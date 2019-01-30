@@ -1,0 +1,5 @@
+---
+Name: calendar
+---
+Dynamic\Calendar\Model\Event:
+  instances_to_show: 3

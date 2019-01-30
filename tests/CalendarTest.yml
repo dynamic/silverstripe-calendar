@@ -1,0 +1,61 @@
+SilverStripe\Security\Group:
+  calendarconfig:
+    Title: Calendar Config Managers
+  eventmanager:
+    Title: Event Managers
+  categorymanager:
+    Title: Category Managers
+
+SilverStripe\Security\Permission:
+  calendarconfig:
+    Code: EDIT_CAPERMISSION
+    Group: =>SilverStripe\Security\Group.calendarconfig
+  eventcreate:
+    Code: CREATE_EVENT
+    Group: =>SilverStripe\Security\Group.eventmanager
+  eventedit:
+    Code: EDIT_EVENT
+    Group: =>SilverStripe\Security\Group.eventmanager
+  eventdelete:
+    Code: DELETE_EVENT
+    Group: =>SilverStripe\Security\Group.eventmanager
+  categorycreate:
+    Code: CREATE_CATEGORY
+    Group: =>SilverStripe\Security\Group.categorymanager
+  categoryedit:
+    Code: EDIT_CATEGORY
+    Group: =>SilverStripe\Security\Group.categorymanager
+  categorydelete:
+    Code: DELETE_CATEGORY
+    Group: =>SilverStripe\Security\Group.categorymanager
+
+SilverStripe\Security\Member:
+  configmanager:
+    FirstName: Calendar
+    Surname: Config Manager
+    Email: calconfig@test.com
+    Groups: =>SilverStripe\Security\Group.calendarconfig
+  eventmanager:
+    FirstName: Event
+    Surname: Manager
+    Email: eventmanager@test.com
+    Groups: =>SilverStripe\Security\Group.eventmanager
+  categorymanager:
+    Firstname: Category
+    Surname: Manager
+    Email: categorymanager@test.com
+    Groups: =>SilverStripe\Security\Group.categorymanager
+
+Dynamic\Calendar\Page\Calendar:
+  calendar:
+    Title: Calendar
+    URLSegment: calendar
+
+Dynamic\Calendar\Model\Category:
+  category1:
+    Title: 'sample category 1'
+  category2:
+    Title: 'sample category 2 (sub)'
+    Parent: =>Dynamic\Calendar\Model\Category.category1
+  category3:
+    Title: 'sample category 3'

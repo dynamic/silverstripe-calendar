@@ -1,0 +1,10 @@
+---
+name: calendar-legacy
+---
+SilverStripe\ORM\DatabaseAdmin:
+  classname_value_remapping:
+    AdditionalDate: Dynamic\Calendar\Model\AdditionalDate
+    CalendarConfig: Dynamic\Calendar\Model\CalendarConfig
+    Category: Dynamic\Calendar\Model\Category
+    Event: Dynamic\Calendar\Model\Event
+    Calendar: Dynamic\Calendar\Page\Calendar

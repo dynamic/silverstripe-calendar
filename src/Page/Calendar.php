@@ -2,12 +2,10 @@
 
 namespace Dynamic\Calendar\Page;
 
+use Carbon\Carbon;
 use Dynamic\Calendar\Controller\CalendarController;
-use Dynamic\Calendar\Model\CalendarConfig;
 use Dynamic\Calendar\Model\Category;
-use Dynamic\Calendar\Model\Event;
-use SilverStripe\Core\Config\Config;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Lumberjack\Model\Lumberjack;
 
 /**
  * Class Calendar
@@ -34,6 +32,11 @@ class Calendar extends \Page
     private static $plural_name = 'Calendars';
 
     /**
+     * @var string
+     */
+    private static $icon = 'font-icon-p-event-alt';
+
+    /**
      * @var array
      */
     private static $casting = [
@@ -48,6 +51,13 @@ class Calendar extends \Page
     ];
 
     /**
+     * @var array
+     */
+    private static $extensions = [
+        Lumberjack::class,
+    ];
+
+    /**
      * @var int
      */
     private static $events_per_page = 12;
@@ -58,112 +68,22 @@ class Calendar extends \Page
     private static $include_child_categories = false;
 
     /**
-     * @param array $filter
-     * @param array $filterAny
-     * @param array $exclude
-     * @param null|mixed $filterByCallback
-     * @return ArrayList|\SilverStripe\ORM\DataList
+     * @return string
      */
-    public static function upcoming_events(
-        $filter = [],
-        $filterAny = [],
-        $exclude = [],
-        $filterByCallback = null
-    ) {
-        $instanceLimit = (
-            CalendarConfig::current_calendar_config()->EventInstancesToShow
-            && CalendarConfig::current_calendar_config()->EventInstancesToShow > 0)
-            ? CalendarConfig::current_calendar_config()->EventInstancesToShow
-            : Config::inst()->get('Event', 'instances_to_show');
+    public function getLumberjackTitle()
+    {
+        return 'Events';
+    }
 
-        $eventsList = ArrayList::create();
-
-        $dateFilter = [];
-        if (static::preg_array_key_exists('/StartDate/', $filter)) {
-            $key = preg_grep('/StartDate/', array_keys($filter))[0];
-            $dateFilter[$key] = $filter[$key];
-            unset($filter[$key]);
-        }
-
-        if (static::preg_array_key_exists('/EndDate/', $filter)) {
-            $key = preg_grep('/EndDate/', array_keys($filter))[0];
-            $dateFilter[$key] = $filter[$key];
-            unset($filter[$key]);
-        }
-
-        $events = Event::get()->filter($filter);
-
-        if (!empty($filterAny)) {
-            if (Config::inst()->get(Calendar::class, 'include_child_categories')) {
-                $filterAny = static::augment_category_filtering($filterAny);
-            }
-
-            $events = $events->filterAny($filterAny);
-        }
-
-        if (!empty($exclude)) {
-            $events = $events->exclude($exclude);
-        }
-
-        if ($filterByCallback !== null && is_callable($filterByCallback)) {
-            $events = $events->filterByCallback($filterByCallback);
-        }
-
-        if ($events->exists()) {
-            $pushEvent = function (Event $event) use (&$eventsList, &$instanceLimit, &$filter) {
-                if ($event->getNextEventInstance()) {
-                    foreach ($event->getAllUpcomingEventInstances($filter, $instanceLimit) as $instance) {
-                        $eventsList->push($instance);
-                    }
-                }
-            };
-            $events->each($pushEvent);
-        }
-
-        if (!empty($dateFilter)) {
-            $filterByDates = function (Event $event) use (&$dateFilter) {
-                $passed = true;
-                foreach ($dateFilter as $key => $val) {
-                    if (!$passed) {
-                        return false;
-                    }
-
-                    $filterParts = explode(':', $key);
-                    if (isset($filterParts[1])) {
-                        $field = $filterParts[0];
-
-                        switch ($filterParts[1]) {
-                            case "GreaterThanOrEqual":
-                                $passed = $event->$field >= $val;
-                                break;
-                            case "GreaterThan":
-                                $passed = $event->$field > $val;
-                                break;
-                            case "LessThanOrEqual":
-                                $passed = $event->$field <= $val;
-                                break;
-                            case "LessThan":
-                                $passed = $event->$field < $val;
-                                break;
-                            default:
-                                $passed = $event->$field == $val;
-                                break;
-                        }
-                    }
-                }
-
-                return $passed;
-            };
-
-            $eventsList = $eventsList->filterByCallback($filterByDates);
-        }
-
-        $eventList = $eventsList->sort([
-            'StartDate' => 'ASC',
-            'StartTime' => 'ASC',
-        ]);
-
-        return $eventList;
+    /**
+     * @return \SilverStripe\ORM\DataList
+     */
+    public function getLumberjackPagesForGridfield()
+    {
+        return EventPage::get()->filter([
+            'ParentID' => $this->ID,
+            //'StartDatetime:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
+        ])->sort('StartDatetime DESC');
     }
 
     /**

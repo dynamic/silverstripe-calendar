@@ -1,6 +1,6 @@
 <?php
 
-namespace Dynamic\Calendar\Tests;
+namespace Dynamic\Calendar\Tests\Factory;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Factory\DateFactory;

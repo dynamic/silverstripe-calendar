@@ -7,6 +7,7 @@ use Dynamic\Calendar\Model\RecursionChangeSet;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Page\RecursiveEvent;
 use SilverStripe\Core\Injector\Injectable;
+use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\SS_List;
 use SilverStripe\Versioned\Versioned;
 
@@ -39,16 +40,21 @@ class RecursiveEventFactory
     private $existing_dates;
 
     /**
+     * @var array
+     */
+    private $daily_dates;
+
+    /**
      * RecursiveEventFactory constructor.
      * @param RecursionChangeSet $changeSet
      * @param array $existingDates
      */
-    public function __construct(RecursionChangeSet $changeSet, $existingDates = [])
+    public function __construct(RecursionChangeSet $changeSet, $existingDates = null)
     {
         $this->setChangeSet($changeSet);
         $this->setEvent($changeSet);
 
-        if (!empty($existingDates)) {
+        if ($existingDates) {
             $this->setExistingDates($existingDates);
         }
     }
@@ -107,11 +113,11 @@ class RecursiveEventFactory
     }
 
     /**
-     * @return array|bool
+     * @return SS_List
      */
     public function getExistingDates()
     {
-        return ($this->existing_dates === (array)$this->existing_dates) ? $this->existing_dates : false;
+        return $this->existing_dates;
     }
 
     /**
@@ -119,37 +125,24 @@ class RecursiveEventFactory
      */
     public function generateEvents()
     {
-        $dates = $this->getNextDateSet();
+        $dates = $this->getDailyDates();
 
         foreach ($dates as $date) {
-            $this->createRecursiveEvent($date);
+            if (!$event = $this->dateExists($date)) {
+                $this->createRecursiveEvent($date);
+            }
         }
     }
 
     /**
-     * @return array
+     * @return $this
      */
-    protected function getNextDateSet()
+    private function setDailyDates()
     {
-        $dates = [];
-
-        if ($this->getChaneSet()->EventPage()->Recursion == 'Daily') {
-            $dates = $this->getDailyDates();
-        }
-
-        return $dates;
-    }
-
-    /**
-     * @return array
-     */
-    private function getDailyDates()
-    {
-        $existing = $this->getExistingDates();
         $count = 0;
-        $start = Carbon::parse($this->getChaneSet()->EventPage()->StartDatetime)->addDay();
+        $existing = $this->getExistingDates() !== null ? $this->getExistingDates() : false;
+        $start = DateFactory::singleton()->getTomorrow($this->getChaneSet()->EventPage()->StartDatetime);
         $max = RecursiveEvent::config()->get('create_new_max');
-
         if ($existing !== false) {
             $existing->filter('StartDatetime:GreaterThanOrEqual', Carbon::now()->format('Y-m-d H:i:s'));
             if (($last = $existing->last())) {
@@ -179,7 +172,30 @@ class RecursiveEventFactory
             }
         }
 
-        return $newDates;
+        $this->daily_dates = $newDates;
+
+        return $this;
+    }
+
+    /**
+     * @return array
+     */
+    private function getDailyDates()
+    {
+        if (!$this->daily_dates) {
+            $this->setDailyDates();
+        }
+
+        return $this->daily_dates;
+    }
+
+    /**
+     * @param $date
+     * @return \SilverStripe\ORM\DataObject
+     */
+    protected function dateExists($date)
+    {
+        return RecursiveEvent::get()->filter('StartDatetime', $date)->first();
     }
 
     /**
@@ -199,7 +215,7 @@ class RecursiveEventFactory
         $event->ParentID = $this->getEvent()->ID;
         $event->Title = $this->getEvent()->Title;
         $event->Content = $this->getEvent()->Content;
-        $event->StartDatetime = $date;
+        $event->StartDatetime = Carbon::parse($date)->format('Y-m-d H:i:s');
         $event->GeneratingChangeSetID = $this->getChaneSet()->ID;
         $event->writeToStage(Versioned::DRAFT);
     }

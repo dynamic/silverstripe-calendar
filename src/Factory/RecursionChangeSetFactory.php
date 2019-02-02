@@ -83,11 +83,18 @@ class RecursionChangeSetFactory
         return $this;
     }
 
+    /**
+     * @return string
+     */
     protected function getLastChangeSet()
     {
         return $this->last_change_set;
     }
 
+    /**
+     * @return RecursionChangeSet
+     * @throws \SilverStripe\ORM\ValidationException
+     */
     public function getChangeSet()
     {
         if (!$this->change_set instanceof RecursionChangeSet) {
@@ -104,7 +111,6 @@ class RecursionChangeSetFactory
     protected function setChangeSet()
     {
         $changeSet = RecursionChangeSet::create($this->getDataArray());
-
         $changeSet->write();
 
         $this->change_set = $changeSet;
@@ -161,14 +167,5 @@ class RecursionChangeSetFactory
         }
 
         return $event;
-    }
-
-    /**
-     * @param RecursionChangeSet $changeSet
-     * @return EventPage
-     */
-    public function newEventFromChangeSet(RecursionChangeSet $changeSet)
-    {
-        return EventPage::create($changeSet->getChangeSetData());
     }
 }

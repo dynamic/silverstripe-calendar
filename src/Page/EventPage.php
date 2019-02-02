@@ -14,7 +14,9 @@ use SilverStripe\Forms\FieldGroup;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
+use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\TreeMultiselectField;
+use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\ORM\HasManyList;
@@ -52,6 +54,16 @@ class EventPage extends \Page
     private static $allowed_children = [RecursiveEvent::class];
 
     /**
+     * @var bool
+     */
+    private static $show_in_sitetree = false;
+
+    /**
+     * @var string
+     */
+    private static $icon = 'font-icon-p-event';
+
+    /**
      *
      */
     private static $can_be_root = false;
@@ -73,6 +85,13 @@ class EventPage extends \Page
      */
     private static $defaults = [
         'Recursion' => null,
+    ];
+
+    /**
+     * @var array
+     */
+    private static $extensions = [
+        Lumberjack::class,
     ];
 
     /**
@@ -118,6 +137,16 @@ class EventPage extends \Page
     /**
      * @var array
      */
+    private static $summary_fields = [
+        'Title' => 'Title',
+        'GridFieldDate' => 'Date',
+        'GridFieldTime' => 'Time',
+        'HasRecurringEvents' => 'Recurring Event',
+    ];
+
+    /**
+     * @var array
+     */
     private static $recursion_days = [
         '1' => 'Monday',
         '2' => 'Tuesday',
@@ -136,6 +165,57 @@ class EventPage extends \Page
         'EndDatetime',
         'Recursion',
     ];
+
+    /**
+     * @return string
+     */
+    public function getGridFieldDate()
+    {
+        $carbon = Carbon::parse($this->StartDatetime);
+
+        return "{$carbon->shortEnglishMonth} {$carbon->day}, {$carbon->year}";
+    }
+
+    /**
+     * @return false|string
+     */
+    public function getGridFieldTime()
+    {
+        $carbon = Carbon::parse($this->StartDatetime);
+
+        return date('g:i a', $carbon->timestamp);
+    }
+
+    /**
+     * @return mixed|string
+     */
+    public function getHasRecurringEvents()
+    {
+        if ($this->Recursion && ($changeSet = $this->getCurrentRecursionChangeSet())) {
+            return $changeSet->RecursionPattern;
+        }
+
+        return 'No';
+    }
+
+    /**
+     * @return string
+     */
+    public function getLumberjackTitle()
+    {
+        return 'Recurring Events';
+    }
+
+    /**
+     * @return \SilverStripe\ORM\DataList
+     */
+    public function getLumberjackPagesForGridfield()
+    {
+        return RecursiveEvent::get()->filter([
+            'ParentID' => $this->ID,
+            'StartDatetime:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
+        ]);
+    }
 
     /**
      * @return FieldList
@@ -191,6 +271,12 @@ class EventPage extends \Page
 
         $fields = parent::getCMSFields();
 
+        if (($children = $fields->dataFieldByName('ChildPages')) && $children instanceof GridField) {
+            if (($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class)) && $component instanceof GridFieldPaginator) {
+                $component->setItemsPerPage(7);
+            }
+        }
+
         if ($this->isCopy()) {
             $fields = $fields->makeReadonly();
         }
@@ -225,6 +311,11 @@ class EventPage extends \Page
     {
         parent::onAfterWrite();
 
+        if ($changeSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID)) {
+            $changeSet->EventPageID = $changeSet->EventPageID == 0 ? $this->ID : $changeSet->EventPageID;
+            $changeSet->write();
+        }
+
         $changeType = self::CHANGE_VALUE;
 
         if ($this->isChanged('Recursion', $changeType)) {
@@ -232,7 +323,10 @@ class EventPage extends \Page
         }
 
         if (!$this->isChanged('Recursion', $changeType) && $this->isChanged('StartDatetime', $changeType)) {
-            if ($event = RecursiveEvent::get()->filter('StartDatetime', $this->StartDatetime)->first()) {
+            if ($event = RecursiveEvent::get()->filter([
+                'StartDatetime' => $this->StartDatetime,
+                'ParentID' => $this->ID,
+            ])->first()) {
                 $event->doUnpublish();
                 $event->doArchive();
             }
@@ -271,6 +365,7 @@ class EventPage extends \Page
 
     /**
      * @return RecursionChangeSet
+     * @throws \SilverStripe\ORM\ValidationException
      */
     protected function generateRecursionChangeSet()
     {
@@ -343,9 +438,25 @@ class EventPage extends \Page
     /**
      * @return bool
      */
+    public function getIsDaily()
+    {
+        return $this->Recursion == 'Daily';
+    }
+
+    /**
+     * @return bool
+     */
     private function isCopy()
     {
         return $this->ParentID > 0 && $this->Parent() instanceof EventPage;
+    }
+
+    /**
+     * @return bool|\SilverStripe\ORM\DataObject
+     */
+    public function getCurrentRecursionChangeSet()
+    {
+        return $this->RecursionChangeSetID ? RecursionChangeSet::get()->byID($this->RecursionChangeSetID) : false;
     }
 
     /**

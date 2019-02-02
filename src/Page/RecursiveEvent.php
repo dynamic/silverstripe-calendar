@@ -35,6 +35,11 @@ class RecursiveEvent extends EventPage
     private static $default_parent = EventPage::class;
 
     /**
+     * @var bool
+     */
+    private static $show_in_sitetree = false;
+
+    /**
      * @var int
      */
     private static $create_new_max = 14;
@@ -45,6 +50,18 @@ class RecursiveEvent extends EventPage
     private static $has_one = [
         'GeneratingChangeSet' => RecursionChangeSet::class,
     ];
+
+    /**
+     * @return array
+     */
+    public function summaryFields()
+    {
+        $fields = parent::summaryFields();
+
+        unset($fields['HasRecurringEvents']);
+
+        return $fields;
+    }
 
     /**
      *

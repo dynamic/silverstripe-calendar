@@ -211,13 +211,35 @@ class EventPage extends \Page
 
         if (!$this->isCopy() && $this->Recursion && !$this->recursionChanged()) {
             $this->Children()
-                ->filter(
-                    'StartDatetime:GreaterThanOrEqual',
-                    Carbon::now(\DateTimeZone::AMERICA)->format('Y-m-d')
-                )
+                ->filter('StartDatetime:GreaterThanOrEqual', Carbon::now()->format('Y-m-d'))
                 ->each(function (RecursiveEvent $event) {
                     $event->writeToStage(Versioned::DRAFT);
                 });
+        }
+    }
+
+    /**
+     *
+     */
+    public function onAfterWrite()
+    {
+        parent::onAfterWrite();
+
+        $changeType = self::CHANGE_VALUE;
+
+        if ($this->isChanged('Recursion', $changeType)) {
+            $this->deleteChildren();
+        }
+
+        if (!$this->isChanged('Recursion', $changeType) && $this->isChanged('StartDatetime', $changeType)) {
+            if ($event = RecursiveEvent::get()->filter('StartDatetime', $this->StartDatetime)->first()) {
+                $event->doUnpublish();
+                $event->doArchive();
+            }
+        }
+
+        if (!$this->isCopy() && $this->Recursion) {
+            $this->createOrUpdateChildren();
         }
     }
 
@@ -234,24 +256,12 @@ class EventPage extends \Page
     }
 
     /**
-     *
-     */
-    public function onAfterWrite()
-    {
-        parent::onAfterWrite();
-
-        if (!$this->isCopy() && $this->Recursion && $this->recursionChanged()) {
-            $this->createOrUpdateChildren();
-        }
-    }
-
-    /**
      * @return bool
      */
     protected function recursionChanged()
     {
         foreach ($this->yieldSingle($this->config()->get('recursion_changed')) as $field) {
-            if ($this->isChanged($field)) {
+            if ($this->isChanged($field, self::CHANGE_VALUE)) {
                 return true;
             }
         }
@@ -517,11 +527,10 @@ class EventPage extends \Page
     private function createOrUpdateChildren()
     {
         $recursionSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID);
-        $existing = $this->Children();
-
+        $existing = RecursiveEvent::get()->filter('ParentID', $this->ID);
         $eventFactory = RecursiveEventFactory::create($recursionSet, $existing);
 
-        $eventFactory->generateNewEvents();
+        $eventFactory->generateEvents();
     }
 
     /**
@@ -529,76 +538,10 @@ class EventPage extends \Page
      */
     private function deleteChildren()
     {
-        foreach ($this->yieldSingle($this->Children()) as $child) {
+        foreach ($this->yieldSingle(RecursiveEvent::get()->filter('ParentID', $this->ID)) as $child) {
             $child->doUnpublish();
             $child->doArchive();
         }
-    }
-
-    /**
-     *
-     */
-    private function createRecursionChildren()
-    {
-        $this->createRecursionEvents();
-    }
-
-    /**
-     *
-     */
-    private function createRecursionEvents()
-    {
-        /*$original = Config::inst()->get(static::class, 'allowed_children');
-        Config::modify()->remove(static::class, 'allowed_children');
-        Config::modify()->set(static::class, 'allowed_children', [EventPage::class]);
-
-        foreach ($this->yieldSingle($this->getRecursionDates()) as $startDateTime) {
-            $newEvent = $this->duplicate(false);
-            $newEvent->ID = null;
-            $newEvent->StartDatetime = $startDateTime;
-            $newEvent->EndDatetime = $this->getEndFromStart($startDateTime);
-            $newEvent->URLSegment = "{$newEvent->URLSegment}-" . date('Y-m-d', strtotime($newEvent->StartDatetime));
-            $newEvent->ParentID = $this->ID;
-
-            $newEvent->writeToStage(Versioned::DRAFT);
-        }
-
-        Config::modify()->set(static::class, 'allowed_children', $original);*/
-    }
-
-    /**
-     * @return array
-     */
-    private function getRecursionDates()
-    {
-        /*$pattern = json_decode($this->RecursionPattern);
-        $mapping = $this->config()->get('recursion_days');
-        $date = strtotime($this->StartDatetime);
-        $end = strtotime($this->RecursionEndDate);
-        $dates = [];
-
-        foreach ($this->yieldSingle($pattern) as $dayNumber) {
-            for ($trackingDate = $date; $trackingDate <= $end; $trackingDate = strtotime('+1 week', $trackingDate)) {
-                if ($trackingDate != $date) {
-                    $dates[] = date('Y-m-d H:i:s', $trackingDate);
-                }
-            }
-        }
-
-        return $dates;//*/
-    }
-
-    /**
-     * @param $newStart
-     * @return false|string
-     */
-    private function getEndFromStart($newStart)
-    {
-        $dateDiff = round((strtotime($this->EndDatetime) - strtotime($this->StartDatetime)) / (60 * 60 * 24));
-        $time = date('H:i:s', strtotime($this->EndDatetime));
-        $day = date('Y-m-d', strtotime("+{$dateDiff} days", strtotime($newStart)));
-
-        return date('Y-m-d H:i:s', strtotime("{$day} {$time}"));
     }
 
     /**

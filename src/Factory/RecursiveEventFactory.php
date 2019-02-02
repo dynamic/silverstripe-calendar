@@ -117,7 +117,7 @@ class RecursiveEventFactory
     /**
      *
      */
-    public function generateNewEvents()
+    public function generateEvents()
     {
         $dates = $this->getNextDateSet();
 
@@ -145,20 +145,49 @@ class RecursiveEventFactory
      */
     private function getDailyDates()
     {
-        if (($existing = $this->getExistingDates()) && ($last = $existing->last())) {
-            $start = Carbon::parse($last->StartDatetime)->addDay();
-        } else {
-            $start = Carbon::parse($this->getChaneSet()->EventPage()->StartDatetime);
+        $existing = $this->getExistingDates();
+        $count = 0;
+        $start = Carbon::parse($this->getChaneSet()->EventPage()->StartDatetime)->addDay();
+        $max = RecursiveEvent::config()->get('create_new_max');
+
+        if ($existing !== false) {
+            $existing->filter('StartDatetime:GreaterThanOrEqual', Carbon::now()->format('Y-m-d H:i:s'));
+            if (($last = $existing->last())) {
+                $start = Carbon::parse($last->StartDatetime)->addDay();
+                $count = $existing->count();
+            }
         }
 
         $newDates = [];
 
-        for ($count = 0; $count < RecursiveEvent::config()->get('create_new_max'); $count++) {
-            $newDates[] = $start->format('Y-m-d H:i:s');
-            $start->addDay();
+        if ($existing !== false && $count > 0) {
+            $newDates = array_merge($existing->column('StartDatetime', $newDates));
+            $existingDates = $existing->column('StartDatetime');
+        }
+
+        while ($count < $max) {
+            if (isset($existingDates)) {
+                if (!in_array($start->format('Y-m-d H:i:s'), $existingDates)) {
+                    $newDates[] = $start->format('Y-m-d H:i:s');
+                    $start->addDay();
+                    $count++;
+                }
+            } else {
+                $newDates[] = $start->format('Y-m-d H:i:s');
+                $start->addDay();
+                $count++;
+            }
         }
 
         return $newDates;
+    }
+
+    /**
+     * @return mixed
+     */
+    protected function getLastKnownDate()
+    {
+        return RecursiveEvent::get()->filter('ParentID', $this->getEvent()->ID)->max('StartDatetime')->StartDatetime;
     }
 
     /**
@@ -171,6 +200,7 @@ class RecursiveEventFactory
         $event->Title = $this->getEvent()->Title;
         $event->Content = $this->getEvent()->Content;
         $event->StartDatetime = $date;
+        $event->GeneratingChangeSetID = $this->getChaneSet()->ID;
         $event->writeToStage(Versioned::DRAFT);
     }
 }

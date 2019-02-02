@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Model\RecursionChangeSet;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Page\RecursiveEvent;
+use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\SS_List;
@@ -18,6 +19,7 @@ use SilverStripe\Versioned\Versioned;
 class RecursiveEventFactory
 {
     use Injectable;
+    use Configurable;
 
     /**
      * @var RecursionChangeSet
@@ -43,6 +45,11 @@ class RecursiveEventFactory
      * @var array
      */
     private $daily_dates;
+
+    /**
+     * @var string
+     */
+    private static $date_string = 'Y-m-d H:i:s';
 
     /**
      * RecursiveEventFactory constructor.
@@ -128,9 +135,7 @@ class RecursiveEventFactory
         $dates = $this->getDailyDates();
 
         foreach ($dates as $date) {
-            if (!$event = $this->dateExists($date)) {
-                $this->createRecursiveEvent($date);
-            }
+            $this->createRecursiveEvent($date);
         }
     }
 
@@ -139,37 +144,22 @@ class RecursiveEventFactory
      */
     private function setDailyDates()
     {
+        $baseDateTime = Carbon::parse($this->getEvent()->StartDatetime);
+        $now = Carbon::now()->setTimeFromTimeString($baseDateTime->format('H:i:s'));
+        $start = ($now->timestamp > $baseDateTime->timestamp) ? $now : $baseDateTime;
+
         $count = 0;
-        $existing = $this->getExistingDates() !== null ? $this->getExistingDates() : false;
-        $start = DateFactory::singleton()->getTomorrow($this->getChaneSet()->EventPage()->StartDatetime);
         $max = RecursiveEvent::config()->get('create_new_max');
-        if ($existing !== false) {
-            $existing->filter('StartDatetime:GreaterThanOrEqual', Carbon::now()->format('Y-m-d H:i:s'));
-            if (($last = $existing->last())) {
-                $start = Carbon::parse($last->StartDatetime)->addDay();
-                $count = $existing->count();
-            }
-        }
 
         $newDates = [];
 
-        if ($existing !== false && $count > 0) {
-            $newDates = array_merge($existing->column('StartDatetime', $newDates));
-            $existingDates = $existing->column('StartDatetime');
-        }
-
         while ($count < $max) {
-            if (isset($existingDates)) {
-                if (!in_array($start->format('Y-m-d H:i:s'), $existingDates)) {
-                    $newDates[] = $start->format('Y-m-d H:i:s');
-                    $start->addDay();
-                    $count++;
-                }
-            } else {
-                $newDates[] = $start->format('Y-m-d H:i:s');
-                $start->addDay();
-                $count++;
+            if (!$existing = $this->dateExists($start)) {
+                $newDates[] = $start->format($this->config()->get('date_string'));
             }
+
+            $start->addDay();
+            $count++;
         }
 
         $this->daily_dates = $newDates;
@@ -193,9 +183,10 @@ class RecursiveEventFactory
      * @param $date
      * @return \SilverStripe\ORM\DataObject
      */
-    protected function dateExists($date)
+    protected function dateExists(Carbon $date)
     {
-        return RecursiveEvent::get()->filter('StartDatetime', $date)->first();
+        return RecursiveEvent::get()->filter('StartDatetime',
+            $date->format($this->config()->get('date_string')))->first();
     }
 
     /**
@@ -209,14 +200,18 @@ class RecursiveEventFactory
     /**
      * @param $date
      */
-    protected function createRecursiveEvent($date)
+    protected function createRecursiveEvent(Carbon $date)
     {
         $event = RecursiveEvent::create();
         $event->ParentID = $this->getEvent()->ID;
         $event->Title = $this->getEvent()->Title;
         $event->Content = $this->getEvent()->Content;
-        $event->StartDatetime = Carbon::parse($date)->format('Y-m-d H:i:s');
+        $event->StartDatetime = $date->format($this->config()->get('date_string'));
         $event->GeneratingChangeSetID = $this->getChaneSet()->ID;
         $event->writeToStage(Versioned::DRAFT);
+
+        if ($this->getEvent()->isPublished()) {
+            $event->publishRecursive();
+        }
     }
 }

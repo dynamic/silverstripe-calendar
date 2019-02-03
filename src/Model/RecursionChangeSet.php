@@ -46,8 +46,14 @@ class RecursionChangeSet extends DataObject
      * @var array
      */
     private static $summary_fields = [
+        'ID' => 'Pattern ID',
         'RecursionPattern' => 'Recursion Pattern',
     ];
+
+    /**
+     * @var string
+     */
+    private static $default_sort = 'ID DESC';
 
     /**
      *

@@ -22,6 +22,11 @@ class RecursiveEventFactoryTest extends SapphireTest
     //protected static $fixture_file = 'calendartest.yml';
 
     /**
+     * @var
+     */
+    private $reading_mode;
+
+    /**
      * @var Calendar
      */
     private $calendar;
@@ -46,6 +51,19 @@ class RecursiveEventFactoryTest extends SapphireTest
         $this->setCalendar();
         $this->setDailyEvent();
         $this->setWeeklyEvent();
+
+        $this->reading_mode = Versioned::get_reading_mode();
+        Versioned::set_reading_mode('stage');
+    }
+
+    /**
+     *
+     */
+    protected function tearDown()
+    {
+        Versioned::set_reading_mode($this->reading_mode);
+
+        parent::tearDown();
     }
 
     /**

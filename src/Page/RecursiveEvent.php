@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Page;
 
+use Carbon\Carbon;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\RecursionChangeSet;
 
@@ -69,6 +70,11 @@ class RecursiveEvent extends EventPage
     public function onBeforeWrite()
     {
         parent::onBeforeWrite();
+
+        if (!$this->exists()) {
+            $dateString = Carbon::parse($this->StartDatetime)->format('Y-m-d');
+            $this->URLSegment = $this->URLSegment . "-{$dateString}";
+        }
 
         if ($this->exists()) {
             $parent = $this->Parent();

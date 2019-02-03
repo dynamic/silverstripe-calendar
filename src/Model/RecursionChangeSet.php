@@ -33,9 +33,6 @@ class RecursionChangeSet extends DataObject
      */
     private static $db = [
         'RecursionPattern' => 'Text',
-        'RecursionHash' => 'Varchar(255)',
-        'RecursiveRecords' => 'Text',
-        'EventPageVersion' => 'Int',
     ];
 
     /**
@@ -43,6 +40,13 @@ class RecursionChangeSet extends DataObject
      */
     private static $has_one = [
         'EventPage' => EventPage::class,
+    ];
+
+    /**
+     * @var array
+     */
+    private static $summary_fields = [
+        'RecursionPattern' => 'Recursion Pattern',
     ];
 
     /**

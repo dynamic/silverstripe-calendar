@@ -78,6 +78,7 @@ class EventPage extends \Page
         'Recursion' => 'Enum(array("Daily","Weekly","Monthly","Weekdays","Annual"))',
         'RecursionEndDate' => 'Date',
         'RecursionChangeSetID' => 'Int',
+        'EventType' => 'Varchar(255)',
     ];
 
     /**
@@ -214,7 +215,7 @@ class EventPage extends \Page
         return RecursiveEvent::get()->filter([
             'ParentID' => $this->ID,
             'StartDatetime:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
-        ]);
+        ])->sort('StartDatetime ASC');
     }
 
     /**
@@ -291,6 +292,8 @@ class EventPage extends \Page
     {
         parent::onBeforeWrite();
 
+        $this->EventType = static::class;
+
         if (!$this->isCopy() && $this->Recursion != null && $this->recursionChanged()) {
             $this->RecursionChangeSetID = $this->generateRecursionChangeSet()->ID;
         }
@@ -311,6 +314,7 @@ class EventPage extends \Page
     {
         parent::onAfterWrite();
 
+        /** @var RecursionChangeSet $changeSet */
         if ($changeSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID)) {
             $changeSet->EventPageID = $changeSet->EventPageID == 0 ? $this->ID : $changeSet->EventPageID;
             $changeSet->write();
@@ -323,6 +327,7 @@ class EventPage extends \Page
         }
 
         if (!$this->isChanged('Recursion', $changeType) && $this->isChanged('StartDatetime', $changeType)) {
+            /** @var RecursiveEvent $event */
             if ($event = RecursiveEvent::get()->filter([
                 'StartDatetime' => $this->StartDatetime,
                 'ParentID' => $this->ID,

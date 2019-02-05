@@ -614,24 +614,6 @@ class EventPage extends \Page
     }
 
     /**
-     * @return bool|string
-     */
-    private function recursionCheckSum()
-    {
-        if ($this->Recursion) {
-            $data = $this->toMap();
-
-            foreach ($this->config()->get('ignore_changed') as $field) {
-                unset($data[$field]);
-            }
-
-            return md5(serialize($data));
-        }
-
-        return false;
-    }
-
-    /**
      *
      */
     private function createOrUpdateChildren()

@@ -521,36 +521,30 @@ class EventPage extends \Page
      */
     protected function getMonthDay()
     {
-        $startDate = new Carbon($this->StartDatetime);
+        $startDate = Carbon::parse($this->StartDatetime);
 
-        $day = $this->getDayFromDate($startDate);
+        $day = $startDate->format('l');
         $month = $startDate->format('F');
         $year = $startDate->format('Y');
 
-        $date = strtotime("First day of {$month} {$year}");
-        $end = strtotime("Last day of {$month} {$year}");
+        $date = Carbon::parse("First day of {$month} {$year}");
+        $end = Carbon::parse("Last day of {$month} {$year}");
 
         $days = [];
 
-        while ($date <= $end) {
-            if ($this->getDayFromDate($date) == $day) {
-                $days[] = date('Y-m-d', $date);
+        while ($date->timestamp <= $end->timestamp) {
+            if ($date->format('l') == $day) {
+                $days[] = $date->format('Y-m-d');
             }
-            $date = strtotime("tomorrow", $date);
+            $date = $date->addDay();
         }
 
-        $dayCount = array_search(date('Y-m-d', strtotime($this->StartDatetime)), $days);
+        $dayCount = array_search($startDate->format('Y-m-d'), $days);
 
         if ($dayCount === false) {
             return '';
-        }
-
-        if ($dayCount == 0) {
-            $firstLast = 'first';
-        }
-
-        if ($dayCount == count($days) - 1) {
-            $firstLast = 'last';
+        } else {
+            $dayCount = $dayCount + 1;
         }
 
         $monthDay = (isset($firstLast))

@@ -36,6 +36,11 @@ class RecursiveEvent extends EventPage
     private static $default_parent = EventPage::class;
 
     /**
+     * @var string
+     */
+    private static $table_name = 'RecursiveEvent';
+
+    /**
      * @var bool
      */
     private static $show_in_sitetree = false;
@@ -43,7 +48,7 @@ class RecursiveEvent extends EventPage
     /**
      * @var int
      */
-    private static $create_new_max = 14;
+    private static $create_new_max = 7;
 
     /**
      * @var array

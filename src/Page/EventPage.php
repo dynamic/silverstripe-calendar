@@ -453,7 +453,7 @@ class EventPage extends \Page
      */
     private function isCopy()
     {
-        return $this->ParentID > 0 && $this->Parent() instanceof EventPage;
+        return $this->ParentID > 0 && $this instanceof RecursiveEvent;
     }
 
     /**
@@ -585,12 +585,30 @@ class EventPage extends \Page
      */
     public function ordinal($number)
     {
-        $ends = ['th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th'];
-        if ((($number % 100) >= 11) && (($number % 100) <= 13)) {
-            return $number . 'th';
-        } else {
-            return $number . $ends[$number % 10];
-        }
+        $first_word = array('eth','First','Second','Third','Fouth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth','Elevents','Twelfth','Thirteenth','Fourteenth','Fifteenth','Sixteenth','Seventeenth','Eighteenth','Nineteenth','Twentieth');
+        $second_word =array('','','Twenty','Thirty','Forty','Fifty');
+
+        if($number <= 20)
+            return $first_word[$number];
+
+        $first_num = substr($number,-1,1);
+        $second_num = substr($number,-2,1);
+
+        return $string = str_replace('y-eth','ieth',$second_word[$second_num].'-'.$first_word[$first_num]);
+    }
+
+    function numToOrdinalWord($num)
+    {
+        $first_word = array('eth','First','Second','Third','Fouth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth','Elevents','Twelfth','Thirteenth','Fourteenth','Fifteenth','Sixteenth','Seventeenth','Eighteenth','Nineteenth','Twentieth');
+        $second_word =array('','','Twenty','Thirty','Forty','Fifty');
+
+        if($num <= 20)
+            return $first_word[$num];
+
+        $first_num = substr($num,-1,1);
+        $second_num = substr($num,-2,1);
+
+        return $string = str_replace('y-eth','ieth',$second_word[$second_num].'-'.$first_word[$first_num]);
     }
 
     /**

@@ -316,24 +316,6 @@ class RecursiveEventFactory
     }
 
     /**
-     * @param $date
-     * @return \SilverStripe\ORM\DataObject
-     */
-    protected function dateExists(Carbon $date)
-    {
-        return RecursiveEvent::get()->filter('StartDatetime',
-            $date->format($this->config()->get('date_format')))->first();
-    }
-
-    /**
-     * @return mixed
-     */
-    protected function getLastKnownDate()
-    {
-        return RecursiveEvent::get()->filter('ParentID', $this->getEvent()->ID)->max('StartDatetime')->StartDatetime;
-    }
-
-    /**
      * @param Carbon $date
      * @return RecursiveEvent|\SilverStripe\ORM\DataObject
      */

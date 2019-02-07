@@ -57,6 +57,11 @@ class RecursiveEventFactory
     private $monthly_dates;
 
     /**
+     * @var
+     */
+    private $yearly_dates;
+
+    /**
      * @var string
      */
     private static $date_format = 'Y-m-d H:i:s';
@@ -271,6 +276,41 @@ class RecursiveEventFactory
         }
 
         $this->monthly_dates = $dates;
+
+        return $this;
+    }
+
+    /**
+     * @return mixed
+     */
+    private function getYearlyEvents()
+    {
+        if (!$this->yearly_dates) {
+            $this->setYearlyDates();
+        }
+
+        return $this->yearly_dates;
+    }
+
+    /**
+     * @return $this
+     */
+    private function setYearlyDates()
+    {
+        $freshDate = function ($string) {
+            return Carbon::parse($string);
+        };
+
+        $max = RecursiveEvent::config()->get('create_new_max');
+        $date = Carbon::parse($this->getEvent()->StartDatetime)->addYear();
+        $dates = [];
+
+        while (count($dates) < $max) {
+            $dates[] = $freshDate($date->format($this->config()->get('date_format')));
+            $date->addYear();
+        }
+
+        $this->yearly_dates = $dates;
 
         return $this;
     }

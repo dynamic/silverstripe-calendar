@@ -27,6 +27,11 @@ class EventPageTest extends SapphireTest
     private $know_daily_event;
 
     /**
+     * @var
+     */
+    private $known_weekly_event;
+
+    /**
      *
      */
     protected function setUp()
@@ -71,7 +76,7 @@ class EventPageTest extends SapphireTest
      */
     public function testEventEdit()
     {
-        $event = $this->getKnownDailyEvent();
+        $event = $this->getKnownWeeklyEvent();
 
         $currentChangeSet = $event->RecursionChangeSetID;
 
@@ -92,7 +97,22 @@ class EventPageTest extends SapphireTest
 
         $childenCount = EventPage::get()->byID($event->ID)->Children()->count();
 
-        $this->assertEquals(RecursiveEvent::config()->get('create_new_max'), $event->Children()->count());
+        //$this->assertEquals(RecursiveEvent::config()->get('create_new_max'), $event->Children()->count());
+    }
+
+    public function testNewDate()
+    {
+        $event = $this->getKnownDailyEvent();
+        $this->assertEquals(14, $event->Children()->count());
+    }
+
+    protected function getKnownWeeklyEvent()
+    {
+        if (!$this->known_weekly_event instanceof EventPage) {
+            $this->setKnownWeeklyEvent();
+        }
+
+        return $this->known_weekly_event;
     }
 
     /**
@@ -110,7 +130,7 @@ class EventPageTest extends SapphireTest
     /**
      * @return $this
      */
-    protected function setKnownDailyEvent()
+    protected function setKnownWeeklyEvent()
     {
         if (!$event = EventPage::get()->filter('Recursion', 'Weekly')->first()) {
             $event = EventPage::create();
@@ -124,8 +144,31 @@ class EventPageTest extends SapphireTest
             $event->publishRecursive();
         }
 
+        $this->known_weekly_event = EventPage::get()->byID($event->ID);
+
+        return $this;
+    }
+
+    /**
+     * @return $this
+     */
+    protected function setKnownDailyEvent()
+    {
+        if (!$event = EventPage::get()->filter('Recursion', 'Daily')->first()) {
+            $event = EventPage::create();
+
+            $event->Title = 'My Daily Event';
+            $event->StartDatetime = Carbon::now(\DateTimeZone::AMERICA)->format('Y-m-d H:i:s');
+            $event->Recursion = 'Daily';
+            $event->ParentID = $this->getCalendar()->ID;
+
+            $event->writeToStage(Versioned::DRAFT);
+            $event->publishRecursive();
+        }
+
         $this->know_daily_event = EventPage::get()->byID($event->ID);
 
         return $this;
     }
+
 }

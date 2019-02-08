@@ -6,7 +6,9 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Model\RecursionChangeSet;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Page\RecursiveEvent;
+use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Injector\Injectable;
+use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\SS_List;
 use SilverStripe\Versioned\Versioned;
 
@@ -17,6 +19,7 @@ use SilverStripe\Versioned\Versioned;
 class RecursiveEventFactory
 {
     use Injectable;
+    use Configurable;
 
     /**
      * @var RecursionChangeSet
@@ -39,16 +42,41 @@ class RecursiveEventFactory
     private $existing_dates;
 
     /**
+     * @var array
+     */
+    private $daily_dates;
+
+    /**
+     * @var
+     */
+    private $weekly_dates;
+
+    /**
+     * @var
+     */
+    private $monthly_dates;
+
+    /**
+     * @var
+     */
+    private $yearly_dates;
+
+    /**
+     * @var string
+     */
+    private static $date_format = 'Y-m-d H:i:s';
+
+    /**
      * RecursiveEventFactory constructor.
      * @param RecursionChangeSet $changeSet
      * @param array $existingDates
      */
-    public function __construct(RecursionChangeSet $changeSet, $existingDates = [])
+    public function __construct(RecursionChangeSet $changeSet, $existingDates = null)
     {
         $this->setChangeSet($changeSet);
         $this->setEvent($changeSet);
 
-        if (!empty($existingDates)) {
+        if ($existingDates) {
             $this->setExistingDates($existingDates);
         }
     }
@@ -107,37 +135,60 @@ class RecursiveEventFactory
     }
 
     /**
-     * @return array|bool
+     * @return SS_List
      */
     public function getExistingDates()
     {
-        return ($this->existing_dates === (array)$this->existing_dates) ? $this->existing_dates : false;
+        return $this->existing_dates;
     }
 
     /**
      *
      */
-    public function generateNewEvents()
+    public function generateEvents()
     {
-        $dates = $this->getNextDateSet();
+        switch ($this->getEvent()->Recursion) {
+            case 'Daily':
+                $dates = $this->getDailyDates();
+                break;
+            case 'Weekly':
+                $dates = $this->getWeeklyDates();
+                break;
+            case 'Monthly':
+                $dates = $this->getMonthlyDates();
+                break;
+        }
 
-        foreach ($dates as $date) {
-            $this->createRecursiveEvent($date);
+        if (isset($dates)) {
+            foreach ($dates as $date) {
+                $this->createRecursiveEvent($date);
+            }
         }
     }
 
     /**
-     * @return array
+     * @return $this
      */
-    protected function getNextDateSet()
+    private function setDailyDates()
     {
+        $freshDate = function ($string) {
+            return Carbon::parse($string);
+        };
+
+        $format = $this->config()->get('date_format');
+        $date = Carbon::parse($this->getEvent()->StartDatetime)->addDay();
+        $max = RecursiveEvent::config()->get('create_new_max');
+
         $dates = [];
 
-        if ($this->getChaneSet()->EventPage()->Recursion == 'Daily') {
-            $dates = $this->getDailyDates();
+        while (count($dates) < $max) {
+            $dates[] = $freshDate($date->format($format));
+            $date->addDay();
         }
 
-        return $dates;
+        $this->daily_dates = $dates;
+
+        return $this;
     }
 
     /**
@@ -145,32 +196,154 @@ class RecursiveEventFactory
      */
     private function getDailyDates()
     {
-        if (($existing = $this->getExistingDates()) && ($last = $existing->last())) {
-            $start = Carbon::parse($last->StartDatetime)->addDay();
-        } else {
-            $start = Carbon::parse($this->getChaneSet()->EventPage()->StartDatetime);
+        if (!$this->daily_dates) {
+            $this->setDailyDates();
         }
 
-        $newDates = [];
-
-        for ($count = 0; $count < RecursiveEvent::config()->get('create_new_max'); $count++) {
-            $newDates[] = $start->format('Y-m-d H:i:s');
-            $start->addDay();
-        }
-
-        return $newDates;
+        return $this->daily_dates;
     }
 
     /**
-     * @param $date
+     * @return mixed
      */
-    protected function createRecursiveEvent($date)
+    private function getWeeklyDates()
     {
-        $event = RecursiveEvent::create();
-        $event->ParentID = $this->getEvent()->ID;
+        if (!$this->weekly_dates) {
+            $this->setWeeklyDates();
+        }
+
+        return $this->weekly_dates;
+    }
+
+    /**
+     * @return $this
+     */
+    private function setWeeklyDates()
+    {
+        $freshDate = function ($string) {
+            return Carbon::parse($string);
+        };
+
+        $format = $this->config()->get('date_format');
+        $max = RecursiveEvent::config()->get('create_new_max');
+        $date = Carbon::parse($this->getEvent()->StartDatetime)->addDay(7);
+
+        $dates = [];
+
+        while (count($dates) < $max) {
+            $dates[] = $freshDate($date->format($format));
+            $date->addDay(7);
+        }
+
+        $this->weekly_dates = $dates;
+
+        return $this;
+    }
+
+    /**
+     * @return mixed
+     */
+    private function getMonthlyDates()
+    {
+        if (!$this->monthly_dates) {
+            $this->setMonthlyDates();
+        }
+
+        return $this->monthly_dates;
+    }
+
+    /**
+     * @return $this
+     */
+    private function setMonthlyDates()
+    {
+        $freshDate = function ($string) {
+            return Carbon::parse($string);
+        };
+
+        $max = RecursiveEvent::config()->get('create_new_max');
+        $date = Carbon::parse($this->getEvent()->StartDatetime);
+        $dates = [];
+
+        while (count($dates) < $max) {
+            $month = $date->month;
+
+            while ($month == $date->month) {
+                $date->addWeek();
+            }
+
+            $dates[] = $freshDate($date->format($this->config()->get('date_format')));
+        }
+
+        $this->monthly_dates = $dates;
+
+        return $this;
+    }
+
+    /**
+     * @return mixed
+     */
+    private function getYearlyEvents()
+    {
+        if (!$this->yearly_dates) {
+            $this->setYearlyDates();
+        }
+
+        return $this->yearly_dates;
+    }
+
+    /**
+     * @return $this
+     */
+    private function setYearlyDates()
+    {
+        $freshDate = function ($string) {
+            return Carbon::parse($string);
+        };
+
+        $max = RecursiveEvent::config()->get('create_new_max');
+        $date = Carbon::parse($this->getEvent()->StartDatetime)->addYear();
+        $dates = [];
+
+        while (count($dates) < $max) {
+            $dates[] = $freshDate($date->format($this->config()->get('date_format')));
+            $date->addYear();
+        }
+
+        $this->yearly_dates = $dates;
+
+        return $this;
+    }
+
+    /**
+     * @param Carbon $date
+     * @return RecursiveEvent|\SilverStripe\ORM\DataObject
+     */
+    public function createRecursiveEvent(Carbon $date)
+    {
+        $time = Carbon::parse($this->getEvent()->StartDatetime)->format('H:i:s');
+        $dateTime = $date->setTimeFromTimeString($time)->format($this->config()->get('date_format'));
+
+        $filter = [
+            'ParentID' => $this->getEvent()->ID,
+            'StartDatetime' => $dateTime,
+        ];
+
+        if (!$event = RecursiveEvent::get()->filter($filter)->first()) {
+            $event = RecursiveEvent::create();
+            $event->ParentID = $this->getEvent()->ID;
+            $event->GeneratingChangeSetID = $this->getChaneSet()->ID;
+        }
+
+        $event->StartDatetime = $dateTime;
         $event->Title = $this->getEvent()->Title;
         $event->Content = $this->getEvent()->Content;
-        $event->StartDatetime = $date;
         $event->writeToStage(Versioned::DRAFT);
+
+        if ($this->getEvent()->isPublished()) {
+            $event->publishRecursive();
+        }
+
+        return $event;
     }
 }

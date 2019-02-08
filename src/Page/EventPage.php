@@ -14,7 +14,9 @@ use SilverStripe\Forms\FieldGroup;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
+use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\TreeMultiselectField;
+use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBDatetime;
 use SilverStripe\ORM\HasManyList;
@@ -52,6 +54,16 @@ class EventPage extends \Page
     private static $allowed_children = [RecursiveEvent::class];
 
     /**
+     * @var bool
+     */
+    private static $show_in_sitetree = false;
+
+    /**
+     * @var string
+     */
+    private static $icon = 'font-icon-p-event';
+
+    /**
      *
      */
     private static $can_be_root = false;
@@ -66,6 +78,7 @@ class EventPage extends \Page
         'Recursion' => 'Enum(array("Daily","Weekly","Monthly","Weekdays","Annual"))',
         'RecursionEndDate' => 'Date',
         'RecursionChangeSetID' => 'Int',
+        'EventType' => 'Varchar(255)',
     ];
 
     /**
@@ -73,6 +86,13 @@ class EventPage extends \Page
      */
     private static $defaults = [
         'Recursion' => null,
+    ];
+
+    /**
+     * @var array
+     */
+    private static $extensions = [
+        Lumberjack::class,
     ];
 
     /**
@@ -118,6 +138,16 @@ class EventPage extends \Page
     /**
      * @var array
      */
+    private static $summary_fields = [
+        'Title' => 'Title',
+        'GridFieldDate' => 'Date',
+        'GridFieldTime' => 'Time',
+        'HasRecurringEvents' => 'Recurring Event',
+    ];
+
+    /**
+     * @var array
+     */
     private static $recursion_days = [
         '1' => 'Monday',
         '2' => 'Tuesday',
@@ -136,6 +166,57 @@ class EventPage extends \Page
         'EndDatetime',
         'Recursion',
     ];
+
+    /**
+     * @return string
+     */
+    public function getGridFieldDate()
+    {
+        $carbon = Carbon::parse($this->StartDatetime);
+
+        return "{$carbon->shortEnglishMonth} {$carbon->day}, {$carbon->year}";
+    }
+
+    /**
+     * @return false|string
+     */
+    public function getGridFieldTime()
+    {
+        $carbon = Carbon::parse($this->StartDatetime);
+
+        return date('g:i a', $carbon->timestamp);
+    }
+
+    /**
+     * @return mixed|string
+     */
+    public function getHasRecurringEvents()
+    {
+        if ($this->Recursion && ($changeSet = $this->getCurrentRecursionChangeSet())) {
+            return $changeSet->RecursionPattern;
+        }
+
+        return 'No';
+    }
+
+    /**
+     * @return string
+     */
+    public function getLumberjackTitle()
+    {
+        return 'Recurring Events';
+    }
+
+    /**
+     * @return \SilverStripe\ORM\DataList
+     */
+    public function getLumberjackPagesForGridfield()
+    {
+        return RecursiveEvent::get()->filter([
+            'ParentID' => $this->ID,
+            'StartDatetime:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
+        ])->sort('StartDatetime ASC');
+    }
 
     /**
      * @return FieldList
@@ -191,6 +272,12 @@ class EventPage extends \Page
 
         $fields = parent::getCMSFields();
 
+        if (($children = $fields->dataFieldByName('ChildPages')) && $children instanceof GridField) {
+            if (($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class)) && $component instanceof GridFieldPaginator) {
+                $component->setItemsPerPage(7);
+            }
+        }
+
         if ($this->isCopy()) {
             $fields = $fields->makeReadonly();
         }
@@ -205,19 +292,53 @@ class EventPage extends \Page
     {
         parent::onBeforeWrite();
 
+        $this->EventType = static::class;
+
         if (!$this->isCopy() && $this->Recursion != null && $this->recursionChanged()) {
             $this->RecursionChangeSetID = $this->generateRecursionChangeSet()->ID;
         }
 
         if (!$this->isCopy() && $this->Recursion && !$this->recursionChanged()) {
             $this->Children()
-                ->filter(
-                    'StartDatetime:GreaterThanOrEqual',
-                    Carbon::now(\DateTimeZone::AMERICA)->format('Y-m-d')
-                )
+                ->filter('StartDatetime:GreaterThanOrEqual', Carbon::now()->format('Y-m-d'))
                 ->each(function (RecursiveEvent $event) {
                     $event->writeToStage(Versioned::DRAFT);
                 });
+        }
+    }
+
+    /**
+     *
+     */
+    public function onAfterWrite()
+    {
+        parent::onAfterWrite();
+
+        /** @var RecursionChangeSet $changeSet */
+        if ($changeSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID)) {
+            $changeSet->EventPageID = $changeSet->EventPageID == 0 ? $this->ID : $changeSet->EventPageID;
+            $changeSet->write();
+        }
+
+        $changeType = self::CHANGE_VALUE;
+
+        if ($this->isChanged('Recursion', $changeType)) {
+            $this->deleteChildren();
+        }
+
+        if (!$this->isChanged('Recursion', $changeType) && $this->isChanged('StartDatetime', $changeType)) {
+            /** @var RecursiveEvent $event */
+            if ($event = RecursiveEvent::get()->filter([
+                'StartDatetime' => $this->StartDatetime,
+                'ParentID' => $this->ID,
+            ])->first()) {
+                $event->doUnpublish();
+                $event->doArchive();
+            }
+        }
+
+        if (!$this->isCopy() && $this->Recursion) {
+            $this->createOrUpdateChildren();
         }
     }
 
@@ -234,24 +355,12 @@ class EventPage extends \Page
     }
 
     /**
-     *
-     */
-    public function onAfterWrite()
-    {
-        parent::onAfterWrite();
-
-        if (!$this->isCopy() && $this->Recursion && $this->recursionChanged()) {
-            $this->createOrUpdateChildren();
-        }
-    }
-
-    /**
      * @return bool
      */
     protected function recursionChanged()
     {
         foreach ($this->yieldSingle($this->config()->get('recursion_changed')) as $field) {
-            if ($this->isChanged($field)) {
+            if ($this->isChanged($field, self::CHANGE_VALUE)) {
                 return true;
             }
         }
@@ -261,6 +370,7 @@ class EventPage extends \Page
 
     /**
      * @return RecursionChangeSet
+     * @throws \SilverStripe\ORM\ValidationException
      */
     protected function generateRecursionChangeSet()
     {
@@ -333,9 +443,25 @@ class EventPage extends \Page
     /**
      * @return bool
      */
+    public function getIsDaily()
+    {
+        return $this->Recursion == 'Daily';
+    }
+
+    /**
+     * @return bool
+     */
     private function isCopy()
     {
-        return $this->ParentID > 0 && $this->Parent() instanceof EventPage;
+        return $this->ParentID > 0 && $this instanceof RecursiveEvent;
+    }
+
+    /**
+     * @return bool|\SilverStripe\ORM\DataObject
+     */
+    public function getCurrentRecursionChangeSet()
+    {
+        return $this->RecursionChangeSetID ? RecursionChangeSet::get()->byID($this->RecursionChangeSetID) : false;
     }
 
     /**
@@ -395,36 +521,30 @@ class EventPage extends \Page
      */
     protected function getMonthDay()
     {
-        $startDate = new Carbon($this->StartDatetime);
+        $startDate = Carbon::parse($this->StartDatetime);
 
-        $day = $this->getDayFromDate($startDate);
+        $day = $startDate->format('l');
         $month = $startDate->format('F');
         $year = $startDate->format('Y');
 
-        $date = strtotime("First day of {$month} {$year}");
-        $end = strtotime("Last day of {$month} {$year}");
+        $date = Carbon::parse("First day of {$month} {$year}");
+        $end = Carbon::parse("Last day of {$month} {$year}");
 
         $days = [];
 
-        while ($date <= $end) {
-            if ($this->getDayFromDate($date) == $day) {
-                $days[] = date('Y-m-d', $date);
+        while ($date->timestamp <= $end->timestamp) {
+            if ($date->format('l') == $day) {
+                $days[] = $date->format('Y-m-d');
             }
-            $date = strtotime("tomorrow", $date);
+            $date = $date->addDay();
         }
 
-        $dayCount = array_search(date('Y-m-d', strtotime($this->StartDatetime)), $days);
+        $dayCount = array_search($startDate->format('Y-m-d'), $days);
 
         if ($dayCount === false) {
             return '';
-        }
-
-        if ($dayCount == 0) {
-            $firstLast = 'first';
-        }
-
-        if ($dayCount == count($days) - 1) {
-            $firstLast = 'last';
+        } else {
+            $dayCount = $dayCount + 1;
         }
 
         $monthDay = (isset($firstLast))
@@ -465,12 +585,30 @@ class EventPage extends \Page
      */
     public function ordinal($number)
     {
-        $ends = ['th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th'];
-        if ((($number % 100) >= 11) && (($number % 100) <= 13)) {
-            return $number . 'th';
-        } else {
-            return $number . $ends[$number % 10];
-        }
+        $first_word = array('eth','First','Second','Third','Fouth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth','Elevents','Twelfth','Thirteenth','Fourteenth','Fifteenth','Sixteenth','Seventeenth','Eighteenth','Nineteenth','Twentieth');
+        $second_word =array('','','Twenty','Thirty','Forty','Fifty');
+
+        if($number <= 20)
+            return $first_word[$number];
+
+        $first_num = substr($number,-1,1);
+        $second_num = substr($number,-2,1);
+
+        return $string = str_replace('y-eth','ieth',$second_word[$second_num].'-'.$first_word[$first_num]);
+    }
+
+    function numToOrdinalWord($num)
+    {
+        $first_word = array('eth','First','Second','Third','Fouth','Fifth','Sixth','Seventh','Eighth','Ninth','Tenth','Elevents','Twelfth','Thirteenth','Fourteenth','Fifteenth','Sixteenth','Seventeenth','Eighteenth','Nineteenth','Twentieth');
+        $second_word =array('','','Twenty','Thirty','Forty','Fifty');
+
+        if($num <= 20)
+            return $first_word[$num];
+
+        $first_num = substr($num,-1,1);
+        $second_num = substr($num,-2,1);
+
+        return $string = str_replace('y-eth','ieth',$second_word[$second_num].'-'.$first_word[$first_num]);
     }
 
     /**
@@ -494,34 +632,15 @@ class EventPage extends \Page
     }
 
     /**
-     * @return bool|string
-     */
-    private function recursionCheckSum()
-    {
-        if ($this->Recursion) {
-            $data = $this->toMap();
-
-            foreach ($this->config()->get('ignore_changed') as $field) {
-                unset($data[$field]);
-            }
-
-            return md5(serialize($data));
-        }
-
-        return false;
-    }
-
-    /**
      *
      */
     private function createOrUpdateChildren()
     {
         $recursionSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID);
-        $existing = $this->Children();
-
+        $existing = RecursiveEvent::get()->filter('ParentID', $this->ID);
         $eventFactory = RecursiveEventFactory::create($recursionSet, $existing);
 
-        $eventFactory->generateNewEvents();
+        $eventFactory->generateEvents();
     }
 
     /**
@@ -529,76 +648,10 @@ class EventPage extends \Page
      */
     private function deleteChildren()
     {
-        foreach ($this->yieldSingle($this->Children()) as $child) {
+        foreach ($this->yieldSingle(RecursiveEvent::get()->filter('ParentID', $this->ID)) as $child) {
             $child->doUnpublish();
             $child->doArchive();
         }
-    }
-
-    /**
-     *
-     */
-    private function createRecursionChildren()
-    {
-        $this->createRecursionEvents();
-    }
-
-    /**
-     *
-     */
-    private function createRecursionEvents()
-    {
-        /*$original = Config::inst()->get(static::class, 'allowed_children');
-        Config::modify()->remove(static::class, 'allowed_children');
-        Config::modify()->set(static::class, 'allowed_children', [EventPage::class]);
-
-        foreach ($this->yieldSingle($this->getRecursionDates()) as $startDateTime) {
-            $newEvent = $this->duplicate(false);
-            $newEvent->ID = null;
-            $newEvent->StartDatetime = $startDateTime;
-            $newEvent->EndDatetime = $this->getEndFromStart($startDateTime);
-            $newEvent->URLSegment = "{$newEvent->URLSegment}-" . date('Y-m-d', strtotime($newEvent->StartDatetime));
-            $newEvent->ParentID = $this->ID;
-
-            $newEvent->writeToStage(Versioned::DRAFT);
-        }
-
-        Config::modify()->set(static::class, 'allowed_children', $original);*/
-    }
-
-    /**
-     * @return array
-     */
-    private function getRecursionDates()
-    {
-        /*$pattern = json_decode($this->RecursionPattern);
-        $mapping = $this->config()->get('recursion_days');
-        $date = strtotime($this->StartDatetime);
-        $end = strtotime($this->RecursionEndDate);
-        $dates = [];
-
-        foreach ($this->yieldSingle($pattern) as $dayNumber) {
-            for ($trackingDate = $date; $trackingDate <= $end; $trackingDate = strtotime('+1 week', $trackingDate)) {
-                if ($trackingDate != $date) {
-                    $dates[] = date('Y-m-d H:i:s', $trackingDate);
-                }
-            }
-        }
-
-        return $dates;//*/
-    }
-
-    /**
-     * @param $newStart
-     * @return false|string
-     */
-    private function getEndFromStart($newStart)
-    {
-        $dateDiff = round((strtotime($this->EndDatetime) - strtotime($this->StartDatetime)) / (60 * 60 * 24));
-        $time = date('H:i:s', strtotime($this->EndDatetime));
-        $day = date('Y-m-d', strtotime("+{$dateDiff} days", strtotime($newStart)));
-
-        return date('Y-m-d H:i:s', strtotime("{$day} {$time}"));
     }
 
     /**

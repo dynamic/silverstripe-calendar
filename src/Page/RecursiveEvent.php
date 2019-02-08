@@ -2,12 +2,15 @@
 
 namespace Dynamic\Calendar\Page;
 
+use Carbon\Carbon;
 use Dynamic\Calendar\Model\Category;
+use Dynamic\Calendar\Model\RecursionChangeSet;
 
 /**
  * Class RecursiveEvent
  * @package Dynamic\Calendar\Page
- *
+ * @property int $GeneratingChangeSetID
+ * @method RecursionChangeSet GeneratingChangeSet()
  * @method EventPage Parent()
  */
 class RecursiveEvent extends EventPage
@@ -33,9 +36,38 @@ class RecursiveEvent extends EventPage
     private static $default_parent = EventPage::class;
 
     /**
+     * @var string
+     */
+    private static $table_name = 'RecursiveEvent';
+
+    /**
+     * @var bool
+     */
+    private static $show_in_sitetree = false;
+
+    /**
      * @var int
      */
-    private static $create_new_max = 14;
+    private static $create_new_max = 7;
+
+    /**
+     * @var array
+     */
+    private static $has_one = [
+        'GeneratingChangeSet' => RecursionChangeSet::class,
+    ];
+
+    /**
+     * @return array
+     */
+    public function summaryFields()
+    {
+        $fields = parent::summaryFields();
+
+        unset($fields['HasRecurringEvents']);
+
+        return $fields;
+    }
 
     /**
      *
@@ -44,12 +76,16 @@ class RecursiveEvent extends EventPage
     {
         parent::onBeforeWrite();
 
-        if($this->exists()){
+        if (!$this->exists()) {
+            $dateString = Carbon::parse($this->StartDatetime)->format('Y-m-d');
+            $this->URLSegment = $this->URLSegment . "-{$dateString}";
+        }
+
+        if ($this->exists()) {
             $parent = $this->Parent();
 
             $this->Title = $parent->Title;
             $this->Content = $parent->Content;
-
 
             if ($parent instanceof EventPage) {
                 $this->AllDay = $parent->AllDay;

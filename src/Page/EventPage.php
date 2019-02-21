@@ -529,7 +529,7 @@ class EventPage extends \Page
     /**
      * @return string
      */
-    protected function getMonthDay()
+    public function getMonthDay()
     {
         $startDate = Carbon::parse($this->StartDatetime);
 

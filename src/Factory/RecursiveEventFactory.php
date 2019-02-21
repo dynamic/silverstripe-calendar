@@ -274,16 +274,13 @@ class RecursiveEventFactory
             ? Carbon::parse($this->getExistingDates()->last()->StartDatetime)
             : Carbon::parse($this->getEvent()->StartDatetime);
 
+        $pattern = $this->getEvent()->getMonthDay();
+
         $dates = [];
 
         while (count($dates) < $max) {
-            $month = $date->month;
-
-            while ($month == $date->month) {
-                $date->addWeek();
-            }
-
-            $dates[] = $freshDate($date->format($this->config()->get('date_format')));
+            $dates[] = $freshDate("{$pattern} {$date->format('Y-m')}");
+            $date = $date->addMonth();
         }
 
         $this->monthly_dates = $dates;

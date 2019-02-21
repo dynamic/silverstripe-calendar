@@ -75,10 +75,7 @@ class RecursiveEventFactory
     {
         $this->setChangeSet($changeSet);
         $this->setEvent($changeSet);
-
-        if ($existingDates) {
-            $this->setExistingDates($existingDates);
-        }
+        $this->setExistingDates($existingDates);
     }
 
     /**
@@ -129,6 +126,10 @@ class RecursiveEventFactory
      */
     public function setExistingDates($existingDates)
     {
+        if ($existingDates === null) {
+            $existingDates = $this->getEvent()->Children();
+        }
+
         $this->existing_dates = $existingDates;
 
         return $this;
@@ -157,6 +158,9 @@ class RecursiveEventFactory
             case 'Monthly':
                 $dates = $this->getMonthlyDates();
                 break;
+            case 'Annual':
+                $dates = $this->getYearlyEvents();
+                break;
         }
 
         if (isset($dates)) {
@@ -176,7 +180,9 @@ class RecursiveEventFactory
         };
 
         $format = $this->config()->get('date_format');
-        $date = Carbon::parse($this->getEvent()->StartDatetime)->addDay();
+        $date = ($this->getExistingDates()->count())
+            ? Carbon::parse($this->getExistingDates()->last()->StartDatetime)->addDay()
+            : Carbon::parse($this->getEvent()->StartDatetime)->addDay();
         $max = RecursiveEvent::config()->get('create_new_max');
 
         $dates = [];
@@ -226,7 +232,9 @@ class RecursiveEventFactory
 
         $format = $this->config()->get('date_format');
         $max = RecursiveEvent::config()->get('create_new_max');
-        $date = Carbon::parse($this->getEvent()->StartDatetime)->addDay(7);
+        $date = ($this->getExistingDates()->count())
+            ? Carbon::parse($this->getExistingDates()->last()->StartDatetime)->addDay(7)
+            : Carbon::parse($this->getEvent()->StartDatetime)->addDay(7);
 
         $dates = [];
 
@@ -262,7 +270,10 @@ class RecursiveEventFactory
         };
 
         $max = RecursiveEvent::config()->get('create_new_max');
-        $date = Carbon::parse($this->getEvent()->StartDatetime);
+        $date = ($this->getExistingDates()->count())
+            ? Carbon::parse($this->getExistingDates()->last()->StartDatetime)
+            : Carbon::parse($this->getEvent()->StartDatetime);
+
         $dates = [];
 
         while (count($dates) < $max) {
@@ -302,7 +313,9 @@ class RecursiveEventFactory
         };
 
         $max = RecursiveEvent::config()->get('create_new_max');
-        $date = Carbon::parse($this->getEvent()->StartDatetime)->addYear();
+        $date = ($this->getExistingDates()->count())
+            ? Carbon::parse($this->getExistingDates()->last()->StartDatetime)->addYear()
+            : Carbon::parse($this->getEvent()->StartDatetime)->addYear();
         $dates = [];
 
         while (count($dates) < $max) {

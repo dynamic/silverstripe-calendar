@@ -47,6 +47,11 @@ class RecursiveEventFactoryTest extends SapphireTest
     private $monthly_event;
 
     /**
+     * @var
+     */
+    private $annual_event;
+
+    /**
      *
      */
     protected function setUp()
@@ -56,6 +61,8 @@ class RecursiveEventFactoryTest extends SapphireTest
         $this->setCalendar();
         $this->setDailyEvent();
         $this->setWeeklyEvent();
+        $this->setMonthlyEvent();
+        $this->setAnnualEvent();
 
         $this->reading_mode = Versioned::get_reading_mode();
         Versioned::set_reading_mode('stage');
@@ -203,6 +210,40 @@ class RecursiveEventFactoryTest extends SapphireTest
     }
 
     /**
+     * @return mixed
+     * @throws \SilverStripe\ORM\ValidationException
+     */
+    protected function getMonthEvent()
+    {
+        if (!$this->annual_event) {
+            $this->setAnnualEvent();
+        }
+
+        return $this->annual_event;
+    }
+
+    /**
+     * @return $this
+     * @throws \SilverStripe\ORM\ValidationException
+     */
+    protected function setAnnualEvent()
+    {
+        if (!$event = EventPage::get()->filter('Recursion', 'Annual')->first()) {
+            $event = EventPage::create();
+            $event->ParentID = $this->getCalendar()->ID;
+            $event->Title = 'My Annual Event';
+            $event->URLSegment = 'my-annual-event';
+            $event->Recursion = 'Annual';
+            $event->StartDatetime = Carbon::now()->addDay()->format('Y-m-d H:i:s');
+            $event->write();
+        }
+
+        $this->annual_event = $event;
+
+        return $this;
+    }
+
+    /**
      *
      */
     public function testSetChangeSet()
@@ -250,7 +291,6 @@ class RecursiveEventFactoryTest extends SapphireTest
 
         $factory->generateEvents();
         $newEvent = EventPage::get()->byID($newEvent->ID);
-
         //$this->assertEquals(RecursiveEvent::config()->get('create_new_max'), $newEvent->Children()->count());
     }
 
@@ -308,7 +348,6 @@ class RecursiveEventFactoryTest extends SapphireTest
     public function testWeeklyEvents()
     {
         $event = $this->getWeeklyEvent();
-
         //$this->assertEquals(RecursiveEvent::config()->get('create_new_max'), $event->Children()->count());
     }
 

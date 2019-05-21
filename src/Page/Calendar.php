@@ -2,17 +2,13 @@
 
 namespace Dynamic\Calendar\Page;
 
-use Carbon\Carbon;
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 
 /**
  * Class Calendar
- *
- * @package calendar
- *
- * @method \SilverStripe\ORM\DataList Categories()
+ * @package Dynamic\Calendar\Page
  */
 class Calendar extends \Page
 {

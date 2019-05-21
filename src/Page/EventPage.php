@@ -69,6 +69,13 @@ class EventPage extends \Page
     private static $can_be_root = false;
 
     /**
+     * Recursion is currently experimental.
+     *
+     * @var bool
+     */
+    private static $recursion = false;
+
+    /**
      * @var array
      */
     private static $db = [
@@ -245,7 +252,7 @@ class EventPage extends \Page
 
             $end->hideIf('AllDay')->isEqualTo(true)->end();
 
-            if ($this->StartDatetime) {
+            if ($this->StartDatetime && $this->config()->get('recursion')) {
                 $allDayGroup->push(
                     $recursion = DropdownField::create('Recursion')
                         ->setSource($this->getPatternSource())
@@ -253,7 +260,7 @@ class EventPage extends \Page
                 );
             }
 
-            if ($this->Recursion) {
+            if ($this->Recursion && $this->config()->get('recursion')) {
                 if ($this->isCopy()) {
                     $allDayGroup->performReadonlyTransformation();
                 } else {
@@ -280,6 +287,10 @@ class EventPage extends \Page
 
         if ($this->isCopy()) {
             $fields = $fields->makeReadonly();
+        }
+
+        if (!$this->config()->get('recursion')) {
+            $fields->removeByName('RecurringEvents');
         }
 
         return $fields;

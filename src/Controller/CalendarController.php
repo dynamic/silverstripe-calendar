@@ -2,12 +2,10 @@
 
 namespace Dynamic\Calendar\Controller;
 
-use Dynamic\Calendar\Controller\EventController;
+use Carbon\Carbon;
 use Dynamic\Calendar\Model\Category;
-use Dynamic\Calendar\Page\Calendar;
+use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\Controller;
-use SilverStripe\Control\HTTPRequest;
-use SilverStripe\Core\Config\Config;
 use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\FieldGroup;
@@ -16,8 +14,7 @@ use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\PaginatedList;
-use SilverStripe\View\ArrayData;
+use SilverStripe\ORM\DataList;
 
 /**
  * Class CalendarController
@@ -26,99 +23,161 @@ use SilverStripe\View\ArrayData;
  */
 class CalendarController extends \PageController
 {
+    /**
+     * @var
+     */
+    private $events = null;
 
     /**
      * @var array
      */
-    private static $url_handlers = array(
-        'event' => 'event',
-    );
-
-    /**
-     * @var array
-     */
-    private static $allowed_actions = array(
-        'index',
-        'event',
-        'EventFilterForm',
-    );
-
-    /**
-     * @var int
-     */
-    private static $pagination_length = 8;
+    private $default_filter;
 
     /**
      * @var string
      */
-    private static $filter_prefix = 'f';
+    private $view_type;
+
+    /**
+     * The Public stage.
+     */
+    const LISTVIEW = 'list';
+
+    /**
+     * The draft (default) stage
+     */
+    const GRIDVIEW = 'grid';
 
     /**
      * @var string
      */
-    private static $filter_any_prefix = 'a';
+    private $grid_link;
 
     /**
      * @var string
      */
-    private static $partial_match_prefix = 'p';
-
-    /**
-     * @var string
-     */
-    private static $exclude_prefix = 'e';
+    private $list_link;
 
     /**
      * @var
      */
-    private $filter;
+    private $start_date;
 
     /**
-     * @var
+     * @var string
      */
-    private $filter_any;
+    private static $view_session = 'Calendar.VIEW';
 
     /**
-     * @var
+     * @param bool $global
+     * @return $this
      */
-    private $exclude;
-
-    /**
-     * @param HTTPRequest $request
-     * @return \SilverStripe\View\ViewableData_Customised
-     */
-    public function index(HTTPRequest $request)
+    public function setDefaultFilter($global = false)
     {
-        $filter = $this->getFilter();
-        $filterAny = $this->getFilterAny();
-        $exclude = $this->getExclude();
+        $filter = ['StartDatetime:GreaterThanOrEqual' => $this->getStartDate()];
 
-        $events = Calendar::upcoming_events($filter, $filterAny, $exclude);
-        $start = ($request->getVar('start')) ? (int)$request->getVar('start') : 0;
+        if (!$global) {
+            $filter['ParentID'] = $this->data()->ID;
+        }
 
-        $list = PaginatedList::create($events, $this->request);
-        $list->setPageStart($start);
-        $list->setPageLength(Config::inst()->get(Calendar::class, 'events_per_page'));
+        $this->default_filter = $filter;
 
-        $agenda = $this->isAgenda();
-
-        return $this->customise(new ArrayData([
-            'IsAgenda' => $agenda,
-            'Events' => $list,
-        ]));
+        return $this;
     }
 
     /**
-     * @param null $request
-     * @return \SilverStripe\Control\HTTPResponse
+     * @return array
      */
-    public function event($request = null)
+    public function getDefaultFilter()
     {
-        if (!$request) {
-            $request = $this->getRequest();
+        if (!$this->default_filter) {
+            $this->setDefaultFilter();
         }
-        return EventController::create()
-            ->handleRequest($request, $this->model);
+
+        return $this->default_filter;
+    }
+
+    /**
+     * @return $this
+     */
+    protected function setEvents()
+    {
+        $events = EventPage::get()
+            ->filter($this->getDefaultFilter());
+
+        $events = $this->filterByRequest($events);
+
+        $this->extend('updateEvents', $events);
+
+        $this->events = $events;
+
+        return $this;
+    }
+
+    /**
+     * @return |null
+     */
+    public function getEvents()
+    {
+        if ($this->events === null) {
+            $this->setEvents();
+        }
+
+        return $this->events;
+    }
+
+    /**
+     * @return string
+     */
+    protected function getStartDate()
+    {
+        if (!$this->start_date) {
+            $this->setStartDate();
+        }
+
+        return $this->start_date;
+    }
+
+    /**
+     * @return $this
+     */
+    protected function setStartDate()
+    {
+        $this->start_date = ($startDate = $this->getRequest()->getVar('StartDate'))
+            ? Carbon::parse($startDate)->setTimeFrom(Carbon::now())->format(Carbon::MOCK_DATETIME_FORMAT)
+            : Carbon::now()->format(Carbon::MOCK_DATETIME_FORMAT);
+
+        return $this;
+    }
+
+    /**
+     * @param DataList $events
+     * @return mixed
+     */
+    protected function filterByRequest($events)
+    {
+        if (!$events->exists()) {
+            return $events;
+        }
+
+        $request = $this->getRequest();
+
+        if ($endDate = $request->getVar('EndDate')) {
+            $endDateTime = Carbon::parse($endDate)->endOfDay();
+
+            $events = $events->filter('EndDatetime:LessThanOrEqual',
+                $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT));
+        }
+
+        if ($title = $request->getVar('Title')) {
+            $events = $events->filter('Title:PartialMatch', $title);
+        }
+
+        if ($categories = $request->getVar('Categories')) {
+            $events = $events->filter(['Categories.ID' => $categories]);
+        }
+
+        return $events;
     }
 
     /**
@@ -126,15 +185,8 @@ class CalendarController extends \PageController
      */
     public function EventFilterForm()
     {
-
-        $filter = $this->config()->get('filter_prefix');
-        $partial = $this->config()->get('partial_match_prefix');
-        $filterAny = $this->config()->get('filter_any_prefix');
-
-        $categoryFilter = (class_exists('Subsite')) ? ['SubsiteID' => Subsite::currentSubsiteID()] : [];
-
         $fields = FieldList::create(
-            TextField::create($partial . '_Title')
+            TextField::create('Title')
                 ->setTitle('Title')
                 ->addExtraClass('largelabel')
                 ->addExtraClass('double-bottom'),
@@ -145,265 +197,122 @@ class CalendarController extends \PageController
             FieldGroup::create(
                 'dates',
                 FieldList::create(
-                    $date = DateField::create($filter . '_StartDate')
+                    $date = DateField::create('StartDate')
                         ->setTitle('')->addExtraClass('startdate'),
                     LiteralField::create(
                         'daterangemiddle',
                         '<div class="daterangemiddle"><label>to</label></div>'
                     ),
-                    DateField::create($filter . '_EndDate')
+                    DateField::create('EndDate')
                         ->setTitle('')->addExtraClass('enddate')
                 )
             )->setTitle('Date Range')->addExtraClass('double-bottom'),
-            CheckboxSetField::create($filterAny . '_Categories')
+            CheckboxSetField::create('Categories')
                 ->setTitle('Categories')
-                ->setSource(Category::get()->filter($categoryFilter)->map())
+                ->setSource(Category::get()->map())
         );
-
-        $this->extend('updateEventFilterFormFields', $fields);
 
         $actions = FieldList::create(
             FormAction::create('doFilter')
                 ->setTitle('Filter')
         );
 
-        return Form::create($this, __FUNCTION__, $fields, $actions)
+        $form = Form::create($this, __FUNCTION__, $fields, $actions)
             ->setFormMethod('GET')
             ->setFormAction($this->Link())
             ->disableSecurityToken()
             ->loadDataFrom($this->request->getVars());
+
+        $this->extend('updateEventSearchForm', $form);
+
+        return $form;
     }
 
     /**
-     * @return array
-     */
-    public function getFilter()
-    {
-        if (!$this->filter) {
-            $this->setFilter($this->filterFromRequest());
-        }
-        return $this->filter;
-    }
-
-    /**
-     * @param array $params
      * @return $this
      */
-    public function setFilter($params = array())
+    protected function setGridLink()
     {
-        $this->extend('updateCalendarFilter', $params);
-        $this->filter = $params;
+        $getVars = $this->getRequest()->getVars();
+        $getVars['view'] = static::GRIDVIEW;
+
+        $this->grid_link = Controller::join_links($this->Link(), http_build_query($getVars));
+
         return $this;
     }
 
     /**
-     * @param HTTPRequest|null $request
-     * @return array
-     */
-    public function filterFromRequest(HTTPRequest $request = null)
-    {
-        $request = ($request) ? $request : $this->request;
-        $params = self::clean_request_vars($request->getVars());
-        $filterPrefix = $this->config()->get('filter_prefix');
-
-        if (empty($params)) {
-            return array();
-        }
-
-        $filter = [];
-
-        foreach ($params as $key => $val) {
-            if (strpos($key, $filterPrefix . '_') !== false) {
-                if (!$request->getVar($key)) {
-                    continue;
-                }
-                $parts = explode('_', $key);
-                $filterKey = ((array)$val === $val) ? $parts[1] . '.ID' : $parts[1];
-                if (strpos($filterKey, 'Start') !== false) {
-                    $filterKey = $filterKey . ':GreaterThanOrEqual';
-                    $val = date('Y-m-d', strtotime($val));
-                }
-                if (strpos($filterKey, 'End') !== false) {
-                    $filterKey = $filterKey . ':LessThanOrEqual';
-                    $val = date('Y-m-d', strtotime($val));
-                }
-                $filter[$filterKey] = $val;
-            }
-        }
-
-        return $filter;
-    }
-
-    /**
-     * @return array
-     */
-    public function getFilterAny()
-    {
-        if (!$this->filter_any) {
-            $this->setFilterAny($this->filterAnyFromRequest());
-        }
-        return $this->filter_any;
-    }
-
-    /**
-     * @param array $params
-     * @return $this
-     */
-    public function setFilterAny($params = array())
-    {
-        $this->extend('updateCalendarFilterAny', $params);
-        $this->filter_any = $params;
-        return $this;
-    }
-
-    /**
-     * @param HTTPRequest|null $request
-     * @return array
-     */
-    public function filterAnyFromRequest(HTTPRequest $request = null)
-    {
-        $request = ($request) ? $request : $this->request;
-        $params = self::clean_request_vars($request->getVars());
-        $filterAnyPrefix = $this->config()->get('filter_any_prefix');
-        $partialMatchPrefix = $this->config()->get('partial_match_prefix');
-
-        if (empty($params)) {
-            return array();
-        }
-
-        $filterAny = [];
-
-        foreach ($params as $key => $val) {
-            if (strpos($key, $partialMatchPrefix . '_') !== false || strpos($key, $filterAnyPrefix . '_') !== false) {
-                if (!$request->getVar($key)) {
-                    continue;
-                }
-                $parts = explode('_', $key);
-                if ($parts[0] == $filterAnyPrefix) {
-                    $filterKey = ((array)$val === $val) ? $parts[1] . '.ID' : $parts[1];
-                } else {
-                    $filterKey = $parts[1] . ':PartialMatch';
-                }
-                $filterAny[$filterKey] = $val;
-            }
-        }
-
-        return $filterAny;
-    }
-
-    /**
-     * @return array
-     */
-    public function getExclude()
-    {
-        if (!$this->exclude) {
-            $this->setExclude($this->excludeFromRequest());
-        }
-        return $this->exclude;
-    }
-
-    /**
-     * @param array $params
-     * @return $this
-     */
-    public function setExclude($params = array())
-    {
-        $this->extend('updateCalendarExclude', $params);
-        $this->exclude = $params;
-        return $this;
-    }
-
-    /**
-     * @param HTTPRequest|null $request
-     * @return array
-     */
-    public function excludeFromRequest(HTTPRequest $request = null)
-    {
-        $request = ($request) ? $request : $this->request;
-        $params = self::clean_request_vars($request->getVars());
-        $excludePrefix = $this->config()->get('exclude_prefix');
-
-        if (empty($params)) {
-            return array();
-        }
-
-        $exclude = [];
-
-        foreach ($params as $key => $val) {
-            if (strpos($key, $excludePrefix . '_') !== false) {
-                if (!$request->getVar($key)) {
-                    continue;
-                }
-                $parts = explode('_', $key);
-                $filterKey = ((array)$val === $val) ? $parts[1] . '.ID' : $parts[1];
-                $exclude[$filterKey] = $val;
-            }
-        }
-
-        return $exclude;
-    }
-
-    /**
-     * @param array $vars
-     * @return array
-     */
-    public static function clean_request_vars($vars = array())
-    {
-        if (isset($vars['url'])) {
-            unset($vars['url']);
-        }
-        if (isset($vars['action_doFilter'])) {
-            unset($vars['action_doFilter']);
-        }
-        return $vars;
-    }
-
-    /**
-     * @param $vars
-     * @return mixed
-     */
-    protected static function clear_view($vars)
-    {
-        if (isset($vars['view'])) {
-            unset($vars['view']);
-        }
-        return $vars;
-    }
-
-    /**
-     * @return bool
-     */
-    protected function isAgenda()
-    {
-        return ($this->request->getVar('view') && $this->request->getVar('view') == 'agenda');
-    }
-
-    /**
-     * @param array $vars
      * @return string
      */
-    protected static function build_view_link_vars($vars = array())
+    public function getGridLink()
     {
-        return http_build_query($vars);
+        if (!$this->grid_link) {
+            $this->setGridLink();
+        }
+
+        return $this->grid_link;
     }
 
     /**
-     * @return String
+     * @return $this
      */
-    public function AgendaLink()
+    protected function setListLink()
     {
-        $requestVars = self::clear_view(self::clean_request_vars($this->getRequest()->getVars()));
-        $requestVars['view'] = 'agenda';
-        return Controller::join_links($this->Link(), '?' . self::build_view_link_vars($requestVars));
+        $getVars = $this->getRequest()->getVars();
+        $getVars['view'] = static::LISTVIEW;
+
+        $this->list_link = Controller::join_links($this->Link(), http_build_query($getVars));
+
+        return $this;
     }
 
     /**
-     * @return String
+     * @return string
      */
-    public function GridLink()
+    public function getListLink()
     {
-        $requestVars = self::clear_view(self::clean_request_vars($this->getRequest()->getVars()));
-        $requestVars['view'] = 'grid';
-        return Controller::join_links($this->Link(), '?' . self::build_view_link_vars($requestVars));
+        if (!$this->list_link) {
+            $this->setListLink();
+        }
+
+        return $this->list_link;
+    }
+
+    /**
+     * @return string
+     */
+    public function getViewType()
+    {
+        if (!$this->view_type) {
+            $this->setViewType();
+        }
+
+        return $this->view_type;
+    }
+
+    /**
+     * @return $this
+     */
+    protected function setViewType()
+    {
+        if (($view = $this->getRequest()->getVar('view')) && $this->validView($view)) {
+            $this->getRequest()->getSession()->set($this->config()->get('calendar_session'), $view);
+            $this->view_type = $view;
+        } elseif (($view = $this->getRequest()->getSession()->get($this->config()->get('calendar_session'))) && $this->validView($view)) {
+            $this->view_type = $view;
+        } else {
+            $this->view_type = static::GRIDVIEW;
+        }
+
+        return $this;
+    }
+
+    /**
+     * @param $view
+     * @return bool
+     */
+    protected function validView($view)
+    {
+        return $view == static::LISTVIEW || $view == static::GRIDVIEW;
     }
 }

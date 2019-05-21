@@ -277,7 +277,6 @@ class Category extends DataObject implements PermissionProvider
         }
 
         return !SiteTree::get()->filter('URLSegment', $this->URLSegment)->first()
-            && !Event::get()->filter('URLSegment', $this->URLSegment)->first()
             && !static::get()->filter('URLSegment', $this->URLSegment)->exclude($exclude)->first();
     }
 

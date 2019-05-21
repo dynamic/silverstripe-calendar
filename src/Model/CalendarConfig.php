@@ -88,18 +88,6 @@ class CalendarConfig extends DataObject implements PermissionProvider, TemplateG
             HiddenField::create('ID')
         );
 
-        if ($this->canAccessEvents()) {
-            $root->push(Tab::create(
-                'Events',
-                GridField::create(
-                    'Events',
-                    'Events',
-                    Event::get(),
-                    GridFieldConfig_RecordEditor::create()
-                )
-            ));
-        }
-
         if ($this->canAccessCategories()) {
             $root->push(Tab::create(
                 'Categories',

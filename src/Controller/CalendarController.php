@@ -165,8 +165,10 @@ class CalendarController extends \PageController
         if ($endDate = $request->getVar('EndDate')) {
             $endDateTime = Carbon::parse($endDate)->endOfDay();
 
-            $events = $events->filter('EndDatetime:LessThanOrEqual',
-                $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT));
+            $events = $events->filter(
+                'EndDatetime:LessThanOrEqual',
+                $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT)
+            );
         }
 
         if ($title = $request->getVar('Title')) {

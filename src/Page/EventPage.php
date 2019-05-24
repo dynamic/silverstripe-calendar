@@ -641,7 +641,7 @@ class EventPage extends \Page
         return $string = str_replace('y-eth', 'ieth', $second_word[$second_num] . '-' . $first_word[$first_num]);
     }
 
-    function numToOrdinalWord($num)
+    public function numToOrdinalWord($num)
     {
         $first_word = [
             'eth',

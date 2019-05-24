@@ -20,6 +20,7 @@ before_script:
   - phpenv rehash
   - phpenv config-rm xdebug.ini
   - echo 'memory_limit = 2048M' >> ~/.phpenv/versions/$(phpenv version-name)/etc/conf.d/travis.ini
+  - echo 'date.timezone = "America/Chicago" >> ~/.phpenv/versions/$(phpenv version-name)/etc/conf.d/travis.ini
 
   # Install composer dependencies
   - composer require --prefer-dist --no-update silverstripe-themes/simple:~3.2

@@ -290,7 +290,7 @@ class EventPage extends \Page
         }
 
         if (!$this->config()->get('recursion')) {
-            $fields->removeByName('RecurringEvents');
+            $fields->removeByName('ChildPages');
         }
 
         return $fields;

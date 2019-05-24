@@ -68,12 +68,4 @@ class RecursionChangeSetFactoryTest extends FunctionalTest
     {
         return ListboxField::create('RecursionPattern')->stringEncode($days);
     }
-
-    /**
-     *
-     */
-    public function testGetSerializedData()
-    {
-
-    }
 }

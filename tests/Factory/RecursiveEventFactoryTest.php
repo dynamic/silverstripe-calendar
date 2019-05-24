@@ -58,14 +58,14 @@ class RecursiveEventFactoryTest extends SapphireTest
     {
         parent::setUp();
 
-        $this->setCalendar();
+        /*$this->setCalendar();
         $this->setDailyEvent();
         $this->setWeeklyEvent();
         $this->setMonthlyEvent();
         $this->setAnnualEvent();
 
         $this->reading_mode = Versioned::get_reading_mode();
-        Versioned::set_reading_mode('stage');
+        Versioned::set_reading_mode('stage');//*/
     }
 
     /**
@@ -73,7 +73,7 @@ class RecursiveEventFactoryTest extends SapphireTest
      */
     protected function tearDown()
     {
-        Versioned::set_reading_mode($this->reading_mode);
+        //Versioned::set_reading_mode($this->reading_mode);
 
         parent::tearDown();
     }

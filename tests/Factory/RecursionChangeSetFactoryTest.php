@@ -18,7 +18,7 @@ class RecursionChangeSetFactoryTest extends FunctionalTest
     /**
      * @var string
      */
-    //protected static $fixture_file = '../CalendarTest.yml';
+    protected static $fixture_file = '../Calendar.yml';
 
     /**
      * @var array

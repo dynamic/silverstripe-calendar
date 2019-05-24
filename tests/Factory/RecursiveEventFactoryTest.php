@@ -19,7 +19,7 @@ class RecursiveEventFactoryTest extends SapphireTest
     /**
      * @var string
      */
-    //protected static $fixture_file = 'calendartest.yml';
+    protected static $fixture_file = '../Calendar.yml';
 
     /**
      * @var

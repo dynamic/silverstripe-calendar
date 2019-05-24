@@ -17,7 +17,10 @@ use SilverStripe\Versioned\Versioned;
  */
 class EventPageTest extends SapphireTest
 {
-    protected static $fixture_file = '../EventTest.yml';
+    /**
+     * @var string
+     */
+    protected static $fixture_file = '../Calendar.yml';
 
     /**
      *

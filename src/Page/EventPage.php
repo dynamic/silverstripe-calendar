@@ -280,8 +280,7 @@ class EventPage extends \Page
         $fields = parent::getCMSFields();
 
         if (($children = $fields->dataFieldByName('ChildPages')) && $children instanceof GridField) {
-            if (
-                ($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class))
+            if (($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class))
                 && $component instanceof GridFieldPaginator
             ) {
                 $component->setItemsPerPage(7);

@@ -300,7 +300,10 @@ class CalendarController extends \PageController
         if (($view = $this->getRequest()->getVar('view')) && $this->validView($view)) {
             $this->getRequest()->getSession()->set($this->config()->get('calendar_session'), $view);
             $this->view_type = $view;
-        } elseif (($view = $this->getRequest()->getSession()->get($this->config()->get('calendar_session'))) && $this->validView($view)) {
+        } elseif (
+            ($view = $this->getRequest()->getSession()->get($this->config()->get('calendar_session')))
+            && $this->validView($view)
+        ) {
             $this->view_type = $view;
         } else {
             $this->view_type = static::GRIDVIEW;

@@ -165,8 +165,10 @@ class CalendarController extends \PageController
         if ($endDate = $request->getVar('EndDate')) {
             $endDateTime = Carbon::parse($endDate)->endOfDay();
 
-            $events = $events->filter('EndDatetime:LessThanOrEqual',
-                $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT));
+            $events = $events->filter(
+                'EndDatetime:LessThanOrEqual',
+                $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT)
+            );
         }
 
         if ($title = $request->getVar('Title')) {
@@ -298,7 +300,9 @@ class CalendarController extends \PageController
         if (($view = $this->getRequest()->getVar('view')) && $this->validView($view)) {
             $this->getRequest()->getSession()->set($this->config()->get('calendar_session'), $view);
             $this->view_type = $view;
-        } elseif (($view = $this->getRequest()->getSession()->get($this->config()->get('calendar_session'))) && $this->validView($view)) {
+        } elseif (($view = $this->getRequest()->getSession()->get($this->config()->get('calendar_session')))
+            && $this->validView($view)
+        ) {
             $this->view_type = $view;
         } else {
             $this->view_type = static::GRIDVIEW;

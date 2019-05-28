@@ -280,7 +280,9 @@ class EventPage extends \Page
         $fields = parent::getCMSFields();
 
         if (($children = $fields->dataFieldByName('ChildPages')) && $children instanceof GridField) {
-            if (($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class)) && $component instanceof GridFieldPaginator) {
+            if (($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class))
+                && $component instanceof GridFieldPaginator
+            ) {
                 $component->setItemsPerPage(7);
             }
         }
@@ -641,7 +643,7 @@ class EventPage extends \Page
         return $string = str_replace('y-eth', 'ieth', $second_word[$second_num] . '-' . $first_word[$first_num]);
     }
 
-    function numToOrdinalWord($num)
+    public function numToOrdinalWord($num)
     {
         $first_word = [
             'eth',
@@ -706,7 +708,8 @@ class EventPage extends \Page
         $recursionSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID);
         $existing = RecursiveEvent::get()->filter([
             'ParentID' => $this->ID,
-            'StartDatetime:GreaterThanOrEqual' => Carbon::now()->format(RecursiveEventFactory::config()->get('date_format')),
+            'StartDatetime:GreaterThanOrEqual' => Carbon::now()
+                ->format(RecursiveEventFactory::config()->get('date_format')),
         ]);
 
         if (!$existing->exists()) {

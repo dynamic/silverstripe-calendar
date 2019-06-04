@@ -133,7 +133,7 @@ class EventPage extends \Page
     /**
      * @var string
      */
-    private static $default_sort = 'StartDatetime DESC';
+    private static $default_sort = 'StartDatetime';
 
     /**
      * @var array

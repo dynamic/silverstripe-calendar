@@ -30,7 +30,7 @@ class Calendar extends \Page
     /**
      * @var string
      */
-    private static $icon = 'font-icon-p-event-alt';
+    private static $icon_class = 'font-icon-p-event-alt';
 
     /**
      * @var array

@@ -61,7 +61,7 @@ class EventPage extends \Page
     /**
      * @var string
      */
-    private static $icon = 'font-icon-p-event';
+    private static $icon_class = 'font-icon-p-event';
 
     /**
      *

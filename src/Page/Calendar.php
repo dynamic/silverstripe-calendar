@@ -79,7 +79,7 @@ class Calendar extends \Page
         return EventPage::get()->filter([
             'ParentID' => $this->ID,
             //'StartDatetime:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
-        ])->sort('StartDatetime DESC');
+        ])->sort('StartDate DESC');
     }
 
     /**

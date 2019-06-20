@@ -25,6 +25,7 @@ use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\Versioned\Versioned;
+use UncleCheese\DisplayLogic\Forms\Wrapper;
 
 /**
  * Class EventPage
@@ -250,13 +251,13 @@ class EventPage extends \Page
                     $start = FieldGroup::create(
                         DateField::create('StartDate')
                             ->setTitle('Start Date'),
-                        TimeField::create('StartTime')
+                        $startTime = TimeField::create('StartTime')
                             ->setTitle('Start Time')
                     ),
-                    $end = FieldGroup::create(
-                        DateField::create('EndDate')
+                    FieldGroup::create(
+                        $endDate = DateField::create('EndDate')
                             ->setTitle('End Date'),
-                        TimeField::create('EndTime')
+                        $endTime = TimeField::create('EndTime')
                             ->setTitle('End Time')
                     ),
                     $allDayGroup = FieldGroup::create(
@@ -271,7 +272,9 @@ class EventPage extends \Page
                 ]
             );
 
-            $end->hideIf('AllDay')->isEqualTo(true)->end();
+            $endDate->hideIf('AllDay')->isEqualTo(true)->end();
+            $endTime->hideIf('AllDay')->isEqualTo(true)->end();
+            $startTime->hideIf('AllDay')->isEqualTo(true)->end();
 
             if ($this->StartDate && $this->config()->get('recursion')) {
                 $allDayGroup->push(

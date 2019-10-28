@@ -11,7 +11,7 @@
     "type": "silverstripe-vendormodule",
     "require": {
         "nesbot/carbon": "^1.0",
-        "silverstripe/recipe-cms": "^4.0",
+        "silverstripe/cms": "^4.0",
         "silverstripe/lumberjack": "^2.0",
         "symbiote/silverstripe-gridfieldextensions": "^3.0",
         "unclecheese/display-logic": "^2.0"
@@ -41,5 +41,7 @@
     "scripts": {
         "lint": "vendor/bin/phpcs src/ tests/",
         "lint-clean": "vendor/bin/phpcbf src/ tests/"
-    }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }

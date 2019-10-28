@@ -8,6 +8,7 @@ use Dynamic\Calendar\Factory\RecursiveEventFactory;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\RecursionChangeSet;
 use SilverStripe\Forms\CheckboxField;
+use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DatetimeField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
@@ -15,10 +16,12 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
+use SilverStripe\Forms\TimeField;
 use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBDatetime;
+use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\Versioned\Versioned;
@@ -27,8 +30,10 @@ use SilverStripe\Versioned\Versioned;
  * Class EventPage
  * @package Dynamic\Calendar\Page
  *
- * @property DBDatetime $StartDatetime
- * @property DBDatetime $EndDatetime
+ * @property DBDate $StartDate
+ * @property DBTime $StartTime
+ * @property DBDate $EndDate
+ * @property DBTime $EndTime
  * @property bool $AllDay
  * @property string $Recursion
  * @property DBDate $RecursionEndDate
@@ -79,8 +84,12 @@ class EventPage extends \Page
      * @var array
      */
     private static $db = [
-        'StartDatetime' => 'DBDatetime',
-        'EndDatetime' => 'DBDatetime',
+        'StartDatetime' => 'DBDatetime',/** @deprecated  */
+        'EndDatetime' => 'DBDatetime',/** @deprecated  */
+        'StartDate' => 'Date',
+        'EndDate' => 'Date',
+        'StartTime' => 'Time',
+        'EndTime' => 'Time',
         'AllDay' => 'Boolean',
         'Recursion' => 'Enum(array("Daily","Weekly","Monthly","Weekdays","Annual"))',
         'RecursionEndDate' => 'Date',
@@ -133,7 +142,7 @@ class EventPage extends \Page
     /**
      * @var string
      */
-    private static $default_sort = 'StartDatetime';
+    private static $default_sort = 'StartDate';
 
     /**
      * @var array
@@ -169,8 +178,10 @@ class EventPage extends \Page
      * @var array
      */
     private static $recursion_changed = [
-        'StartDatetime',
-        'EndDatetime',
+        'StartDate',
+        'StartTime',
+        'EndDate',
+        'EndTime',
         'Recursion',
     ];
 
@@ -179,7 +190,7 @@ class EventPage extends \Page
      */
     public function getGridFieldDate()
     {
-        $carbon = Carbon::parse($this->StartDatetime);
+        $carbon = Carbon::parse($this->StartDate);
 
         return "{$carbon->shortEnglishMonth} {$carbon->day}, {$carbon->year}";
     }
@@ -189,7 +200,7 @@ class EventPage extends \Page
      */
     public function getGridFieldTime()
     {
-        $carbon = Carbon::parse($this->StartDatetime);
+        $carbon = Carbon::parse($this->StartTime);
 
         return date('g:i a', $carbon->timestamp);
     }
@@ -221,8 +232,8 @@ class EventPage extends \Page
     {
         return RecursiveEvent::get()->filter([
             'ParentID' => $this->ID,
-            'StartDatetime:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
-        ])->sort('StartDatetime ASC');
+            'StartDate:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
+        ])->sort('StartDate ASC');
     }
 
     /**
@@ -234,10 +245,14 @@ class EventPage extends \Page
             $fields->addFieldsToTab(
                 'Root.EventSettings',
                 [
-                    $start = DatetimeField::create('StartDatetime')
-                        ->setTitle('Start Date & Time'),
-                    $end = DatetimeField::create('EndDatetime')
-                        ->setTitle('End Date & Time'),
+                    $start = DateField::create('StartDate')
+                        ->setTitle('Start Date'),
+                    $startTime = TimeField::create('StartTime')
+                        ->setTitle('Start Time'),
+                    $end = DatetimeField::create('EndDate')
+                        ->setTitle('End Date'),
+                    $endTime = TimeField::create('EndTime')
+                        ->setTitle('EndTime'),
                     $allDayGroup = FieldGroup::create(
                         'Pattern',
                         $allDay = DropdownField::create('AllDay')
@@ -250,9 +265,11 @@ class EventPage extends \Page
                 ]
             );
 
+            $startTime->hideIf('AllDay')->isEqualTo(true)->end();
             $end->hideIf('AllDay')->isEqualTo(true)->end();
+            $endTime->hideIf('AllDay')->isEqualTo(true)->end();
 
-            if ($this->StartDatetime && $this->config()->get('recursion')) {
+            if ($this->StartDate && $this->config()->get('recursion')) {
                 $allDayGroup->push(
                     $recursion = DropdownField::create('Recursion')
                         ->setSource($this->getPatternSource())
@@ -324,7 +341,7 @@ class EventPage extends \Page
     private function writeChildrenToStage()
     {
         $this->Children()
-            ->filter('StartDatetime:GreaterThanOrEqual', Carbon::now()->format('Y-m-d'))
+            ->filter('StartDate:GreaterThanOrEqual', Carbon::now()->format('Y-m-d'))
             ->each(function (RecursiveEvent $event) {
                 $event->writeToStage(Versioned::DRAFT);
             });
@@ -349,10 +366,10 @@ class EventPage extends \Page
             $this->deleteChildren();
         }
 
-        if (!$this->isChanged('Recursion', $changeType) && $this->isChanged('StartDatetime', $changeType)) {
+        if (!$this->isChanged('Recursion', $changeType) && $this->isChanged('StartDate', $changeType)) {
             /** @var RecursiveEvent $event */
             if ($event = RecursiveEvent::get()->filter([
-                'StartDatetime' => $this->StartDatetime,
+                'StartDate' => $this->StartDate,
                 'ParentID' => $this->ID,
             ])->first()) {
                 $event->doUnpublish();
@@ -507,7 +524,7 @@ class EventPage extends \Page
     public function getPatternSource()
     {
         $pattern = EventPage::singleton()->dbObject('Recursion')->enumValues();
-        $day = $this->getDayFromDate($this->StartDatetime);
+        $day = $this->getDayFromDate($this->StartDate);
 
         foreach ($pattern as $key => $val) {
             switch ($key) {
@@ -544,7 +561,7 @@ class EventPage extends \Page
      */
     public function getMonthDay()
     {
-        $startDate = Carbon::parse($this->StartDatetime);
+        $startDate = Carbon::parse($this->StartDate);
 
         $day = $startDate->format('l');
         $month = $startDate->format('F');
@@ -685,7 +702,7 @@ class EventPage extends \Page
      */
     protected function getMonthDate()
     {
-        return date('F j', strtotime($this->StartDatetime));
+        return date('F j', strtotime($this->StartDate));
     }
 
     /**
@@ -708,7 +725,7 @@ class EventPage extends \Page
         $recursionSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID);
         $existing = RecursiveEvent::get()->filter([
             'ParentID' => $this->ID,
-            'StartDatetime:GreaterThanOrEqual' => Carbon::now()
+            'StartDate:GreaterThanOrEqual' => Carbon::now()
                 ->format(RecursiveEventFactory::config()->get('date_format')),
         ]);
 

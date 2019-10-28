@@ -74,7 +74,7 @@ class CalendarController extends \PageController
      */
     public function setDefaultFilter($global = false)
     {
-        $filter = ['StartDatetime:GreaterThanOrEqual' => $this->getStartDate()];
+        $filter = ['StartDate:GreaterThanOrEqual' => $this->getStartDate()];
 
         if (!$global) {
             $filter['ParentID'] = $this->data()->ID;
@@ -166,7 +166,7 @@ class CalendarController extends \PageController
             $endDateTime = Carbon::parse($endDate)->endOfDay();
 
             $events = $events->filter(
-                'EndDatetime:LessThanOrEqual',
+                'EndDate:LessThanOrEqual',
                 $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT)
             );
         }

@@ -5,11 +5,13 @@ Dynamic\Calendar\Page\Calendar:
 Dynamic\Calendar\Page\EventPage:
   one:
     Title: 'Main Event'
-    StartDatetime: '2019-07-04 09:00:00'
+    StartDate: '2019-07-04'
+    StartTime: '09:00:00'
     AllDay: 0
     Parent: =>Dynamic\Calendar\Page\Calendar.one
   two:
     Title: 'All Day Event'
-    StartDatetime: '2019-01-01 00:00:00'
+    StartDate: '2019-01-01'
+    StartTime: '00:00:00'
     AllDay: 1
     Parent: =>Dynamic\Calendar\Page\Calendar.one

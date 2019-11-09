@@ -2,14 +2,9 @@
 
 namespace Dynamic\Calendar\Tests\Page;
 
-use Carbon\Carbon;
-use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
-use Dynamic\Calendar\Page\RecursiveEvent;
-use PHP_CodeSniffer\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\FieldList;
-use SilverStripe\Versioned\Versioned;
 
 /**
  * Class EventPageTest

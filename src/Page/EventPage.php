@@ -402,6 +402,7 @@ class EventPage extends \Page
 
         return false;
     }
+
     /**
      * @param null $member
      * @return bool

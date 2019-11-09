@@ -2,18 +2,12 @@
 
 namespace Dynamic\Calendar\Factory;
 
-use Carbon\Carbon;
-use Dynamic\Calendar\Model\RecursionChangeSet;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Page\RecursiveEvent;
 use RRule\RRule;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
-use SilverStripe\Dev\Debug;
-use SilverStripe\ORM\ArrayList;
-use SilverStripe\ORM\FieldType\DBDate;
-use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\SS_List;
 use SilverStripe\Versioned\Versioned;
 

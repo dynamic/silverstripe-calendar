@@ -188,9 +188,10 @@ class EventPage extends \Page
      */
     public function getGridFieldDate()
     {
-        $carbon = Carbon::parse($this->StartDate);
+        /** @var DBDate $date */
+        $date = DBField::create_field(DBDate::class, $this->StartDate);
 
-        return "{$carbon->shortEnglishMonth} {$carbon->day}, {$carbon->year}";
+        return "{$date->ShortMonth()} {$date->DayOfMonth(true)}, {$date->Year()}";
     }
 
     /**
@@ -198,9 +199,10 @@ class EventPage extends \Page
      */
     public function getGridFieldTime()
     {
-        $carbon = Carbon::parse($this->StartTime);
+        /** @var DBTime $date */
+        $time = DBField::create_field(DBTime::class, $this->StartTime);
 
-        return date('g:i a', $carbon->timestamp);
+        return $time->Nice();
     }
 
     /**

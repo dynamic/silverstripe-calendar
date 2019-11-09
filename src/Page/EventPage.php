@@ -5,22 +5,20 @@ namespace Dynamic\Calendar\Page;
 use Carbon\Carbon;
 use Dynamic\Calendar\Factory\RecursionChangeSetFactory;
 use Dynamic\Calendar\Factory\RecursiveEventFactory;
+use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\RecursionChangeSet;
-use SilverStripe\Forms\CheckboxField;
 use SilverStripe\Forms\DateField;
-use SilverStripe\Forms\DatetimeField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
-use SilverStripe\Forms\TimeField;
 use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\FieldType\DBDate;
-use SilverStripe\ORM\FieldType\DBDatetime;
+use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
@@ -247,11 +245,11 @@ class EventPage extends \Page
                 [
                     $start = DateField::create('StartDate')
                         ->setTitle('Start Date'),
-                    $startTime = TimeField::create('StartTime')
+                    $startTime = CalendarTimeField::create('StartTime')
                         ->setTitle('Start Time'),
-                    $end = DatetimeField::create('EndDate')
+                    $end = DateField::create('EndDate')
                         ->setTitle('End Date'),
-                    $endTime = TimeField::create('EndTime')
+                    $endTime = CalendarTimeField::create('EndTime')
                         ->setTitle('EndTime'),
                     $allDayGroup = FieldGroup::create(
                         'Pattern',

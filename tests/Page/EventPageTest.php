@@ -30,7 +30,7 @@ class EventPageTest extends SapphireTest
         /** @var EventPage $event */
         $event = $this->objFromFixture(EventPage::class, 'one');
 
-        $this->assertEquals('Jul 4, 2019', $event->getGridFieldDate());
+        $this->assertEquals('Jul 4th, 2019', $event->getGridFieldDate());
     }
 
     /**

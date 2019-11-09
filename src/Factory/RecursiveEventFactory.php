@@ -76,7 +76,7 @@ class RecursiveEventFactory
     protected function getRecursionSet()
     {
         return new RRule([
-            'FREQ' => EventPage::RRULE[$this->getEvent()->Recursion],
+            'FREQ' => $this->getEvent()->Recursion,
             'INTERVAL' => $this->getEvent()->Interval,
             'DTSTART' => $this->getEvent()->StartDate,
             'UNTIL' => $this->getEvent()->RecursionEndDate,
@@ -261,7 +261,7 @@ class RecursiveEventFactory
 
         $existing = RecursiveEvent::get()
             ->filter('ParentID', $this->getEvent()->ID)
-            ->exclude($validDates)
+            ->exclude('StartDate', $validDates)
             ->column('StartDate');
 
         $remaining = array_diff($validDates, $existing);

@@ -15,6 +15,7 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
+use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\FieldType\DBDate;
@@ -46,10 +47,10 @@ class EventPage extends \Page
      * array
      */
     const RRULE = [
-        'Daily' => 'DAILY',
-        'Weekly' => 'WEEKLY',
-        'Monthly' => 'MONTHLY',
-        'Annual' => 'YEARLY',
+        'DAILY' => 'Day(s)',
+        'WEEKLY' => 'Week(s)',
+        'MONTHLY' => 'Month(s)',
+        'YEARLY' => 'Year(s)',
     ];
 
     /**
@@ -102,7 +103,7 @@ class EventPage extends \Page
         'StartTime' => 'Time',
         'EndTime' => 'Time',
         'AllDay' => 'Boolean',
-        'Recursion' => 'Enum(array("Daily","Weekly","Monthly","Annual"))',
+        'Recursion' => 'Enum(array("DAILY","WEEKLY","MONTHLY","YEARLY"))',
         'Interval' => 'Int',
         'RecursionEndDate' => 'Date',
         'RecursionChangeSetID' => 'Int',
@@ -195,6 +196,8 @@ class EventPage extends \Page
         'EndDate',
         'EndTime',
         'Recursion',
+        'Interval',
+        'RecursionEndDate',
     ];
 
     /**
@@ -267,12 +270,9 @@ class EventPage extends \Page
                         ->setTitle('End Date'),
                     $endTime = CalendarTimeField::create('EndTime')
                         ->setTitle('EndTime'),
-                    $allDayGroup = FieldGroup::create(
-                        'Pattern',
-                        $allDay = DropdownField::create('AllDay')
-                            ->setTitle('All Day')
-                            ->setSource([false => 'No', true => 'Yes'])
-                    )->setTitle(''),
+                    $allDay = DropdownField::create('AllDay')
+                        ->setTitle('All Day')
+                        ->setSource([false => 'No', true => 'Yes']),
                     $categories = TreeMultiselectField::create('Categories')
                         ->setTitle('Categories')
                         ->setSourceObject(Category::class),
@@ -283,27 +283,26 @@ class EventPage extends \Page
             $end->hideIf('AllDay')->isEqualTo(true)->end();
             $endTime->hideIf('AllDay')->isEqualTo(true)->end();
 
-            if ($this->StartDate && $this->config()->get('recursion')) {
-                $allDayGroup->push(
-                    $recursion = DropdownField::create('Recursion')
-                        ->setSource($this->getPatternSource())
-                        ->setEmptyString('Does not repeat')
+            if ($this->config()->get('recursion')) {
+                $fields->addFieldsToTab(
+                    'Root.Recursion',
+                    [
+                        FieldGroup::create(
+                            $interval = NumericField::create('Interval')
+                                ->setTitle(''),
+                            $recursion = DropdownField::create('Recursion')
+                                ->setSource($this->getPatternSource())
+                                ->setEmptyString('Does not repeat'),
+                            $recursionEndDate = DateField::create('RecursionEndDate')
+                                ->setTitle('Ending On')
+                        )->setTitle('Repeat every'),
+                    ]
                 );
             }
 
             if ($this->Recursion && $this->config()->get('recursion')) {
                 if ($this->isCopy()) {
-                    $allDayGroup->performReadonlyTransformation();
-                } else {
-                    $fields->addFieldToTab(
-                        'Root.EventSettings',
-                        GridField::create(
-                            'RecursionChangeSets',
-                            'Recursion Change Sets',
-                            $this->RecursionChangeSets(),
-                            $recursionsConfig = GridFieldConfig_RecordViewer::create()
-                        )
-                    );
+                    //$allDayGroup->performReadonlyTransformation();
                 }
             }
         });
@@ -339,14 +338,14 @@ class EventPage extends \Page
         $this->EventType = static::class;
 
         if (!$this->isCopy() && $this->Recursion != null && $this->recursionChanged()) {
-            //$this->RecursionChangeSetID = $this->generateRecursionChangeSet()->ID;
+            $factory = RecursiveEventFactory::create($this);
+            $factory->createRecursiveEvent();
         }
-
-        if (!$this->isCopy() && !$this->Recursion && $this->Children()->count()) {
+        /*if (!$this->isCopy() && !$this->Recursion && $this->Children()->count()) {
             $this->deleteChildren();
         } elseif (!$this->isCopy() && $this->Recursion && !$this->recursionChanged()) {
             $this->writeChildrenToStage();
-        }
+        }//*/
     }
 
     /**
@@ -537,24 +536,7 @@ class EventPage extends \Page
      */
     public function getPatternSource()
     {
-        $pattern = EventPage::singleton()->dbObject('Recursion')->enumValues();
-        $day = $this->getDayFromDate($this->StartDate);
-
-        foreach ($pattern as $key => $val) {
-            switch ($key) {
-                case 'Weekly':
-                    $pattern[$key] = "{$val} on {$day}";
-                    break;
-                case 'Monthly':
-                    $pattern[$key] = "{$val} on the {$this->getMonthDay()}";
-                    break;
-                case 'Annual':
-                    $pattern[$key] = "{$val} on {$this->getMonthDate()}";
-                    break;
-            }
-        }
-
-        return $pattern;
+        return self::RRULE;
     }
 
     /**

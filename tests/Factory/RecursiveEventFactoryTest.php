@@ -57,10 +57,9 @@ class RecursiveEventFactoryTest extends SapphireTest
     protected function setUp()
     {
         parent::setUp();
-
-        /*$this->setCalendar();
+        $this->setCalendar();
         $this->setDailyEvent();
-        $this->setWeeklyEvent();
+        /*$this->setWeeklyEvent();
         $this->setMonthlyEvent();
         $this->setAnnualEvent();
 
@@ -113,7 +112,7 @@ class RecursiveEventFactoryTest extends SapphireTest
      */
     protected function getDailyEvent()
     {
-        if (!$this->daily_event) {
+        if (!$this->daily_event instanceof EventPage) {
             $this->setDailyEvent();
         }
 
@@ -132,7 +131,9 @@ class RecursiveEventFactoryTest extends SapphireTest
             $event->Title = 'My Daily Event';
             $event->URLSegment = 'my-daily-event';
             $event->Recursion = 'Daily';
-            $event->StartDatetime = Carbon::now()->addDay()->format('Y-m-d H:i:s');
+            $event->StartDate = Carbon::now()->addDay()->format('Y-m-d');
+            $event->Interval = 2;
+            $event->RecursionEndDate = Carbon::now()->addDay(7)->format('Y-m-d');
             $event->write();
         }
 
@@ -244,12 +245,24 @@ class RecursiveEventFactoryTest extends SapphireTest
     }
 
     /**
+     * @throws \SilverStripe\ORM\ValidationException
+     */
+    public function testYieldRecursionData()
+    {
+        $event = $this->getDailyEvent();
+
+        $factory = RecursiveEventFactory::create($event);
+
+        $this->assertInstanceOf(EventPage::class, $event);
+        $this->assertEquals(4, $factory->getFullRecursionCount());
+    }
+
+    /**
      *
      */
     public function testSetChangeSet()
     {
         $this->markTestSkipped('Complete with recursion');
-
         /*$changeSet = $this->getDailyEvent()->getCurrentRecursionChangeSet();
 
         $factory = RecursiveEventFactory::create($changeSet);
@@ -263,7 +276,6 @@ class RecursiveEventFactoryTest extends SapphireTest
     public function testSetExistingDates()
     {
         $this->markTestSkipped('Complete with recursion');
-
         /*$changeSet = $this->getDailyEvent()->getCurrentRecursionChangeSet();
 
         $factory = RecursiveEventFactory::create($changeSet);
@@ -283,7 +295,6 @@ class RecursiveEventFactoryTest extends SapphireTest
     public function testGenerateEvents()
     {
         $this->markTestSkipped('Complete with recursion');
-
         /*$newEvent = $this->getDailyEvent();
         $changeSet = $newEvent->getCurrentRecursionChangeSet();
 
@@ -306,7 +317,6 @@ class RecursiveEventFactoryTest extends SapphireTest
     public function testShiftBaseDay()
     {
         $this->markTestSkipped('Complete with recursion');
-
         /*$event = $this->getDailyEvent();
 
         /**
@@ -355,7 +365,6 @@ class RecursiveEventFactoryTest extends SapphireTest
     public function testWeeklyEvents()
     {
         $this->markTestSkipped('Complete with recursion');
-
         /*$event = $this->getWeeklyEvent();
         //$this->assertEquals(RecursiveEvent::config()->get('create_new_max'), $event->Children()->count());//*/
     }
@@ -363,7 +372,6 @@ class RecursiveEventFactoryTest extends SapphireTest
     public function testMonthlyEvents()
     {
         $this->markTestSkipped('Complete with recursion');
-
         /*$event = $this->getMonthlyEvent();
 
         $this->assertEquals(RecursiveEvent::config()->get('create_new_max'), $event->Children()->count());//*/

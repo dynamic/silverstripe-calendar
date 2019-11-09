@@ -34,6 +34,7 @@ use SilverStripe\Versioned\Versioned;
  * @property DBTime $EndTime
  * @property bool $AllDay
  * @property string $Recursion
+ * @property int $Interval
  * @property DBDate $RecursionEndDate
  * @property int $RecursionChangeSetID
  * @method HasManyList RecursionChangeSets()
@@ -41,6 +42,16 @@ use SilverStripe\Versioned\Versioned;
  */
 class EventPage extends \Page
 {
+    /**
+     * array
+     */
+    const RRULE = [
+        'Daily' => 'DAILY',
+        'Weekly' => 'WEEKLY',
+        'Monthly' => 'MONTHLY',
+        'Annual' => 'YEARLY',
+    ];
+
     /**
      * @var string
      */
@@ -82,14 +93,17 @@ class EventPage extends \Page
      * @var array
      */
     private static $db = [
-        'StartDatetime' => 'DBDatetime',/** @deprecated  */
-        'EndDatetime' => 'DBDatetime',/** @deprecated  */
+        'StartDatetime' => 'DBDatetime',
+        /** @deprecated */
+        'EndDatetime' => 'DBDatetime',
+        /** @deprecated */
         'StartDate' => 'Date',
         'EndDate' => 'Date',
         'StartTime' => 'Time',
         'EndTime' => 'Time',
         'AllDay' => 'Boolean',
-        'Recursion' => 'Enum(array("Daily","Weekly","Monthly","Weekdays","Annual"))',
+        'Recursion' => 'Enum(array("Daily","Weekly","Monthly","Annual"))',
+        'Interval' => 'Int',
         'RecursionEndDate' => 'Date',
         'RecursionChangeSetID' => 'Int',
         'EventType' => 'Varchar(255)',
@@ -325,7 +339,7 @@ class EventPage extends \Page
         $this->EventType = static::class;
 
         if (!$this->isCopy() && $this->Recursion != null && $this->recursionChanged()) {
-            $this->RecursionChangeSetID = $this->generateRecursionChangeSet()->ID;
+            //$this->RecursionChangeSetID = $this->generateRecursionChangeSet()->ID;
         }
 
         if (!$this->isCopy() && !$this->Recursion && $this->Children()->count()) {
@@ -357,7 +371,7 @@ class EventPage extends \Page
         /** @var RecursionChangeSet $changeSet */
         if ($changeSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID)) {
             $changeSet->EventPageID = $changeSet->EventPageID == 0 ? $this->ID : $changeSet->EventPageID;
-            $changeSet->write();
+            //$changeSet->write();
         }
 
         $changeType = self::CHANGE_VALUE;
@@ -378,7 +392,7 @@ class EventPage extends \Page
         }
 
         if (!$this->isCopy() && $this->Recursion) {
-            $this->createOrUpdateChildren();
+            //$this->createOrUpdateChildren();
         }
     }
 

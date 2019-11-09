@@ -1,0 +1,12 @@
+---
+name: recursive-event-factory-config
+---
+
+Dynamic\Calendar\Factory\RecursiveEventFactory:
+  event_clone_data:
+    db:
+      - Title
+      - Content
+      - StartTime
+      - EndTime
+      - AllDay

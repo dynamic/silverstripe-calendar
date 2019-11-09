@@ -245,9 +245,9 @@ class RecursiveEventFactory
     }
 
     /**
-     *
+     * @return array
      */
-    public function createRecursiveEvent()
+    public function getValidRecursionDates()
     {
         $event = $this->getEvent();
 
@@ -258,6 +258,17 @@ class RecursiveEventFactory
                 $validDates[$date->format('Y-m-d')] = $date->format('Y-m-d');
             }
         }
+
+        return $validDates;
+    }
+
+    /**
+     *
+     */
+    public function createRecursiveEvent()
+    {
+        $event = $this->getEvent();
+        $validDates = $this->getValidRecursionDates();
 
         $existing = RecursiveEvent::get()
             ->filter('ParentID', $this->getEvent()->ID)

@@ -283,7 +283,7 @@ class EventPage extends \Page
             $end->hideIf('AllDay')->isEqualTo(true)->end();
             $endTime->hideIf('AllDay')->isEqualTo(true)->end();
 
-            if ($this->config()->get('recursion')) {
+            if ($this->config()->get('recursion') && !$this->isCopy()) {
                 $fields->addFieldsToTab(
                     'Root.Recursion',
                     [
@@ -318,6 +318,7 @@ class EventPage extends \Page
         }
 
         if ($this->isCopy()) {
+            $fields->removeByName('ChildPages');
             $fields = $fields->makeReadonly();
         }
 
@@ -367,31 +368,15 @@ class EventPage extends \Page
     {
         parent::onAfterWrite();
 
-        /** @var RecursionChangeSet $changeSet */
-        if ($changeSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID)) {
-            $changeSet->EventPageID = $changeSet->EventPageID == 0 ? $this->ID : $changeSet->EventPageID;
-            //$changeSet->write();
-        }
+        if (!$this instanceof RecursiveEvent) {
+            $factory = RecursiveEventFactory::create($this);
+            $validDates = $factory->getValidRecursionDates();
 
-        $changeType = self::CHANGE_VALUE;
-
-        if ($this->isChanged('Recursion', $changeType)) {
-            $this->deleteChildren();
-        }
-
-        if (!$this->isChanged('Recursion', $changeType) && $this->isChanged('StartDate', $changeType)) {
-            /** @var RecursiveEvent $event */
-            if ($event = RecursiveEvent::get()->filter([
-                'StartDate' => $this->StartDate,
-                'ParentID' => $this->ID,
-            ])->first()) {
-                $event->doUnpublish();
-                $event->doArchive();
-            }
-        }
-
-        if (!$this->isCopy() && $this->Recursion) {
-            //$this->createOrUpdateChildren();
+            RecursiveEvent::get()->exclude('StartDate', $validDates)
+                ->each(function (RecursiveEvent $event) {
+                    $event->doUnpublish();
+                    $event->doArchive();
+                });
         }
     }
 

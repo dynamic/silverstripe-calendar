@@ -100,7 +100,7 @@ class EventPage extends \Page
         'StartTime' => 'Time',
         'EndTime' => 'Time',
         'AllDay' => 'Boolean',
-        'Recursion' => 'Enum(array("DAILY","WEEKLY","MONTHLY","YEARLY"))',
+        'Recursion' => 'Enum(array("NONE","DAILY","WEEKLY","MONTHLY","YEARLY"), "NONE")',
         'Interval' => 'Int',
         'RecursionEndDate' => 'Date',
         'RecursionChangeSetID' => 'Int',
@@ -111,7 +111,7 @@ class EventPage extends \Page
      * @var array
      */
     private static $defaults = [
-        'Recursion' => null,
+        'Recursion' => 'NONE',
     ];
 
     /**
@@ -119,13 +119,6 @@ class EventPage extends \Page
      */
     private static $extensions = [
         Lumberjack::class,
-    ];
-
-    /**
-     * @var array
-     */
-    private static $has_many = [
-        'RecursionChangeSets' => RecursionChangeSet::class,
     ];
 
     /**
@@ -259,14 +252,18 @@ class EventPage extends \Page
             $fields->addFieldsToTab(
                 'Root.EventSettings',
                 [
-                    $start = DateField::create('StartDate')
-                        ->setTitle('Start Date'),
-                    $startTime = CalendarTimeField::create('StartTime')
-                        ->setTitle('Start Time'),
-                    $end = DateField::create('EndDate')
-                        ->setTitle('End Date'),
-                    $endTime = CalendarTimeField::create('EndTime')
-                        ->setTitle('EndTime'),
+                    FieldGroup::create(
+                        $start = DateField::create('StartDate')
+                            ->setTitle('Start Date'),
+                        $startTime = CalendarTimeField::create('StartTime')
+                            ->setTitle('Start Time')
+                    )->setTitle('From'),
+                    FieldGroup::create(
+                        $endTime = CalendarTimeField::create('EndTime')
+                            ->setTitle('End Time'),
+                        $end = DateField::create('EndDate')
+                            ->setTitle('End Date')
+                    )->setTitle('To'),
                     $allDay = DropdownField::create('AllDay')
                         ->setTitle('All Day')
                         ->setSource([false => 'No', true => 'Yes']),
@@ -277,7 +274,6 @@ class EventPage extends \Page
             );
 
             $startTime->hideIf('AllDay')->isEqualTo(true)->end();
-            $end->hideIf('AllDay')->isEqualTo(true)->end();
             $endTime->hideIf('AllDay')->isEqualTo(true)->end();
 
             if ($this->config()->get('recursion') && !$this->isCopy()) {
@@ -288,19 +284,12 @@ class EventPage extends \Page
                             $interval = NumericField::create('Interval')
                                 ->setTitle(''),
                             $recursion = DropdownField::create('Recursion')
-                                ->setSource($this->getPatternSource())
-                                ->setEmptyString('Does not repeat'),
+                                ->setSource($this->getPatternSource()),
                             $recursionEndDate = DateField::create('RecursionEndDate')
                                 ->setTitle('Ending On')
                         )->setTitle('Repeat every'),
                     ]
                 );
-            }
-
-            if ($this->Recursion && $this->config()->get('recursion')) {
-                if ($this->isCopy()) {
-                    //$allDayGroup->performReadonlyTransformation();
-                }
             }
         });
 
@@ -334,47 +323,6 @@ class EventPage extends \Page
         parent::onBeforeWrite();
 
         $this->EventType = static::class;
-
-        if (!$this->isCopy() && $this->Recursion != null && $this->recursionChanged()) {
-            $factory = RecursiveEventFactory::create($this);
-            $factory->createRecursiveEvent();
-        }
-        /*if (!$this->isCopy() && !$this->Recursion && $this->Children()->count()) {
-            $this->deleteChildren();
-        } elseif (!$this->isCopy() && $this->Recursion && !$this->recursionChanged()) {
-            $this->writeChildrenToStage();
-        }//*/
-    }
-
-    /**
-     *
-     */
-    private function writeChildrenToStage()
-    {
-        $this->Children()
-            ->filter('StartDate:GreaterThanOrEqual', Carbon::now()->format('Y-m-d'))
-            ->each(function (RecursiveEvent $event) {
-                $event->writeToStage(Versioned::DRAFT);
-            });
-    }
-
-    /**
-     *
-     */
-    public function onAfterWrite()
-    {
-        parent::onAfterWrite();
-
-        if (!$this instanceof RecursiveEvent) {
-            $factory = RecursiveEventFactory::create($this);
-            $validDates = $factory->getValidRecursionDates();
-
-            RecursiveEvent::get()->exclude('StartDate', $validDates)
-                ->each(function (RecursiveEvent $event) {
-                    $event->doUnpublish();
-                    $event->doArchive();
-                });
-        }
     }
 
     /**
@@ -384,8 +332,24 @@ class EventPage extends \Page
     {
         parent::onAfterPublish();
 
-        $this->Children()->each(function (RecursiveEvent $event) {
-            $event->publishRecursive();
+        if ($this->ClassName == EventPage::class) {
+            if ($this->Recursion != 'NONE') {
+                $factory = RecursiveEventFactory::create($this);
+                $factory->createRecursiveEvents();
+            } else {
+                $this->deleteRecursions();
+            }
+        }
+    }
+
+    /**
+     *
+     */
+    protected function deleteRecursions()
+    {
+        RecursiveEvent::get()->filter('ParentID', $this->ID)->each(function (RecursiveEvent $event) {
+            $event->doUnpublish();
+            $event->doArchive();
         });
     }
 
@@ -466,7 +430,7 @@ class EventPage extends \Page
     /**
      * @return bool
      */
-    private function isCopy()
+    public function isCopy()
     {
         return $this->ParentID > 0 && $this instanceof RecursiveEvent;
     }
@@ -476,7 +440,7 @@ class EventPage extends \Page
      */
     public function getPatternSource()
     {
-        return self::RRULE;
+        return array_merge(['NONE' => 'Does not repeat'], self::RRULE);
     }
 
     /**

@@ -8,6 +8,7 @@ use RRule\RRule;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
+use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\SS_List;
 use SilverStripe\Versioned\Versioned;
 
@@ -259,29 +260,67 @@ class RecursiveEventFactory
     /**
      *
      */
-    public function createRecursiveEvent()
+    public function createRecursiveEvents()
     {
         $event = $this->getEvent();
-        $validDates = $this->getValidRecursionDates();
 
-        $existing = RecursiveEvent::get()
-            ->filter('ParentID', $this->getEvent()->ID)
-            ->exclude('StartDate', $validDates)
-            ->column('StartDate');
+        if (!$this->getEvent()->isCopy()) {
+            $validDates = $this->getValidRecursionDates();
+            $remaining = $validDates;
 
-        $remaining = array_diff($validDates, $existing);
-
-        foreach ($remaining as $startDate) {
-            $recursion = RecursiveEvent::create();
-            $recursion->ParentID = $this->getEvent()->ID;
-            $recursion->StartDate = $startDate;
-
-            $recursion = $this->duplicateData($recursion);
-            $recursion->writeToStage(Versioned::DRAFT);
-
-            if ($event->isPublished()) {
-                $recursion->publishRecursive();
+            /** @var DataList $existing */
+            if (($existing = RecursiveEvent::get()->filter('ParentID', $event->ID)) && $existing->count()) {
+                $remaining = array_diff($remaining, $existing->column('StartDate'));
             }
+
+            /** @var RecursiveEvent $reecord */
+            foreach ($this->yieldSingle($existing) as $record) {
+                // Ensure we don't pop an empty array
+                if (count($remaining)) {
+                    if (!in_array($record->StartDate, $validDates)) {
+                        $date = array_pop(array_reverse($remaining));
+
+                        $record->StartDate = $date;
+                        $record = $this->duplicateData($record);
+
+                        $record->writeToStage(Versioned::DRAFT);
+
+                        if ($event->isPublished()) {
+                            $record->publishRecursive();
+                        }
+                    }
+                } else {
+                    $record->doUnpublish();
+                    $record->deleteFromStage(Versioned::DRAFT);
+                }
+            }
+
+            if (count($remaining)) {
+                // If we have remaining dates to fill, let's do that
+                foreach ($this->yieldSingle($remaining) as $startDate) {
+                    $recursion = RecursiveEvent::create();
+                    $recursion->ParentID = $this->getEvent()->ID;
+                    $recursion->StartDate = $startDate;
+
+                    $recursion = $this->duplicateData($recursion);
+                    $recursion->writeToStage(Versioned::DRAFT);
+
+                    if ($event->isPublished()) {
+                        $recursion->publishRecursive();
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @param $list
+     * @return \Generator
+     */
+    protected function yieldSingle($list)
+    {
+        foreach ($list as $item) {
+            yield $item;
         }
     }
 }

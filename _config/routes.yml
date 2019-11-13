@@ -1,7 +1,0 @@
----
-Name: dynamiccalendarroutes
-After: framework/routes#coreroutes
----
-SilverStripe\Control\Director:
-  rules:
-    'event': Dynamic\Calendar\Controller\EventController

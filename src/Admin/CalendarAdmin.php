@@ -11,7 +11,6 @@ use SilverStripe\Admin\ModelAdmin;
  */
 class CalendarAdmin extends ModelAdmin
 {
-
     /**
      * @var string
      */
@@ -20,7 +19,7 @@ class CalendarAdmin extends ModelAdmin
     /**
      * @var string
      */
-    private static $url_segment = 'calendar-config';
+    private static $url_segment = 'calendar-admin';
 
     /**
      * @var array
@@ -28,9 +27,4 @@ class CalendarAdmin extends ModelAdmin
     private static $managed_models = [
         Category::class,
     ];
-
-    /**
-     * @var int
-     */
-    private static $menu_priority = 6;
 }

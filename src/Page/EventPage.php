@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Factory\RecursiveEventFactory;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
+use Dynamic\Calendar\RRule\CustomSchemaHelper;
 use RRule\RRule;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DropdownField;
@@ -425,16 +426,24 @@ class EventPage extends \Page
      */
     protected function getRecursionSet()
     {
-        if (!$this->eventRecurs()) {
-            return [];
-        }
-
-        return new RRule([
+        $pattern = [
             'FREQ' => $this->Recursion,
             'INTERVAL' => $this->Interval,
             'DTSTART' => $this->StartDate,
             'UNTIL' => $this->RecursionEndDate,
-        ]);
+        ];
+
+        if (!$this->eventRecurs()) {
+            return [];
+        }
+
+        $validator = CustomSchemaHelper::create($pattern);
+
+        if (!$validator->isValidPattern()) {
+            return [];
+        }
+
+        return new RRule($pattern);
     }
 
     /**

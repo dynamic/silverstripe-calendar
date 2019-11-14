@@ -38,6 +38,7 @@ use SilverStripe\Versioned\Versioned;
  * @property int $Interval
  * @property string $EventType
  * @property DBDate $RecursionEndDate
+ * @property string $RecursionString
  * @method ManyManyList Categories()
  */
 class EventPage extends \Page
@@ -103,8 +104,11 @@ class EventPage extends \Page
         'EndTime' => 'Time',
         'AllDay' => 'Boolean',
         'Recursion' => 'Enum(array("NONE","DAILY","WEEKLY","MONTHLY","YEARLY"), "NONE")',
+        'RecursionString' => 'Varchar(255)',
+        'EndType' => 'Enum(array("UNTIL","COUNT"))',
         'Interval' => 'Int',
         'RecursionEndDate' => 'Date',
+        'RecursionInstances' => 'Int',
         'EventType' => 'Varchar(255)',
     ];
 
@@ -293,20 +297,39 @@ class EventPage extends \Page
             $startTime->hideIf('AllDay')->isEqualTo(true)->end();
             $endTime->hideIf('AllDay')->isEqualTo(true)->end();
 
-            if ($this->config()->get('recursion') && !$this->isCopy()) {
+            if ($this->config()->get('recursion') && !$this->isCopy() && $this->exists()) {
                 $fields->addFieldsToTab(
                     'Root.Recursion',
                     [
+                        DropdownField::create('RecursionString')
+                            ->setSource($this->getRecursionStringSource())
+                            ->setTitle('Repeat'),
                         FieldGroup::create(
                             $interval = NumericField::create('Interval')
-                                ->setTitle(''),
+                                ->setTitle('Repeat every'),
                             $recursion = DropdownField::create('Recursion')
-                                ->setSource($this->getPatternSource()),
+                                ->setSource(self::RRULE)
+                                ->setTitle('')
+                        ),
+                        FieldGroup::create(
+                            $endType = DropdownField::create('EndType')
+                                ->setTitle('Ends')
+                                ->setSource(['UNTIL' => 'On', 'COUNT' => 'After']),
                             $recursionEndDate = DateField::create('RecursionEndDate')
-                                ->setTitle('Ending On')
-                        )->setTitle('Repeat every'),
+                                ->setTitle(''),
+                            $recursionInstances = NumericField::create('RecursionInstances')
+                                ->setTitle('')
+                                ->setRightTitle('Occurrences')
+                        )
                     ]
                 );
+
+                $interval->hideUnless('RecursionString')->isEqualTo('CUSTOM')->end();
+                $recursion->hideUnless('RecursionString')->isEqualTo('CUSTOM')->end();
+                $endType->hideUnless('RecursionString')->isEqualTo('CUSTOM')->end();
+                $recursionEndDate->hideUnless('RecursionString')->isEqualTo('CUSTOM')->end();
+                $recursionEndDate->hideUnless('RecursionString')->isEqualTo('CUSTOM')->andIf('EndType')->isEqualTo('UNTIL')->end();
+                $recursionInstances->hideUnless('RecursionString')->isEqualTo('CUSTOM')->andIf('EndType')->isEqualTo('COUNT')->end();
             }
         });
 
@@ -330,6 +353,14 @@ class EventPage extends \Page
         }
 
         return $fields;
+    }
+
+    /**
+     * @return array
+     */
+    protected function getRecursionStringSource()
+    {
+        return ['CUSTOM' => 'Custom'];
     }
 
     /**
@@ -544,14 +575,6 @@ class EventPage extends \Page
     public function isCopy()
     {
         return $this->ParentID > 0 && $this->ClassName == RecursiveEvent::class;
-    }
-
-    /**
-     * @return mixed
-     */
-    public function getPatternSource()
-    {
-        return array_merge(['NONE' => 'Does not repeat'], self::RRULE);
     }
 
     /**

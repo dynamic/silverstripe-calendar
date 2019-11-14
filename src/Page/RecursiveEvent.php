@@ -2,7 +2,7 @@
 
 namespace Dynamic\Calendar\Page;
 
-use Dynamic\Calendar\Model\Category;
+use SilverStripe\Versioned\Versioned;
 
 /**
  * Class RecursiveEvent
@@ -64,49 +64,20 @@ class RecursiveEvent extends EventPage
         if (!$this->exists()) {
             $this->URLSegment = $this->URLSegment . "-{$this->StartDate}";
         }
+    }
 
-        $parent = $this->Parent();
-
-        if ($parent instanceof EventPage && $this->exists()) {
-            $this->unsetCategories();
-            $this->setCategoriesFromParent();
+    /**
+     *
+     */
+    public function syncRelationsFromParentEvent()
+    {
+        if ($this->config()->get('sync_relations')) {
+            $this->duplicateRelations($this->Parent(), $this, $this->config()->get('sync_relations'));
         }
-    }
 
-    /**
-     *
-     */
-    public function onAfterWrite()
-    {
-        parent::onAfterWrite();
-
-        $parentCategories = $this->Parent()->Categories()->sort('ID')->column();
-        $categories = $this->Categories()->sort('ID')->column();
-
-        if ($parentCategories != $categories) {
-            $this->unsetCategories();
-            $this->setCategoriesFromParent();
-        }
-    }
-
-    /**
-     *
-     */
-    private function unsetCategories()
-    {
-        $this->Categories()->removeAll();
-    }
-
-    /**
-     *
-     */
-    private function setCategoriesFromParent()
-    {
-        $categories = $this->Categories();
-        if (($parent = $this->Parent()) && $parent instanceof EventPage) {
-            $parent->Categories()->each(function (Category $category) use (&$categories) {
-                $categories->add($category);
-            });
+        $this->writeToStage(Versioned::DRAFT);
+        if ($this->Parent()->isPublished()) {
+            $this->publishRecursive();
         }
     }
 }

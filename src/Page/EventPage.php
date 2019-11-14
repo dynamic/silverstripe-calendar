@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Factory\RecursiveEventFactory;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
+use RRule\RRule;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
@@ -332,12 +333,38 @@ class EventPage extends \Page
     {
         parent::onAfterPublish();
 
-        if ($this->config()->get('recursion') && $this->ClassName == EventPage::class) {
-            if ($this->Recursion != 'NONE') {
-                $factory = RecursiveEventFactory::create($this);
-                $factory->createRecursiveEvents();
-            } else {
-                $this->deleteRecursions();
+        if ($this->eventRecurs()) {
+            $this->generateAdditionalEvents();
+        }
+
+        $this->cleanRecursions();
+    }
+
+    /**
+     * @return bool
+     */
+    protected function eventRecurs()
+    {
+        return $this->config()->get('recursion') && $this->ClassName == EventPage::class && $this->Recursion != 'NONE';
+    }
+
+    /**
+     *
+     */
+    protected function generateAdditionalEvents()
+    {
+        $factory = RecursiveEventFactory::create();
+        $factory->setEvent($this);
+        $skip = RecursiveEvent::get()->filter([
+            'ParentID' => $this->ID,
+        ])->exclude([
+            'StartDate' => $this->getValidDates()
+        ])->column('StartDate');
+
+        foreach ($this->yieldSingle($this->getRecursionSet()) as $date) {
+            if ($date != $this->StartDate && !in_array($date, $skip)) {
+                $factory->setDate($date);
+                $factory->createEvent();
             }
         }
     }
@@ -345,12 +372,59 @@ class EventPage extends \Page
     /**
      *
      */
-    protected function deleteRecursions()
+    protected function cleanRecursions()
     {
-        RecursiveEvent::get()->filter('ParentID', $this->ID)->each(function (RecursiveEvent $event) {
-            $event->doUnpublish();
+        $clean = RecursiveEvent::get()
+            ->filter('ParentID', $this->ID)
+            ->exclude('StartDate', $this->getValidDates());
+
+        /** @var RecursiveEvent $event */
+        foreach ($this->yieldSingle($clean) as $event) {
             $event->doArchive();
-        });
+        }
+    }
+
+    /**
+     * @return RRule|array
+     */
+    protected function getRecursionSet()
+    {
+        if (!$this->eventRecurs()) {
+            return [];
+        }
+
+        return new RRule([
+            'FREQ' => $this->Recursion,
+            'INTERVAL' => $this->Interval,
+            'DTSTART' => $this->StartDate,
+            'UNTIL' => $this->RecursionEndDate,
+        ]);
+    }
+
+    /**
+     * The total count will include the originating date.
+     *
+     * @return int
+     */
+    public function getFullRecursionCount()
+    {
+        return $this->getRecursionSet()->count();
+    }
+
+    /**
+     * @return array
+     */
+    protected function getValidDates()
+    {
+        $dates = [];
+
+        foreach ($this->yieldSingle($this->getRecursionSet()) as $date) {
+            if ($date != $date) {
+                $dates[] = $date;
+            }
+        }
+
+        return $dates;
     }
 
     /**
@@ -424,7 +498,7 @@ class EventPage extends \Page
      */
     public function isCopy()
     {
-        return $this->ParentID > 0 && $this instanceof RecursiveEvent;
+        return $this->ParentID > 0 && $this->ClassName == RecursiveEvent::class;
     }
 
     /**

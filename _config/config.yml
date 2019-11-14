@@ -1,3 +1,7 @@
 ---
 Name: calendar
 ---
+
+Dynamic\Calendar\Page\RecursiveEvent:
+  sync_relations:
+    - Categories

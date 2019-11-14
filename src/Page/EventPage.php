@@ -328,8 +328,10 @@ class EventPage extends \Page
                 $recursion->hideUnless('RecursionString')->isEqualTo('CUSTOM')->end();
                 $endType->hideUnless('RecursionString')->isEqualTo('CUSTOM')->end();
                 $recursionEndDate->hideUnless('RecursionString')->isEqualTo('CUSTOM')->end();
-                $recursionEndDate->hideUnless('RecursionString')->isEqualTo('CUSTOM')->andIf('EndType')->isEqualTo('UNTIL')->end();
-                $recursionInstances->hideUnless('RecursionString')->isEqualTo('CUSTOM')->andIf('EndType')->isEqualTo('COUNT')->end();
+                $recursionEndDate->hideUnless('RecursionString')->isEqualTo('CUSTOM')
+                    ->andIf('EndType')->isEqualTo('UNTIL')->end();
+                $recursionInstances->hideUnless('RecursionString')->isEqualTo('CUSTOM')
+                    ->andIf('EndType')->isEqualTo('COUNT')->end();
             }
         });
 

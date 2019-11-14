@@ -16,6 +16,7 @@ use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\Lumberjack\Model\Lumberjack;
+use SilverStripe\ORM\FieldType\DBBoolean;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBTime;
@@ -169,7 +170,7 @@ class EventPage extends \Page
         'Title' => 'Title',
         'GridFieldDate' => 'Date',
         'GridFieldTime' => 'Time',
-        'HasRecurringEvents' => 'Recurring Event',
+        'HasRecurringEvents' => 'Recurring Events',
     ];
 
     /**
@@ -225,7 +226,20 @@ class EventPage extends \Page
      */
     public function getHasRecurringEvents()
     {
-        return ($this->Children()->filter('ClassName', RecursiveEvent::class)->count()) ? 'Yes' : 'No';
+        $filter = [
+            'ParentID' => $this->ID,
+        ];
+
+        $instances = RecursiveEvent::get()->filter($filter);
+        $existing = $instances->count() > 0;
+
+        $summary = DBField::create_field(DBBoolean::class, $existing)->Nice();
+
+        if ($existing) {
+            $summary .= " ({$instances->count()})";
+        }
+
+        return $summary;
     }
 
     /**

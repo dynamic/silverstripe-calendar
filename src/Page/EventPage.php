@@ -3,20 +3,20 @@
 namespace Dynamic\Calendar\Page;
 
 use Carbon\Carbon;
-use Dynamic\Calendar\Factory\RecursionChangeSetFactory;
 use Dynamic\Calendar\Factory\RecursiveEventFactory;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
-use Dynamic\Calendar\Model\RecursionChangeSet;
+use RRule\RRule;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
-use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
+use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\Lumberjack\Model\Lumberjack;
+use SilverStripe\ORM\FieldType\DBBoolean;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBTime;
@@ -34,13 +34,23 @@ use SilverStripe\Versioned\Versioned;
  * @property DBTime $EndTime
  * @property bool $AllDay
  * @property string $Recursion
+ * @property int $Interval
+ * @property string $EventType
  * @property DBDate $RecursionEndDate
- * @property int $RecursionChangeSetID
- * @method HasManyList RecursionChangeSets()
  * @method ManyManyList Categories()
  */
 class EventPage extends \Page
 {
+    /**
+     * array
+     */
+    const RRULE = [
+        'DAILY' => 'Day(s)',
+        'WEEKLY' => 'Week(s)',
+        'MONTHLY' => 'Month(s)',
+        'YEARLY' => 'Year(s)',
+    ];
+
     /**
      * @var string
      */
@@ -82,16 +92,18 @@ class EventPage extends \Page
      * @var array
      */
     private static $db = [
-        'StartDatetime' => 'DBDatetime',/** @deprecated  */
-        'EndDatetime' => 'DBDatetime',/** @deprecated  */
+        'StartDatetime' => 'DBDatetime',
+        /** @deprecated */
+        'EndDatetime' => 'DBDatetime',
+        /** @deprecated */
         'StartDate' => 'Date',
         'EndDate' => 'Date',
         'StartTime' => 'Time',
         'EndTime' => 'Time',
         'AllDay' => 'Boolean',
-        'Recursion' => 'Enum(array("Daily","Weekly","Monthly","Weekdays","Annual"))',
+        'Recursion' => 'Enum(array("NONE","DAILY","WEEKLY","MONTHLY","YEARLY"), "NONE")',
+        'Interval' => 'Int',
         'RecursionEndDate' => 'Date',
-        'RecursionChangeSetID' => 'Int',
         'EventType' => 'Varchar(255)',
     ];
 
@@ -99,7 +111,7 @@ class EventPage extends \Page
      * @var array
      */
     private static $defaults = [
-        'Recursion' => null,
+        'Recursion' => 'NONE',
     ];
 
     /**
@@ -107,13 +119,6 @@ class EventPage extends \Page
      */
     private static $extensions = [
         Lumberjack::class,
-    ];
-
-    /**
-     * @var array
-     */
-    private static $has_many = [
-        'RecursionChangeSets' => RecursionChangeSet::class,
     ];
 
     /**
@@ -152,11 +157,18 @@ class EventPage extends \Page
     /**
      * @var array
      */
+    private static $cascade_deletes = [
+        'Children',
+    ];
+
+    /**
+     * @var array
+     */
     private static $summary_fields = [
         'Title' => 'Title',
         'GridFieldDate' => 'Date',
         'GridFieldTime' => 'Time',
-        'HasRecurringEvents' => 'Recurring Event',
+        'HasRecurringEvents' => 'Recurring Events',
     ];
 
     /**
@@ -181,6 +193,8 @@ class EventPage extends \Page
         'EndDate',
         'EndTime',
         'Recursion',
+        'Interval',
+        'RecursionEndDate',
     ];
 
     /**
@@ -210,11 +224,20 @@ class EventPage extends \Page
      */
     public function getHasRecurringEvents()
     {
-        if ($this->Recursion && ($changeSet = $this->getCurrentRecursionChangeSet())) {
-            return $changeSet->RecursionPattern;
+        $filter = [
+            'ParentID' => $this->ID,
+        ];
+
+        $instances = RecursiveEvent::get()->filter($filter);
+        $existing = $instances->count() > 0;
+
+        $summary = DBField::create_field(DBBoolean::class, $existing)->Nice();
+
+        if ($existing) {
+            $summary .= " ({$instances->count()})";
         }
 
-        return 'No';
+        return $summary;
     }
 
     /**
@@ -245,20 +268,21 @@ class EventPage extends \Page
             $fields->addFieldsToTab(
                 'Root.EventSettings',
                 [
-                    $start = DateField::create('StartDate')
-                        ->setTitle('Start Date'),
-                    $startTime = CalendarTimeField::create('StartTime')
-                        ->setTitle('Start Time'),
-                    $end = DateField::create('EndDate')
-                        ->setTitle('End Date'),
-                    $endTime = CalendarTimeField::create('EndTime')
-                        ->setTitle('EndTime'),
-                    $allDayGroup = FieldGroup::create(
-                        'Pattern',
-                        $allDay = DropdownField::create('AllDay')
-                            ->setTitle('All Day')
-                            ->setSource([false => 'No', true => 'Yes'])
-                    )->setTitle(''),
+                    FieldGroup::create(
+                        $start = DateField::create('StartDate')
+                            ->setTitle('Start Date'),
+                        $startTime = CalendarTimeField::create('StartTime')
+                            ->setTitle('Start Time')
+                    )->setTitle('From'),
+                    FieldGroup::create(
+                        $endTime = CalendarTimeField::create('EndTime')
+                            ->setTitle('End Time'),
+                        $end = DateField::create('EndDate')
+                            ->setTitle('End Date')
+                    )->setTitle('To'),
+                    $allDay = DropdownField::create('AllDay')
+                        ->setTitle('All Day')
+                        ->setSource([false => 'No', true => 'Yes']),
                     $categories = TreeMultiselectField::create('Categories')
                         ->setTitle('Categories')
                         ->setSourceObject(Category::class),
@@ -266,31 +290,22 @@ class EventPage extends \Page
             );
 
             $startTime->hideIf('AllDay')->isEqualTo(true)->end();
-            $end->hideIf('AllDay')->isEqualTo(true)->end();
             $endTime->hideIf('AllDay')->isEqualTo(true)->end();
 
-            if ($this->StartDate && $this->config()->get('recursion')) {
-                $allDayGroup->push(
-                    $recursion = DropdownField::create('Recursion')
-                        ->setSource($this->getPatternSource())
-                        ->setEmptyString('Does not repeat')
+            if ($this->config()->get('recursion') && !$this->isCopy()) {
+                $fields->addFieldsToTab(
+                    'Root.Recursion',
+                    [
+                        FieldGroup::create(
+                            $interval = NumericField::create('Interval')
+                                ->setTitle(''),
+                            $recursion = DropdownField::create('Recursion')
+                                ->setSource($this->getPatternSource()),
+                            $recursionEndDate = DateField::create('RecursionEndDate')
+                                ->setTitle('Ending On')
+                        )->setTitle('Repeat every'),
+                    ]
                 );
-            }
-
-            if ($this->Recursion && $this->config()->get('recursion')) {
-                if ($this->isCopy()) {
-                    $allDayGroup->performReadonlyTransformation();
-                } else {
-                    $fields->addFieldToTab(
-                        'Root.EventSettings',
-                        GridField::create(
-                            'RecursionChangeSets',
-                            'Recursion Change Sets',
-                            $this->RecursionChangeSets(),
-                            $recursionsConfig = GridFieldConfig_RecordViewer::create()
-                        )
-                    );
-                }
             }
         });
 
@@ -305,6 +320,7 @@ class EventPage extends \Page
         }
 
         if ($this->isCopy()) {
+            $fields->removeByName('ChildPages');
             $fields = $fields->makeReadonly();
         }
 
@@ -316,70 +332,13 @@ class EventPage extends \Page
     }
 
     /**
-     * Set the $RecursionHash as a checksum for the event recursion is enabled
+     *
      */
     public function onBeforeWrite()
     {
         parent::onBeforeWrite();
 
         $this->EventType = static::class;
-
-        if (!$this->isCopy() && $this->Recursion != null && $this->recursionChanged()) {
-            $this->RecursionChangeSetID = $this->generateRecursionChangeSet()->ID;
-        }
-
-        if (!$this->isCopy() && !$this->Recursion && $this->Children()->count()) {
-            $this->deleteChildren();
-        } elseif (!$this->isCopy() && $this->Recursion && !$this->recursionChanged()) {
-            $this->writeChildrenToStage();
-        }
-    }
-
-    /**
-     *
-     */
-    private function writeChildrenToStage()
-    {
-        $this->Children()
-            ->filter('StartDate:GreaterThanOrEqual', Carbon::now()->format('Y-m-d'))
-            ->each(function (RecursiveEvent $event) {
-                $event->writeToStage(Versioned::DRAFT);
-            });
-    }
-
-    /**
-     *
-     */
-    public function onAfterWrite()
-    {
-        parent::onAfterWrite();
-
-        /** @var RecursionChangeSet $changeSet */
-        if ($changeSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID)) {
-            $changeSet->EventPageID = $changeSet->EventPageID == 0 ? $this->ID : $changeSet->EventPageID;
-            $changeSet->write();
-        }
-
-        $changeType = self::CHANGE_VALUE;
-
-        if ($this->isChanged('Recursion', $changeType)) {
-            $this->deleteChildren();
-        }
-
-        if (!$this->isChanged('Recursion', $changeType) && $this->isChanged('StartDate', $changeType)) {
-            /** @var RecursiveEvent $event */
-            if ($event = RecursiveEvent::get()->filter([
-                'StartDate' => $this->StartDate,
-                'ParentID' => $this->ID,
-            ])->first()) {
-                $event->doUnpublish();
-                $event->doArchive();
-            }
-        }
-
-        if (!$this->isCopy() && $this->Recursion) {
-            $this->createOrUpdateChildren();
-        }
     }
 
     /**
@@ -389,9 +348,119 @@ class EventPage extends \Page
     {
         parent::onAfterPublish();
 
-        $this->Children()->each(function (RecursiveEvent $event) {
-            $event->publishRecursive();
-        });
+        if ($this->eventRecurs()) {
+            $this->generateAdditionalEvents();
+        }
+
+        $this->cleanRecursions();
+    }
+
+    /**
+     * @return bool
+     */
+    protected function eventRecurs()
+    {
+        return $this->config()->get('recursion')
+            && $this->ClassName == EventPage::class
+            && !$this instanceof RecursiveEvent
+            && $this->Recursion != 'NONE';
+    }
+
+    /**
+     *
+     */
+    protected function generateAdditionalEvents()
+    {
+        $factory = RecursiveEventFactory::create();
+        $factory->setEvent($this);
+        $skip = $this->getSkipList();
+
+        foreach ($this->yieldSingle($this->getValidDates()) as $date) {
+            if ($date != $this->StartDate && !in_array($date, $skip)) {
+                $factory->setDate($date);
+                $factory->createEvent();
+            }
+        }
+    }
+
+    /**
+     * @return array
+     */
+    protected function getSkipList()
+    {
+        $skip = RecursiveEvent::get()->filter([
+            'ParentID' => $this->ID,
+        ]);
+
+        if (count($this->getValidDates())) {
+            $skip = $skip->exclude([
+                'StartDate' => $this->getValidDates()
+            ]);
+        };
+
+        return $skip->column('StartDate');
+    }
+
+    /**
+     *
+     */
+    protected function cleanRecursions()
+    {
+        $clean = RecursiveEvent::get()
+            ->filter('ParentID', $this->ID);
+
+        if (count($this->getValidDates())) {
+            $clean = $clean->exclude('StartDate', $this->getValidDates());
+        }
+
+
+        /** @var RecursiveEvent $event */
+        foreach ($this->yieldSingle($clean) as $event) {
+            $event->doArchive();
+        }
+    }
+
+    /**
+     * @return RRule|array
+     */
+    protected function getRecursionSet()
+    {
+        if (!$this->eventRecurs()) {
+            return [];
+        }
+
+        return new RRule([
+            'FREQ' => $this->Recursion,
+            'INTERVAL' => $this->Interval,
+            'DTSTART' => $this->StartDate,
+            'UNTIL' => $this->RecursionEndDate,
+        ]);
+    }
+
+    /**
+     * The total count will include the originating date.
+     *
+     * @return int
+     */
+    public function getFullRecursionCount()
+    {
+        return $this->getRecursionSet()->count();
+    }
+
+    /**
+     * @return array
+     */
+    protected function getValidDates()
+    {
+        $dates = [];
+
+        foreach ($this->yieldSingle($this->getRecursionSet()) as $date) {
+            if ($date->format('Y-m-d') != $this->StartDate) {
+                $dates[] = $date->format('Y-m-d');
+            }
+        }
+
+        return $dates;
     }
 
     /**
@@ -409,17 +478,6 @@ class EventPage extends \Page
     }
 
     /**
-     * @return RecursionChangeSet
-     * @throws \SilverStripe\ORM\ValidationException
-     */
-    protected function generateRecursionChangeSet()
-    {
-        $factory = RecursionChangeSetFactory::create($this);
-
-        return $factory->getChangeSet();
-    }
-
-    /**
      * @param null $member
      * @return bool
      */
@@ -429,17 +487,8 @@ class EventPage extends \Page
             return false;
         }
 
-        return parent::canEdit($member); // TODO: Change the autogenerated stub
+        return parent::canEdit($member);
     }
-
-    /**
-     * @param null $member
-     * @return bool
-     */
-    /*public function canAddChildren($member = null)
-    {
-        return false;
-    }*/
 
     /**
      * @param null $member
@@ -451,7 +500,7 @@ class EventPage extends \Page
             return false;
         }
 
-        return parent::canPublish($member); // TODO: Change the autogenerated stub
+        return parent::canPublish($member);
     }
 
     /**
@@ -464,7 +513,7 @@ class EventPage extends \Page
             return false;
         }
 
-        return parent::canUnpublish($member); // TODO: Change the autogenerated stub
+        return parent::canUnpublish($member);
     }
 
     /**
@@ -483,39 +532,9 @@ class EventPage extends \Page
     /**
      * @return bool
      */
-    public function getIsDaily()
+    public function isCopy()
     {
-        return $this->Recursion == 'Daily';
-    }
-
-    /**
-     * @return bool
-     */
-    private function isCopy()
-    {
-        return $this->ParentID > 0 && $this instanceof RecursiveEvent;
-    }
-
-    /**
-     * @return bool|\SilverStripe\ORM\DataObject
-     */
-    public function getCurrentRecursionChangeSet()
-    {
-        return $this->RecursionChangeSetID ? RecursionChangeSet::get()->byID($this->RecursionChangeSetID) : false;
-    }
-
-    /**
-     * @return string|null
-     */
-    public function generateRecursionPattern()
-    {
-        $source = $this->getPatternSource();
-
-        if (isset($source[$this->Recursion])) {
-            return $source[$this->Recursion];
-        }
-
-        return null;
+        return $this->ParentID > 0 && $this->ClassName == RecursiveEvent::class;
     }
 
     /**
@@ -523,230 +542,7 @@ class EventPage extends \Page
      */
     public function getPatternSource()
     {
-        $pattern = EventPage::singleton()->dbObject('Recursion')->enumValues();
-        $day = $this->getDayFromDate($this->StartDate);
-
-        foreach ($pattern as $key => $val) {
-            switch ($key) {
-                case 'Weekly':
-                    $pattern[$key] = "{$val} on {$day}";
-                    break;
-                case 'Monthly':
-                    $pattern[$key] = "{$val} on the {$this->getMonthDay()}";
-                    break;
-                case 'Annual':
-                    $pattern[$key] = "{$val} on {$this->getMonthDate()}";
-                    break;
-            }
-        }
-
-        return $pattern;
-    }
-
-    /**
-     * @param $date
-     * @return false|string
-     */
-    protected function getDayFromDate($date)
-    {
-        if (strpos($date, ' ')) {
-            $date = strtotime($date);
-        }
-
-        return date('l', $date);
-    }
-
-    /**
-     * @return string
-     */
-    public function getMonthDay()
-    {
-        $startDate = Carbon::parse($this->StartDate);
-
-        $day = $startDate->format('l');
-        $month = $startDate->format('F');
-        $year = $startDate->format('Y');
-
-        $date = Carbon::parse("First day of {$month} {$year}");
-        $end = Carbon::parse("Last day of {$month} {$year}");
-
-        $days = [];
-
-        while ($date->timestamp <= $end->timestamp) {
-            if ($date->format('l') == $day) {
-                $days[] = $date->format('Y-m-d');
-            }
-            $date = $date->addDay();
-        }
-
-        $dayCount = array_search($startDate->format('Y-m-d'), $days);
-
-        if ($dayCount === false) {
-            return '';
-        } else {
-            $dayCount = $dayCount + 1;
-        }
-
-        $monthDay = (isset($firstLast))
-            ? "{$firstLast} {$day}"
-            : "{$this->ordinal($dayCount)} {$day}";
-
-        return $monthDay;
-    }
-
-    /**
-     * @param Carbon $date
-     * @return string
-     */
-    protected function getDayName(Carbon $date)
-    {
-        if ($date->isMonday()) {
-            return 'Monday';
-        } elseif ($date->isTuesday()) {
-            return 'Tuesday';
-        } elseif ($date->isWednesday()) {
-            return 'Wednesday';
-        } elseif ($date->isThursday()) {
-            return 'Thursday';
-        } elseif ($date->isFriday()) {
-            return 'Friday';
-        } elseif ($date->isSaturday()) {
-            return 'Saturday';
-        } elseif ($date->isSunday()) {
-            return 'Sunday';
-        }
-
-        return '';
-    }
-
-    /**
-     * @param $number
-     * @return string
-     */
-    public function ordinal($number)
-    {
-        $first_word = [
-            'eth',
-            'First',
-            'Second',
-            'Third',
-            'Fouth',
-            'Fifth',
-            'Sixth',
-            'Seventh',
-            'Eighth',
-            'Ninth',
-            'Tenth',
-            'Elevents',
-            'Twelfth',
-            'Thirteenth',
-            'Fourteenth',
-            'Fifteenth',
-            'Sixteenth',
-            'Seventeenth',
-            'Eighteenth',
-            'Nineteenth',
-            'Twentieth',
-        ];
-        $second_word = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty'];
-
-        if ($number <= 20) {
-            return $first_word[$number];
-        }
-
-        $first_num = substr($number, -1, 1);
-        $second_num = substr($number, -2, 1);
-
-        return $string = str_replace('y-eth', 'ieth', $second_word[$second_num] . '-' . $first_word[$first_num]);
-    }
-
-    public function numToOrdinalWord($num)
-    {
-        $first_word = [
-            'eth',
-            'First',
-            'Second',
-            'Third',
-            'Fouth',
-            'Fifth',
-            'Sixth',
-            'Seventh',
-            'Eighth',
-            'Ninth',
-            'Tenth',
-            'Elevents',
-            'Twelfth',
-            'Thirteenth',
-            'Fourteenth',
-            'Fifteenth',
-            'Sixteenth',
-            'Seventeenth',
-            'Eighteenth',
-            'Nineteenth',
-            'Twentieth',
-        ];
-        $second_word = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty'];
-
-        if ($num <= 20) {
-            return $first_word[$num];
-        }
-
-        $first_num = substr($num, -1, 1);
-        $second_num = substr($num, -2, 1);
-
-        return $string = str_replace('y-eth', 'ieth', $second_word[$second_num] . '-' . $first_word[$first_num]);
-    }
-
-    /**
-     * @return false|string
-     */
-    protected function getMonthDate()
-    {
-        return date('F j', strtotime($this->StartDate));
-    }
-
-    /**
-     * @return \SilverStripe\ORM\DataList
-     */
-    protected function getAllEvents()
-    {
-        $idSet = [$this->ID];
-
-        $idSet = array_merge($idSet, $this->Children()->column());
-
-        return EventPage::get()->filter(['ID' => $idSet]);
-    }
-
-    /**
-     *
-     */
-    private function createOrUpdateChildren()
-    {
-        $recursionSet = RecursionChangeSet::get()->byID($this->RecursionChangeSetID);
-        $existing = RecursiveEvent::get()->filter([
-            'ParentID' => $this->ID,
-            'StartDate:GreaterThanOrEqual' => Carbon::now()
-                ->format(RecursiveEventFactory::config()->get('date_format')),
-        ]);
-
-        if (!$existing->exists()) {
-            $existing = null;
-        }
-
-        $eventFactory = RecursiveEventFactory::create($recursionSet, $existing);
-
-        $eventFactory->generateEvents();
-    }
-
-    /**
-     * Delete children generated from the recursion pattern
-     */
-    private function deleteChildren()
-    {
-        foreach ($this->yieldSingle(RecursiveEvent::get()->filter('ParentID', $this->ID)) as $child) {
-            $child->doUnpublish();
-            $child->doArchive();
-        }
+        return array_merge(['NONE' => 'Does not repeat'], self::RRULE);
     }
 
     /**

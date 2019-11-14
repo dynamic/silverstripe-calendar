@@ -1,5 +1,7 @@
 ---
 Name: calendar
 ---
-Dynamic\Calendar\Model\Event:
-  instances_to_show: 3
+
+Dynamic\Calendar\Page\RecursiveEvent:
+  sync_relations:
+    - Categories

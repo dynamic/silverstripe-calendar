@@ -2,11 +2,8 @@
 
 namespace Dynamic\Calendar\Tests\Page;
 
-use Carbon\Carbon;
-use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
-use Dynamic\Calendar\Page\RecursiveEvent;
-use PHP_CodeSniffer\Config;
+use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Versioned\Versioned;
@@ -25,23 +22,35 @@ class EventPageTest extends SapphireTest
     /**
      *
      */
-    public function testGridFieldDate()
+    public function testRecursiveEventCreation()
     {
+        Config::modify()->set(EventPage::class, 'recursion', true);
+
         /** @var EventPage $event */
         $event = $this->objFromFixture(EventPage::class, 'one');
+        $event->StartDate = date('Y-m-d', strtotime('tomorrow'));
+        $event->Recursion = 'DAILY';
+        $event->Interval = 2;
+        $event->RecursionEndDate = date('Y-m-d', strtotime("{$event->StartDate} + 7 days"));
+        $event->writeToStage(Versioned::DRAFT);
+        $event->publishRecursive();
 
-        $this->assertEquals('Jul 4th, 2019', $event->getGridFieldDate());
-    }
+        $this->assertEquals(3, $event->Children()->count());
 
-    /**
-     *
-     */
-    public function testHasRecurringEvents()
-    {
-        /** @var EventPage $event */
-        $event = $this->objFromFixture(EventPage::class, 'one');
+        $event->Interval = 1;
+        $event->writeToStage(Versioned::DRAFT);
+        $event->publishRecursive();
 
-        $this->assertEquals('No', $event->getHasRecurringEvents());
+        $this->assertEquals(7, $event->Children()->count());
+
+        $event->Interval = 2;
+        $event->writeToStage(Versioned::DRAFT);
+        $event->publishRecursive();
+
+        $this->assertEquals(3, $event->Children()->count());
+
+
+        Config::modify()->set(EventPage::class, 'recursion', false);
     }
 
     /**

@@ -2,15 +2,11 @@
 
 namespace Dynamic\Calendar\Page;
 
-use Carbon\Carbon;
-use Dynamic\Calendar\Model\Category;
-use Dynamic\Calendar\Model\RecursionChangeSet;
+use SilverStripe\Versioned\Versioned;
 
 /**
  * Class RecursiveEvent
  * @package Dynamic\Calendar\Page
- * @property int $GeneratingChangeSetID
- * @method RecursionChangeSet GeneratingChangeSet()
  * @method EventPage Parent()
  */
 class RecursiveEvent extends EventPage
@@ -46,18 +42,6 @@ class RecursiveEvent extends EventPage
     private static $show_in_sitetree = false;
 
     /**
-     * @var int
-     */
-    private static $create_new_max = 7;
-
-    /**
-     * @var array
-     */
-    private static $has_one = [
-        'GeneratingChangeSet' => RecursionChangeSet::class,
-    ];
-
-    /**
      * @return array
      */
     public function summaryFields()
@@ -77,24 +61,7 @@ class RecursiveEvent extends EventPage
         parent::onBeforeWrite();
 
         if (!$this->exists()) {
-            $dateString = Carbon::parse($this->StartDatetime)->format('Y-m-d');
-            $this->URLSegment = $this->URLSegment . "-{$dateString}";
-        }
-
-        if ($this->exists()) {
-            $parent = $this->Parent();
-
-            $this->Title = $parent->Title;
-            $this->Content = $parent->Content;
-
-            if ($parent instanceof EventPage) {
-                $this->AllDay = $parent->AllDay;
-
-                if ($this->exists()) {
-                    $this->unsetCategories();
-                    $this->setCategoriesFromParent();
-                }
-            }
+            $this->URLSegment = $this->URLSegment . "-{$this->StartDate}";
         }
     }
 
@@ -105,33 +72,21 @@ class RecursiveEvent extends EventPage
     {
         parent::onAfterWrite();
 
-        $parentCategories = $this->Parent()->Categories()->sort('ID')->column();
-        $categories = $this->Categories()->sort('ID')->column();
+        //$this->syncRelationsFromParentEvent();
+    }
 
-        if ($parentCategories != $categories) {
-            $this->unsetCategories();
-            $this->setCategoriesFromParent();
+    /**
+     *
+     */
+    protected function syncRelationsFromParentEvent()
+    {
+        if ($this->config()->get('sync_relations')) {
+            $this->duplicateRelations($this->Parent(), $this, $this->config()->get('sync_relations'));
         }
-    }
 
-    /**
-     *
-     */
-    private function unsetCategories()
-    {
-        $this->Categories()->removeAll();
-    }
-
-    /**
-     *
-     */
-    private function setCategoriesFromParent()
-    {
-        $categories = $this->Categories();
-        if (($parent = $this->Parent()) && $parent instanceof EventPage) {
-            $parent->Categories()->each(function (Category $category) use (&$categories) {
-                $categories->add($category);
-            });
+        $this->writeToStage(Versioned::DRAFT);
+        if ($this->Parent()->isPublished()) {
+            $this->publishRecursive();
         }
     }
 }

@@ -69,7 +69,17 @@ class RecursiveEvent extends EventPage
     /**
      *
      */
-    public function syncRelationsFromParentEvent()
+    public function onAfterWrite()
+    {
+        parent::onAfterWrite();
+
+        //$this->syncRelationsFromParentEvent();
+    }
+
+    /**
+     *
+     */
+    protected function syncRelationsFromParentEvent()
     {
         if ($this->config()->get('sync_relations')) {
             $this->duplicateRelations($this->Parent(), $this, $this->config()->get('sync_relations'));

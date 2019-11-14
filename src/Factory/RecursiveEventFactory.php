@@ -4,13 +4,10 @@ namespace Dynamic\Calendar\Factory;
 
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Page\RecursiveEvent;
-use RRule\RRule;
 use SilverStripe\Core\Config\Configurable;
 use SilverStripe\Core\Extensible;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\ORM\DataList;
-use SilverStripe\ORM\SS_List;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -95,6 +92,24 @@ class RecursiveEventFactory
     }
 
     /**
+     * @return array
+     */
+    protected function getCleanMap()
+    {
+        $map = $this->getEvent()->toMap();
+
+        unset($map['ID']);
+        unset($map['ClassName']);
+        unset($map['Created']);
+        unset($map['LastEdited']);
+        unset($map['Version']);
+        unset($map['URLSegment']);
+        unset($map['Sort']);
+
+        return $map;
+    }
+
+    /**
      * @return RecursiveEvent
      */
     public function createEvent()
@@ -107,12 +122,12 @@ class RecursiveEventFactory
 
         if (!$recursion = RecursiveEvent::get()->filter($findFilter)->first()) {
             /** @var RecursiveEvent $recursion */
-            $recursion = Injector::inst()->create(RecursiveEvent::class, $event->toMap());
+            $recursion = RecursiveEvent::create($this->getCleanMap());
+            $recursion->ID = null;
+            $recursion->ParentID = $event->ID;
             $recursion->StartDate = $this->getDate();
             $recursion->writeToStage(Versioned::DRAFT);
         }
-
-        $recursion->syncRelationsFromParentEvent();
 
         return $recursion;
     }

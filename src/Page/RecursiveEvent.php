@@ -7,7 +7,6 @@ use SilverStripe\Versioned\Versioned;
 /**
  * Class RecursiveEvent
  * @package Dynamic\Calendar\Page
- * @property int $GeneratingChangeSetID
  * @method EventPage Parent()
  */
 class RecursiveEvent extends EventPage

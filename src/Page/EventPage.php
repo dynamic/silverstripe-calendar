@@ -35,9 +35,8 @@ use SilverStripe\Versioned\Versioned;
  * @property bool $AllDay
  * @property string $Recursion
  * @property int $Interval
+ * @property string $EventType
  * @property DBDate $RecursionEndDate
- * @property int $RecursionChangeSetID
- * @method HasManyList RecursionChangeSets()
  * @method ManyManyList Categories()
  */
 class EventPage extends \Page
@@ -105,7 +104,6 @@ class EventPage extends \Page
         'Recursion' => 'Enum(array("NONE","DAILY","WEEKLY","MONTHLY","YEARLY"), "NONE")',
         'Interval' => 'Int',
         'RecursionEndDate' => 'Date',
-        'RecursionChangeSetID' => 'Int',
         'EventType' => 'Varchar(255)',
     ];
 

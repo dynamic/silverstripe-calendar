@@ -112,6 +112,7 @@ class EventPage extends \Page
      */
     private static $defaults = [
         'Recursion' => 'NONE',
+        'ShowInMenus' => false,
     ];
 
     /**
@@ -394,7 +395,7 @@ class EventPage extends \Page
 
         if (count($this->getValidDates())) {
             $skip = $skip->exclude([
-                'StartDate' => $this->getValidDates()
+                'StartDate' => $this->getValidDates(),
             ]);
         };
 

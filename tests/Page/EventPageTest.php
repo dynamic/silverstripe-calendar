@@ -28,26 +28,30 @@ class EventPageTest extends SapphireTest
 
         /** @var EventPage $event */
         $event = $this->objFromFixture(EventPage::class, 'one');
-        $event->StartDate = date('Y-m-d', strtotime('tomorrow'));
+        $tomorrow = strtotime('tomorrow');
+
+        $event->StartDate = date('Y-m-d', $tomorrow);
         $event->Recursion = 'DAILY';
         $event->Interval = 2;
-        $event->RecursionEndDate = date('Y-m-d', strtotime("{$event->StartDate} + 7 days"));
+        $event->RecursionEndDate = date('Y-m-d', strtotime("+7 day", $tomorrow));
         $event->writeToStage(Versioned::DRAFT);
         $event->publishRecursive();
 
-        $this->assertEquals(3, $event->Children()->count());
+        $event = EventPage::get()->byID($event->ID);
+
+        $this->assertEquals(3, $event->AllChildren()->count());
 
         $event->Interval = 1;
         $event->writeToStage(Versioned::DRAFT);
         $event->publishRecursive();
 
-        $this->assertEquals(7, $event->Children()->count());
+        $this->assertEquals(7, $event->AllChildren()->count());
 
         $event->Interval = 2;
         $event->writeToStage(Versioned::DRAFT);
         $event->publishRecursive();
 
-        $this->assertEquals(3, $event->Children()->count());
+        $this->assertEquals(3, $event->AllChildren()->count());
 
 
         Config::modify()->set(EventPage::class, 'recursion', false);

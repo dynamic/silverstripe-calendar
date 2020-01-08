@@ -15,6 +15,9 @@ use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\TextField;
 use SilverStripe\ORM\DataList;
+use SilverStripe\ORM\DataQuery;
+use SilverStripe\ORM\Filters\ExactMatchFilter;
+use SilverStripe\ORM\Filters\LessThanOrEqualFilter;
 
 /**
  * Class CalendarController
@@ -165,10 +168,18 @@ class CalendarController extends \PageController
         if ($endDate = $request->getVar('EndDate')) {
             $endDateTime = Carbon::parse($endDate)->endOfDay();
 
-            $events = $events->filter(
-                'EndDate:LessThanOrEqual',
-                $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT)
-            );
+            // event start less than EndDate OR (EndDate is not set AND event start lass than EndDate)
+            $events = $events->alterDataQuery(function (DataQuery $query) use ($endDateTime) {
+                $formattedEndDate = $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT);
+                // create an or group
+                $orGroup = $query->disjunctiveGroup();
+                LessThanOrEqualFilter::create('EndDate', $formattedEndDate)->apply($orGroup);
+
+                // create an and group
+                $andGroup = $orGroup->conjunctiveGroup();
+                ExactMatchFilter::create('EndDate', '')->apply($andGroup);
+                LessThanOrEqualFilter::create('StartDate', $formattedEndDate)->apply($orGroup);
+            });
         }
 
         if ($title = $request->getVar('Title')) {

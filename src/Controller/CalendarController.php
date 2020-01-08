@@ -177,8 +177,8 @@ class CalendarController extends \PageController
 
                 // create an and group (sub group of the or group)
                 $andGroup = $orGroup->conjunctiveGroup();
-                ExactMatchFilter::create('EndDate', '')->apply($andGroup);
-                LessThanOrEqualFilter::create('StartDate', $formattedEndDate)->apply($orGroup);
+                ExactMatchFilter::create('EndDate', null)->apply($andGroup);
+                LessThanOrEqualFilter::create('StartDate', $formattedEndDate)->apply($andGroup);
             });
         }
 

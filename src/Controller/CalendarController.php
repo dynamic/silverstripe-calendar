@@ -168,14 +168,14 @@ class CalendarController extends \PageController
         if ($endDate = $request->getVar('EndDate')) {
             $endDateTime = Carbon::parse($endDate)->endOfDay();
 
-            // event start less than EndDate OR (EndDate is not set AND event start lass than EndDate)
+            // event start less than EndDate OR (EndDate is not set AND event start less than EndDate)
             $events = $events->alterDataQuery(function (DataQuery $query) use ($endDateTime) {
                 $formattedEndDate = $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT);
                 // create an or group
                 $orGroup = $query->disjunctiveGroup();
                 LessThanOrEqualFilter::create('EndDate', $formattedEndDate)->apply($orGroup);
 
-                // create an and group
+                // create an and group (sub group of the or group)
                 $andGroup = $orGroup->conjunctiveGroup();
                 ExactMatchFilter::create('EndDate', '')->apply($andGroup);
                 LessThanOrEqualFilter::create('StartDate', $formattedEndDate)->apply($orGroup);

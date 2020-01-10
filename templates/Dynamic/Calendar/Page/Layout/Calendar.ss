@@ -1,9 +1,9 @@
 <div id="Content" class="searchResults">
   <h1>$Title</h1>
 
-  <% if $Events %>
+  <% if $PaginatedEvents %>
     <ul id="SearchResults">
-      <% loop $Events %>
+      <% loop $PaginatedEvents %>
         <li>
           <h4>
             <a href="$Link">
@@ -26,14 +26,14 @@
     <p>Sorry, no events at this time.</p>
   <% end_if %>
 
-  <% if $Events.MoreThanOnePage %>
+  <% if $PaginatedEvents.MoreThanOnePage %>
     <div id="PageNumbers">
       <div class="pagination">
-        <% if $Events.NotFirstPage %>
-          <a class="prev" href="$Events.PrevLink" title="View the previous page">&larr;</a>
+        <% if $PaginatedEvents.NotFirstPage %>
+          <a class="prev" href="$PaginatedEvents.PrevLink" title="View the previous page">&larr;</a>
         <% end_if %>
         <span>
-          <% loop $Events.Pages %>
+          <% loop $PaginatedEvents.Pages %>
             <% if $CurrentBool %>
               $PageNum
             <% else %>
@@ -41,11 +41,11 @@
             <% end_if %>
           <% end_loop %>
         </span>
-        <% if $Events.NotLastPage %>
-          <a class="next" href="$Events.NextLink" title="View the next page">&rarr;</a>
+        <% if $PaginatedEvents.NotLastPage %>
+          <a class="next" href="$PaginatedEvents.NextLink" title="View the next page">&rarr;</a>
         <% end_if %>
       </div>
-      <p>Page $Events.CurrentPage of $Events.TotalPages</p>
+      <p>Page $PaginatedEvents.CurrentPage of $PaginatedEvents.TotalPages</p>
     </div>
   <% end_if %>
 </div>

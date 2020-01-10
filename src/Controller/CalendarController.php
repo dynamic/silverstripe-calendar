@@ -18,6 +18,7 @@ use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\DataQuery;
 use SilverStripe\ORM\Filters\ExactMatchFilter;
 use SilverStripe\ORM\Filters\LessThanOrEqualFilter;
+use SilverStripe\ORM\PaginatedList;
 
 /**
  * Class CalendarController
@@ -127,6 +128,16 @@ class CalendarController extends \PageController
         }
 
         return $this->events;
+    }
+
+    /**
+     * @return PaginatedList
+     */
+    public function getPaginatedEvents()
+    {
+        $paginatedList = PaginatedList::create($this->getEvents(), $this->getRequest());
+        $this->extend('updatePaginatedEvents', $paginatedList);
+        return $paginatedList;
     }
 
     /**

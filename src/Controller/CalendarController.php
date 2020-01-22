@@ -15,6 +15,7 @@ use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\TextField;
 use SilverStripe\ORM\DataList;
+use SilverStripe\ORM\PaginatedList;
 
 /**
  * Class CalendarController
@@ -124,6 +125,15 @@ class CalendarController extends \PageController
         }
 
         return $this->events;
+    }
+
+    /**
+     * @return PaginatedList
+     */
+    public function getPaginatedEvents()
+    {
+        return PaginatedList::create($this->getEvents(), $this->getRequest())
+            ->setPageLength($this->data()->config()->get('events_per_page'));
     }
 
     /**

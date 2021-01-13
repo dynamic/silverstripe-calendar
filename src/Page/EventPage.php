@@ -3,6 +3,7 @@
 namespace Dynamic\Calendar\Page;
 
 use Carbon\Carbon;
+use Dynamic\Calendar\Controller\EventPageController;
 use Dynamic\Calendar\Factory\RecursiveEventFactory;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
@@ -354,6 +355,14 @@ class EventPage extends \Page
         }
 
         $this->cleanRecursions();
+    }
+
+    /**
+     * @return string
+     */
+    public function getControllerName()
+    {
+        return EventPageController::class;
     }
 
     /**

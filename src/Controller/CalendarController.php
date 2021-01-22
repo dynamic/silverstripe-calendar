@@ -75,13 +75,13 @@ class CalendarController extends \PageController
      */
     public function setDefaultFilter($global = false)
     {
-        $filter = ['StartDate:GreaterThanOrEqual' => $this->getStartDate()];
+        $filter = [];
 
         if (!$global) {
             $filter['ParentID'] = $this->data()->ID;
         }
 
-        $this->default_filter = $filter;
+        $this->default_filter = !empty($filter) ? $filter : null;
 
         return $this;
     }
@@ -104,7 +104,14 @@ class CalendarController extends \PageController
     protected function setEvents()
     {
         $events = EventPage::get()
-            ->filter($this->getDefaultFilter());
+            ->filterAny([
+                'StartDate:GreaterThanOrEqual' => $this->getStartDate(),
+                'EndDate:GreaterThanOrEqual' => date('Y-m-d', strtotime('now')),
+            ]);
+
+        if ($this->getDefaultFilter() != null) {
+            $events->filter($this->getDefaultFilter());
+        }
 
         $events = $this->filterByRequest($events);
 

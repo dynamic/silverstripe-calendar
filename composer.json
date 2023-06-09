@@ -10,7 +10,7 @@
     "license": "BSD-3-Clause",
     "type": "silverstripe-vendormodule",
     "require": {
-        "nesbot/carbon": "^1.0",
+        "nesbot/carbon": "^1.0 || ^2.0",
         "rlanvin/php-rrule": "^2.2",
         "silverstripe/cms": "^4.0",
         "silverstripe/lumberjack": "^2.0",

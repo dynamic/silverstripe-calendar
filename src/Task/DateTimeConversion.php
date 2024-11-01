@@ -3,6 +3,7 @@
 namespace Dynamic\Calendar\Task;
 
 use Dynamic\Calendar\Page\EventPage;
+use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\BuildTask;
 use SilverStripe\Versioned\Versioned;
 
@@ -20,7 +21,7 @@ class DateTimeConversion extends BuildTask
     /**
      * @var string
      */
-    private static $segment = 'calendar-datetime-conversion-task';
+    private static string $segment = 'calendar-datetime-conversion-task';
 
     /**
      * @var string
@@ -28,9 +29,9 @@ class DateTimeConversion extends BuildTask
     protected $description = 'Convert Datetime data to separate Date and Time data';
 
     /**
-     * @param \SilverStripe\Control\HTTPRequest $request
+     * @param HTTPRequest $request
      */
-    public function run($request)
+    public function run($request): void
     {
         $this->convertData();
     }
@@ -38,7 +39,7 @@ class DateTimeConversion extends BuildTask
     /**
      *
      */
-    protected function convertData()
+    protected function convertData(): void
     {
         /** @var EventPage $event */
         foreach ($this->yieldEvents() as $event) {
@@ -72,7 +73,7 @@ class DateTimeConversion extends BuildTask
     /**
      * @return \Generator
      */
-    protected function yieldEvents()
+    protected function yieldEvents(): \Generator
     {
         foreach (EventPage::get() as $event) {
             yield $event;

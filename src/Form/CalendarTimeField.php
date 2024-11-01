@@ -11,9 +11,9 @@ use SilverStripe\Forms\TimeField;
 class CalendarTimeField extends TimeField
 {
     /**
-     * @return mixed|string
+     * @return string
      */
-    public function Value()
+    public function Value(): string
     {
         $localised = $this->internalToFrontend($this->value);
         if ($localised) {

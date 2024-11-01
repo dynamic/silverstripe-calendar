@@ -14,37 +14,37 @@ class RecursiveEvent extends EventPage
     /**
      * @var string
      */
-    private static $hide_ancestor = RecursiveEvent::class;
+    private static string $hide_ancestor = RecursiveEvent::class;
 
     /**
      * @var string
      */
-    private static $singular_name = 'Recursive Event Record';
+    private static string $singular_name = 'Recursive Event Record';
 
     /**
      * @var string
      */
-    private static $plural_name = 'Recursive Event Records';
+    private static string $plural_name = 'Recursive Event Records';
 
     /**
      * @var string
      */
-    private static $default_parent = EventPage::class;
+    private static string $default_parent = EventPage::class;
 
     /**
      * @var string
      */
-    private static $table_name = 'RecursiveEvent';
+    private static string $table_name = 'RecursiveEvent';
 
     /**
      * @var bool
      */
-    private static $show_in_sitetree = false;
+    private static bool $show_in_sitetree = false;
 
     /**
      * @return array
      */
-    public function summaryFields()
+    public function summaryFields(): array
     {
         $fields = parent::summaryFields();
 
@@ -54,9 +54,9 @@ class RecursiveEvent extends EventPage
     }
 
     /**
-     *
+     * @return void
      */
-    public function onBeforeWrite()
+    public function onBeforeWrite(): void
     {
         parent::onBeforeWrite();
 
@@ -66,9 +66,9 @@ class RecursiveEvent extends EventPage
     }
 
     /**
-     *
+     * @return void
      */
-    public function onAfterWrite()
+    public function onAfterWrite(): void
     {
         parent::onAfterWrite();
 
@@ -76,9 +76,9 @@ class RecursiveEvent extends EventPage
     }
 
     /**
-     *
+     * @return void
      */
-    protected function syncRelationsFromParentEvent()
+    protected function syncRelationsFromParentEvent(): void
     {
         if ($this->config()->get('sync_relations')) {
             $this->duplicateRelations($this->Parent(), $this, $this->config()->get('sync_relations'));

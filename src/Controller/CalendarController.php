@@ -69,6 +69,13 @@ class CalendarController extends \PageController
      */
     private static string $view_session = 'Calendar.VIEW';
 
+    protected function init()
+    {
+        parent::init();
+
+        $this->setDefaultFilter();
+    }
+
     /**
      * @param bool $global
      * @return $this

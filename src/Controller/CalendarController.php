@@ -32,7 +32,7 @@ class CalendarController extends \PageController
     /**
      * @var null|array
      */
-    private ?array $default_filter;
+    private ?array $default_filter = null;
 
     /**
      * @var string

@@ -30,9 +30,9 @@ class CalendarController extends \PageController
     private $events = null;
 
     /**
-     * @var array
+     * @var null|array
      */
-    private array $default_filter;
+    private ?array $default_filter;
 
     /**
      * @var string

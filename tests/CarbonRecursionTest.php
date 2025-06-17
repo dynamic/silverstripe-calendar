@@ -168,7 +168,7 @@ class CarbonRecursionTest extends SapphireTest
         // Find the modified occurrence
         $modifiedOccurrence = null;
         foreach ($occurrences as $occurrence) {
-            if ($occurrence->StartDate === '2025-06-18') {
+            if ((string) $occurrence->StartDate === '2025-06-18') {
                 $modifiedOccurrence = $occurrence;
                 break;
             }
@@ -213,7 +213,7 @@ class CarbonRecursionTest extends SapphireTest
         $this->assertCount(4, $occurrences);
 
         // Check that the 18th is not included
-        $dates = array_map(function($occ) { return $occ->StartDate; }, $occurrences);
+        $dates = array_map(function($occ) { return (string) $occ->StartDate; }, $occurrences);
         $this->assertNotContains('2025-06-18', $dates);
         $this->assertContains('2025-06-16', $dates);
         $this->assertContains('2025-06-17', $dates);

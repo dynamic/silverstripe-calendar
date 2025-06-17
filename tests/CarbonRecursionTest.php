@@ -97,7 +97,9 @@ class CarbonRecursionTest extends SapphireTest
         }
 
         // Check specific dates
-        $dates = array_map(function($occ) { return $occ->StartDate; }, $occurrences);
+        $dates = array_map(function ($occ) {
+            return $occ->StartDate;
+        }, $occurrences);
         $expectedDates = ['2025-06-16', '2025-06-23', '2025-06-30', '2025-07-07', '2025-07-14'];
 
         $this->assertEquals($expectedDates, $dates);
@@ -126,7 +128,9 @@ class CarbonRecursionTest extends SapphireTest
         $this->assertCount(6, $occurrences);
 
         // Check that dates are correct
-        $dates = array_map(function($occ) { return $occ->StartDate; }, $occurrences);
+        $dates = array_map(function ($occ) {
+            return $occ->StartDate;
+        }, $occurrences);
         $expectedDates = ['2025-06-15', '2025-07-15', '2025-08-15', '2025-09-15', '2025-10-15', '2025-11-15'];
 
         $this->assertEquals($expectedDates, $dates);
@@ -213,7 +217,9 @@ class CarbonRecursionTest extends SapphireTest
         $this->assertCount(4, $occurrences);
 
         // Check that the 18th is not included
-        $dates = array_map(function($occ) { return (string) $occ->StartDate; }, $occurrences);
+        $dates = array_map(function ($occ) {
+            return (string) $occ->StartDate;
+        }, $occurrences);
         $this->assertNotContains('2025-06-18', $dates);
         $this->assertContains('2025-06-16', $dates);
         $this->assertContains('2025-06-17', $dates);

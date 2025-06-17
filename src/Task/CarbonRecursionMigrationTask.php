@@ -93,14 +93,19 @@ class CarbonRecursionMigrationTask extends BuildTask
                     $this->createEventException($recursiveEvent, $originalEvent);
                 }
                 $migratedCount++;
-                $this->printMessage("Migrated modified instance: {$recursiveEvent->Title} on {$recursiveEvent->StartDate}");
+                $this->printMessage(
+                    "Migrated modified instance: {$recursiveEvent->Title} on {$recursiveEvent->StartDate}"
+                );
             } else {
                 // This is just a standard recurrence instance, no exception needed
                 $skippedCount++;
             }
         }
 
-        $this->printMessage("Migration complete: {$migratedCount} instances migrated, {$skippedCount} skipped", 'success');
+        $this->printMessage(
+            "Migration complete: {$migratedCount} instances migrated, {$skippedCount} skipped",
+            'success'
+        );
     }
 
     /**
@@ -130,7 +135,9 @@ class CarbonRecursionMigrationTask extends BuildTask
         $originalCategories = $originalEvent->Categories()->column('ID');
         $recursiveCategories = $recursiveEvent->Categories()->column('ID');
 
-        if (array_diff($originalCategories, $recursiveCategories) || array_diff($recursiveCategories, $originalCategories)) {
+        if (array_diff($originalCategories, $recursiveCategories) ||
+            array_diff($recursiveCategories, $originalCategories)
+        ) {
             return true;
         }
 
@@ -148,7 +155,10 @@ class CarbonRecursionMigrationTask extends BuildTask
         // Check if exception already exists
         $existing = EventException::findForEventAndDate($originalEvent, $recursiveEvent->StartDate);
         if ($existing) {
-            $this->printMessage("Exception already exists for {$originalEvent->Title} on {$recursiveEvent->StartDate}", 'warning');
+            $this->printMessage(
+                "Exception already exists for {$originalEvent->Title} on {$recursiveEvent->StartDate}",
+                'warning'
+            );
             return;
         }
 
@@ -247,8 +257,10 @@ class CarbonRecursionMigrationTask extends BuildTask
             }
         }
 
-        $this->printMessage("Validation complete: {$validCount} valid, {$invalidCount} invalid",
-                          $invalidCount > 0 ? 'warning' : 'success');
+        $this->printMessage(
+            "Validation complete: {$validCount} valid, {$invalidCount} invalid",
+            $invalidCount > 0 ? 'warning' : 'success'
+        );
     }
 
     /**
@@ -285,7 +297,7 @@ class CarbonRecursionMigrationTask extends BuildTask
      */
     protected function printMessage(string $message, string $type = 'info'): void
     {
-        $prefix = match($type) {
+        $prefix = match ($type) {
             'header' => '### ',
             'success' => '✓ ',
             'warning' => '⚠ ',

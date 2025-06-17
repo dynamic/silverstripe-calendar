@@ -100,7 +100,7 @@ trait CarbonRecursion
         }
 
         try {
-            $period = match($this->Recursion) {
+            $period = match ($this->Recursion) {
                 'DAILY' => $this->createDailyPeriod($eventStart, $rangeEnd),
                 'WEEKLY' => $this->createWeeklyPeriod($eventStart, $rangeEnd),
                 'MONTHLY' => $this->createMonthlyPeriod($eventStart, $rangeEnd),
@@ -116,7 +116,6 @@ trait CarbonRecursion
             return $period->filter(function (Carbon $date) use ($rangeStart, $rangeEnd) {
                 return $date->between($rangeStart, $rangeEnd, true);
             });
-
         } catch (\Exception $e) {
             // Log error and return null to prevent crashes
             error_log("Error creating Carbon period for event {$this->ID}: " . $e->getMessage());
@@ -325,8 +324,12 @@ trait CarbonRecursion
      * @param string $reason
      * @return EventException
      */
-    public function createException(string $instanceDate, string $action, array $overrides = [], string $reason = ''): EventException
-    {
+    public function createException(
+        string $instanceDate,
+        string $action,
+        array $overrides = [],
+        string $reason = ''
+    ): EventException {
         // Remove any existing exception for this date
         $existing = EventException::findForEventAndDate($this, $instanceDate);
         if ($existing) {
@@ -391,7 +394,7 @@ trait CarbonRecursion
         $interval = max(1, (int) $this->Interval);
         $intervalText = $interval === 1 ? '' : " {$interval}";
 
-        $pattern = match($this->Recursion) {
+        $pattern = match ($this->Recursion) {
             'DAILY' => $interval === 1 ? 'Daily' : "Every {$interval} days",
             'WEEKLY' => $interval === 1 ? 'Weekly' : "Every {$interval} weeks",
             'MONTHLY' => $interval === 1 ? 'Monthly' : "Every {$interval} months",

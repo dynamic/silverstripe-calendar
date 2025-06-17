@@ -82,10 +82,12 @@ class EventInstance extends ViewableData
         $this->virtualProperties['EndTime'] = $this->originalEvent->EndTime;
 
         // Generate a virtual ID for consistency
-        $this->virtualProperties['ID'] = 'virtual_' . $this->originalEvent->ID . '_' . $this->instanceDate->format('Y-m-d');
+        $this->virtualProperties['ID'] = 'virtual_' . $this->originalEvent->ID . '_' .
+            $this->instanceDate->format('Y-m-d');
 
         // Generate virtual URL segment
-        $this->virtualProperties['URLSegment'] = $this->originalEvent->URLSegment . '-' . $this->instanceDate->format('Y-m-d');
+        $this->virtualProperties['URLSegment'] = $this->originalEvent->URLSegment . '-' .
+            $this->instanceDate->format('Y-m-d');
     }
 
     /**

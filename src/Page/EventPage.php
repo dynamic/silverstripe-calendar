@@ -615,8 +615,12 @@ class EventPage extends \Page
      * @param string $reason Optional reason for the exception
      * @return EventException
      */
-    public function createException(string $instanceDate, string $action, array $overrides = [], string $reason = ''): EventException
-    {
+    public function createException(
+        string $instanceDate,
+        string $action,
+        array $overrides = [],
+        string $reason = ''
+    ): EventException {
         if ($action === 'DELETED') {
             return EventException::createDeletion($this, $instanceDate, $reason);
         } elseif ($action === 'MODIFIED') {
@@ -628,7 +632,7 @@ class EventPage extends \Page
 
     /**
      * Get all child events/instances for this recurring event
-     * 
+     *
      * For the Carbon system, this returns an ArrayList of virtual instances
      * For the legacy RRule system, this would return actual RecursiveEvent records
      *
@@ -643,7 +647,8 @@ class EventPage extends \Page
             }
 
             // Get occurrences within a reasonable timeframe for testing
-            $endDate = $this->RecursionEndDate ? Carbon::parse($this->RecursionEndDate) : Carbon::parse($this->StartDate)->addMonth();
+            $endDate = $this->RecursionEndDate ? Carbon::parse($this->RecursionEndDate) :
+                Carbon::parse($this->StartDate)->addMonth();
             $occurrences = $this->getOccurrences($this->StartDate, $endDate);
             
             $children = \SilverStripe\ORM\ArrayList::create();

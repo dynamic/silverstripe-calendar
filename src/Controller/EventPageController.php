@@ -23,7 +23,7 @@ class EventPageController extends \PageController
 
     /**
      * Get event occurrences for a date range (AJAX endpoint)
-     * 
+     *
      * @param HTTPRequest $request
      * @return HTTPResponse
      */
@@ -66,7 +66,7 @@ class EventPageController extends \PageController
     
     /**
      * Get next occurrence (AJAX endpoint)
-     * 
+     *
      * @param HTTPRequest $request
      * @return HTTPResponse
      */
@@ -87,7 +87,9 @@ class EventPageController extends \PageController
                 $data = [
                     'nextOccurrence' => [
                         'date' => Carbon::parse($nextOccurrence->StartDate)->format('M j, Y'),
-                        'time' => $nextOccurrence->StartTime ? Carbon::parse($nextOccurrence->StartTime)->format('g:i A') : null,
+                        'time' => $nextOccurrence->StartTime
+                            ? Carbon::parse($nextOccurrence->StartTime)->format('g:i A')
+                            : null,
                         'isModified' => $nextOccurrence->isModified(),
                     ]
                 ];

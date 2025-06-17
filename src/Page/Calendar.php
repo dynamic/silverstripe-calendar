@@ -2,9 +2,12 @@
 
 namespace Dynamic\Calendar\Page;
 
+use Carbon\Carbon;
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
+use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Lumberjack\Model\Lumberjack;
+use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;
 
 /**
@@ -123,5 +126,91 @@ class Calendar extends \Page
     public function getControllerName(): string
     {
         return CalendarController::class;
+    }
+
+    /**
+     * Get events feed for consumption by ElementCalendar and other components
+     * This method handles all the Carbon recursion logic and provides a clean API
+     *
+     * @param int|null $limit Maximum number of events to return
+     * @param ManyManyList|null $categories Categories to filter by
+     * @param Carbon|string|null $fromDate Start date for events (default: now)
+     * @param Carbon|string|null $toDate End date for events (default: 6 months from now)
+     * @return ArrayList
+     */
+    public function getEventsFeed(?int $limit = null, $categories = null, $fromDate = null, $toDate = null): ArrayList
+    {
+        // Parse dates
+        $fromDate = $fromDate ? Carbon::parse($fromDate) : Carbon::now();
+        $toDate = $toDate ? Carbon::parse($toDate) : Carbon::now()->addMonths(6);
+
+        $allEvents = ArrayList::create();
+
+        // Get regular (non-recurring) events
+        $regularEvents = EventPage::get()
+            ->filter([
+                'ParentID' => $this->ID,
+                'Recursion' => 'NONE',
+            ])
+            ->where([
+                'StartDate >= ?' => $fromDate->format('Y-m-d'),
+                'StartDate <= ?' => $toDate->format('Y-m-d'),
+            ]);
+
+        foreach ($regularEvents as $event) {
+            $allEvents->push($event);
+        }
+
+        // Get recurring events and their virtual instances
+        $recurringEvents = EventPage::get()
+            ->filter([
+                'ParentID' => $this->ID,
+            ])
+            ->exclude('Recursion', 'NONE');
+
+        foreach ($recurringEvents as $event) {
+            // Get occurrences within the date range using Carbon recursion
+            $occurrences = $event->getOccurrences($fromDate, $toDate);
+
+            foreach ($occurrences as $occurrence) {
+                $allEvents->push($occurrence);
+            }
+        }
+
+        // Filter by categories if specified
+        if ($categories && $categories->exists()) {
+            $categoryIDs = $categories->column('ID');
+            $filteredEvents = ArrayList::create();
+
+            foreach ($allEvents as $event) {
+                // For virtual instances, check original event categories
+                if ($event->hasMethod('getOriginalEvent')) {
+                    $eventCategories = $event->getOriginalEvent()->Categories();
+                } else {
+                    $eventCategories = $event->Categories();
+                }
+
+                // Check if event has any of the selected categories
+                foreach ($eventCategories as $category) {
+                    if (in_array($category->ID, $categoryIDs)) {
+                        $filteredEvents->push($event);
+                        break; // Only add once even if multiple categories match
+                    }
+                }
+            }
+            $allEvents = $filteredEvents;
+        }
+
+        // Sort events by start date
+        $allEvents = $allEvents->sort('StartDate', 'ASC');
+
+        // Apply limit if specified
+        if ($limit && $limit > 0) {
+            $allEvents = $allEvents->limit($limit);
+        }
+
+        $this->extend('updateEventsFeed', $allEvents);
+
+        return $allEvents;
     }
 }

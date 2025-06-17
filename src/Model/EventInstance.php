@@ -103,7 +103,17 @@ class EventInstance extends ViewableData
 
         // Check for virtual properties
         if (isset($this->virtualProperties[$property])) {
-            return $this->virtualProperties[$property];
+            $value = $this->virtualProperties[$property];
+
+            // Convert date/time strings to proper DBField objects for template formatting
+            if ($property === 'StartDate' || $property === 'EndDate') {
+                return DBField::create_field('Date', $value);
+            }
+            if ($property === 'StartTime' || $property === 'EndTime') {
+                return DBField::create_field('Time', $value);
+            }
+
+            return $value;
         }
 
         // Fall back to original event property

@@ -1,51 +1,106 @@
-<div id="Content" class="searchResults">
-  <h1>$Title</h1>
-
-  <% if $Events %>
-    <ul id="SearchResults">
-      <% loop $Events %>
-        <li>
-          <h4>
-            <a href="$Link">
-              <% if $MenuTitle %>
-                $MenuTitle
-              <% else %>
-                $Title
-              <% end_if %>
-            </a>
-          </h4>
-          <h5>$StartDate</h5>
-          <% if $Content %>
-            <p>$Content.LimitWordCountXML</p>
-          <% end_if %>
-          <a class="readMoreLink" href="$Link" title="Read more about &quot;{$Title}&quot;">Read more about&quot;{$Title}&quot;...</a>
-        </li>
-      <% end_loop %>
-    </ul>
-  <% else %>
-    <p>Sorry, no events at this time.</p>
-  <% end_if %>
-
-  <% if $Events.MoreThanOnePage %>
-    <div id="PageNumbers">
-      <div class="pagination">
-        <% if $Events.NotFirstPage %>
-          <a class="prev" href="$Events.PrevLink" title="View the previous page">&larr;</a>
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <header class="page-header mb-4">
+        <h1 class="display-4">$Title</h1>
+        <% if $Content %>
+          <div class="lead">$Content</div>
         <% end_if %>
-        <span>
-          <% loop $Events.Pages %>
-            <% if $CurrentBool %>
-              $PageNum
-            <% else %>
-              <a href="$Link" title="View page number $PageNum" class="go-to-page">$PageNum</a>
-            <% end_if %>
-          <% end_loop %>
-        </span>
-        <% if $Events.NotLastPage %>
-          <a class="next" href="$Events.NextLink" title="View the next page">&rarr;</a>
-        <% end_if %>
+      </header>
+
+      <!-- Calendar Filters -->
+      <div class="row mb-4">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Filter Events</h5>
+              <form method="get" class="row g-3">
+                <div class="col-md-6">
+                  <label for="from" class="form-label">From Date</label>
+                  <input type="date" class="form-control" id="from" name="from" value="$CurrentFromDate">
+                </div>
+                <div class="col-md-6">
+                  <label for="to" class="form-label">To Date</label>
+                  <input type="date" class="form-control" id="to" name="to" value="$CurrentToDate">
+                </div>
+                <div class="col-12">
+                  <button type="submit" class="btn btn-primary">Filter Events</button>
+                  <a href="$Link" class="btn btn-outline-secondary">Clear Filters</a>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Event Statistics</h5>
+              <p class="mb-1"><strong>Total Events:</strong> $Events.TotalItems</p>
+              <p class="mb-1"><strong>Recurring Events:</strong> $RecurringEventsCount</p>
+              <p class="mb-0"><strong>One-time Events:</strong> $OneTimeEventsCount</p>
+            </div>
+          </div>
+        </div>
       </div>
-      <p>Page $Events.CurrentPage of $Events.TotalPages</p>
+
+      <!-- Elemental Area -->
+      <% if $ElementalArea %>
+        <div class="row mb-4">
+          <div class="col-12">
+            $ElementalArea
+          </div>
+        </div>
+      <% end_if %>
+
+      <% if $Events %>
+        <div class="row">
+          <% loop $Events %>
+            <div class="col-lg-6 col-xl-4 mb-4">
+              <% include Dynamic/Calendar/Includes/EventPreview %>
+            </div>
+          <% end_loop %>
+        </div>
+      <% else %>
+        <div class="alert alert-info text-center" role="alert">
+          <i class="bi bi-calendar-x display-1 text-muted"></i>
+          <h4 class="alert-heading mt-3">No Events Found</h4>
+          <p>Sorry, no events are scheduled for the selected time period.</p>
+          <hr>
+          <p class="mb-0">Try adjusting your date filters or check back later for new events.</p>
+        </div>
+      <% end_if %>
+
+      <% if $Events.MoreThanOnePage %>
+        <nav aria-label="Events pagination" class="mt-4">
+          <ul class="pagination justify-content-center">
+            <% if $Events.NotFirstPage %>
+              <li class="page-item">
+                <a class="page-link" href="$Events.PrevLink" aria-label="Previous">
+                  <span aria-hidden="true">&laquo;</span>
+                </a>
+              </li>
+            <% end_if %>
+            <% loop $Events.Pages %>
+              <li class="page-item <% if $CurrentBool %>active<% end_if %>">
+                <% if $CurrentBool %>
+                  <span class="page-link">$PageNum</span>
+                <% else %>
+                  <a class="page-link" href="$Link">$PageNum</a>
+                <% end_if %>
+              </li>
+            <% end_loop %>
+            <% if $Events.NotLastPage %>
+              <li class="page-item">
+                <a class="page-link" href="$Events.NextLink" aria-label="Next">
+                  <span aria-hidden="true">&raquo;</span>
+                </a>
+              </li>
+            <% end_if %>
+          </ul>
+          <p class="text-center text-muted">Page $Events.CurrentPage of $Events.TotalPages</p>
+        </nav>
+      <% end_if %>
     </div>
-  <% end_if %>
+  </div>
+</div>
 </div>

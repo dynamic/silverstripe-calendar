@@ -1,0 +1,17 @@
+{
+  "name": "silverstripe-calendar-tests",
+  "version": "1.0.0",
+  "description": "Playwright tests for SilverStripe Calendar module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "install-playwright": "playwright install"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  },
+  "keywords": ["silverstripe", "calendar", "testing", "playwright"],
+  "author": "Dynamic",
+  "license": "BSD-3-Clause"
+}

@@ -361,11 +361,15 @@ class EventPage extends \Page
     {
         parent::onAfterPublish();
 
-        if ($this->eventRecurs()) {
-            $this->generateAdditionalEvents();
-        }
+        // Only generate physical recurring events if using the legacy RRule system
+        if ($this->config()->get('recursion_system') === 'rrule') {
+            if ($this->eventRecurs()) {
+                $this->generateAdditionalEvents();
+            }
 
-        $this->cleanRecursions();
+            $this->cleanRecursions();
+        }
+        // For Carbon system, we use virtual instances - no need to generate physical events
     }
 
     /**
@@ -443,10 +447,16 @@ class EventPage extends \Page
 
     /**
      * @return RRule|array
+     * @deprecated Use Carbon-based getOccurrences() method instead
      */
     protected function getRecursionSet()
     {
         if (!$this->eventRecurs()) {
+            return [];
+        }
+
+        // For Carbon system, don't use RRule
+        if ($this->config()->get('recursion_system') === 'carbon') {
             return [];
         }
 
@@ -465,14 +475,32 @@ class EventPage extends \Page
      */
     public function getFullRecursionCount()
     {
+        if ($this->config()->get('recursion_system') === 'carbon') {
+            // For Carbon system, count virtual instances in a reasonable range
+            $count = 0;
+            $limit = 1000; // Reasonable limit to prevent infinite loops
+            foreach ($this->getOccurrences(null, null, $limit) as $instance) {
+                $count++;
+            }
+            return $count;
+        }
+
+        // Legacy RRule system
         return $this->getRecursionSet()->count();
     }
 
     /**
      * @return array
+     * @deprecated Use Carbon-based getOccurrences() method instead
      */
     protected function getValidDates()
     {
+        if ($this->config()->get('recursion_system') === 'carbon') {
+            // For Carbon system, return empty array since we use virtual instances
+            return [];
+        }
+
+        // Legacy RRule system
         $dates = [];
 
         foreach ($this->yieldSingle($this->getRecursionSet()) as $date) {

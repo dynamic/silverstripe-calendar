@@ -31,16 +31,6 @@
             </div>
           </div>
         </div>
-        <div class="col-md-6">
-          <div class="card">
-            <div class="card-body">
-              <h5 class="card-title">Event Statistics</h5>
-              <p class="mb-1"><strong>Total Events:</strong> $Events.TotalItems</p>
-              <p class="mb-1"><strong>Recurring Events:</strong> $RecurringEventsCount</p>
-              <p class="mb-0"><strong>One-time Events:</strong> $OneTimeEventsCount</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Elemental Area -->

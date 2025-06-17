@@ -6,7 +6,6 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
-use SilverStripe\CMS\Controllers\ContentController;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\PaginatedList;
@@ -20,7 +19,7 @@ use SilverStripe\View\ArrayData;
  *
  * @package Dynamic\Calendar\Controller
  */
-class CalendarController extends ContentController
+class CalendarController extends \PageController
 {
     /**
      * @var Calendar

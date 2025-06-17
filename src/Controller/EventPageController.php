@@ -31,19 +31,19 @@ class EventPageController extends \PageController
     {
         $response = HTTPResponse::create();
         $response->addHeader('Content-Type', 'application/json');
-        
+
         if (!$this->dataRecord->eventRecurs()) {
             $response->setBody(json_encode(['occurrences' => []]));
             return $response;
         }
-        
+
         $fromDate = $request->getVar('from') ?: Carbon::now()->format('Y-m-d');
         $toDate = $request->getVar('to') ?: Carbon::now()->addMonths(3)->format('Y-m-d');
-        
+
         try {
             $occurrences = [];
             $generator = $this->dataRecord->getOccurrences($fromDate, $toDate, 50); // Limit to 50 for UI
-            
+
             foreach ($generator as $occurrence) {
                 $occurrences[] = [
                     'title' => $occurrence->Title,
@@ -54,16 +54,16 @@ class EventPageController extends \PageController
                     'link' => $occurrence->Link ?? $this->dataRecord->Link(),
                 ];
             }
-            
+
             $response->setBody(json_encode(['occurrences' => $occurrences]));
         } catch (Exception $e) {
             $response->setStatusCode(500);
             $response->setBody(json_encode(['error' => 'Failed to load occurrences']));
         }
-        
+
         return $response;
     }
-    
+
     /**
      * Get next occurrence (AJAX endpoint)
      *
@@ -74,15 +74,15 @@ class EventPageController extends \PageController
     {
         $response = HTTPResponse::create();
         $response->addHeader('Content-Type', 'application/json');
-        
+
         if (!$this->dataRecord->eventRecurs()) {
             $response->setBody(json_encode(['nextOccurrence' => null]));
             return $response;
         }
-        
+
         try {
             $nextOccurrence = $this->dataRecord->getNextOccurrence();
-            
+
             if ($nextOccurrence) {
                 $data = [
                     'nextOccurrence' => [
@@ -96,16 +96,16 @@ class EventPageController extends \PageController
             } else {
                 $data = ['nextOccurrence' => null];
             }
-            
+
             $response->setBody(json_encode($data));
         } catch (Exception $e) {
             $response->setStatusCode(500);
             $response->setBody(json_encode(['error' => 'Failed to load next occurrence']));
         }
-        
+
         return $response;
     }
-    
+
     /**
      * Helper methods for templates
      */
@@ -113,12 +113,12 @@ class EventPageController extends \PageController
     {
         return Carbon::now()->format('Y-m-d');
     }
-    
+
     public function CurrentFromDate(): string
     {
         return $this->getRequest()->getVar('from') ?: Carbon::now()->format('Y-m-d');
     }
-    
+
     public function CurrentToDate(): string
     {
         return $this->getRequest()->getVar('to') ?: Carbon::now()->addMonths(3)->format('Y-m-d');

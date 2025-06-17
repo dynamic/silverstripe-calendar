@@ -650,10 +650,10 @@ class EventPage extends \Page
             $endDate = $this->RecursionEndDate ? Carbon::parse($this->RecursionEndDate) :
                 Carbon::parse($this->StartDate)->addMonth();
             $occurrences = $this->getOccurrences($this->StartDate, $endDate);
-            
+
             $children = \SilverStripe\ORM\ArrayList::create();
             $originalStartDate = $this->StartDate;
-            
+
             foreach ($occurrences as $occurrence) {
                 // Exclude the original event instance (only return the recurring ones)
                 // Convert both to string to ensure proper comparison
@@ -662,7 +662,7 @@ class EventPage extends \Page
                     $children->push($occurrence);
                 }
             }
-            
+
             return $children;
         } else {
             // Legacy RRule system - return actual RecursiveEvent records

@@ -5,6 +5,7 @@ namespace Dynamic\Calendar\Controller;
 use Carbon\Carbon;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Page\EventPage;
+use Dynamic\Calendar\Traits\CarbonCalendarController;
 use SilverStripe\Control\Controller;
 use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\DateField;
@@ -24,6 +25,8 @@ use SilverStripe\ORM\PaginatedList;
  */
 class CalendarController extends \PageController
 {
+    use CarbonCalendarController;
+
     /**
      * @var
      */
@@ -103,6 +106,12 @@ class CalendarController extends \PageController
      */
     protected function setEvents(): self
     {
+        // Use Carbon-based system if enabled
+        if (EventPage::config()->get('recursion_system') === 'carbon') {
+            return $this->setEventsWithCarbon();
+        }
+
+        // Legacy RRule-based system
         $events = EventPage::get()
             ->filterAny([
                 'StartDate:GreaterThanOrEqual' => $this->getStartDate(),
@@ -125,7 +134,7 @@ class CalendarController extends \PageController
     /**
      * @return |null
      */
-    public function getEvents(): ?DataList
+    public function getEvents()
     {
         if ($this->events === null) {
             $this->setEvents();
@@ -139,6 +148,12 @@ class CalendarController extends \PageController
      */
     public function getPaginatedEvents(): PaginatedList
     {
+        // Use Carbon-based pagination if enabled
+        if (EventPage::config()->get('recursion_system') === 'carbon') {
+            return $this->getCarbonPaginatedEvents();
+        }
+
+        // Legacy pagination
         return PaginatedList::create($this->getEvents(), $this->getRequest())
             ->setPageLength($this->data()->config()->get('events_per_page'));
     }

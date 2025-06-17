@@ -7,6 +7,7 @@ use Dynamic\Calendar\Controller\EventPageController;
 use Dynamic\Calendar\Factory\RecursiveEventFactory;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
+use Dynamic\Calendar\Traits\CarbonRecursion;
 use RRule\RRule;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DropdownField;
@@ -42,6 +43,8 @@ use SilverStripe\Versioned\Versioned;
  */
 class EventPage extends \Page
 {
+    use CarbonRecursion;
+
     /**
      * array
      */
@@ -88,6 +91,13 @@ class EventPage extends \Page
      * @var bool
      */
     private static bool $recursion = false;
+
+    /**
+     * Recursion system to use: 'rrule' (legacy) or 'carbon' (new)
+     *
+     * @var string
+     */
+    private static string $recursion_system = 'carbon';
 
     /**
      * @var array
@@ -317,6 +327,7 @@ class EventPage extends \Page
             if (($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class))
                 && $component instanceof GridFieldPaginator
             ) {
+                // Set items per page for paginator
                 $component->setItemsPerPage(7);
             }
         }
@@ -368,7 +379,7 @@ class EventPage extends \Page
     /**
      * @return bool
      */
-    protected function eventRecurs()
+    public function eventRecurs()
     {
         return $this->config()->get('recursion')
             && $this->ClassName == EventPage::class

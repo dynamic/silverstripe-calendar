@@ -55,44 +55,44 @@ class EventPage extends \Page
     /**
      * @var string
      */
-    private static $singular_name = 'Event';
+    private static string $singular_name = 'Event';
 
     /**
      * @var string
      */
-    private static $plural_name = 'Events';
+    private static string $plural_name = 'Events';
 
     /**
      * @var array
      */
-    private static $allowed_children = [RecursiveEvent::class];
+    private static array $allowed_children = [RecursiveEvent::class];
 
     /**
      * @var bool
      */
-    private static $show_in_sitetree = false;
+    private static bool $show_in_sitetree = false;
 
     /**
      * @var string
      */
-    private static $icon_class = 'font-icon-p-event';
+    private static string $icon_class = 'font-icon-p-event';
 
     /**
      *
      */
-    private static $can_be_root = false;
+    private static bool $can_be_root = false;
 
     /**
      * Recursion is currently experimental.
      *
      * @var bool
      */
-    private static $recursion = false;
+    private static bool $recursion = false;
 
     /**
      * @var array
      */
-    private static $db = [
+    private static array $db = [
         'StartDatetime' => 'DBDatetime',
         /** @deprecated */
         'EndDatetime' => 'DBDatetime',
@@ -111,7 +111,7 @@ class EventPage extends \Page
     /**
      * @var array
      */
-    private static $defaults = [
+    private static array $defaults = [
         'Recursion' => 'NONE',
         'ShowInMenus' => false,
     ];
@@ -119,21 +119,21 @@ class EventPage extends \Page
     /**
      * @var array
      */
-    private static $extensions = [
+    private static array $extensions = [
         Lumberjack::class,
     ];
 
     /**
      * @var array
      */
-    private static $many_many = [
+    private static array $many_many = [
         'Categories' => Category::class,
     ];
 
     /**
      * @var array
      */
-    private static $many_many_extraFields = [
+    private static array $many_many_extraFields = [
         'Categories' => [
             'SortOrder' => 'Int',
         ],
@@ -142,31 +142,31 @@ class EventPage extends \Page
     /**
      * @var string
      */
-    private static $table_name = 'EventPage';
+    private static string $table_name = 'EventPage';
 
     /**
      * @var string
      */
-    private static $default_sort = 'StartDate';
+    private static string $default_sort = 'StartDate';
 
     /**
      * @var array
      */
-    private static $cascade_duplicates = [
+    private static array $cascade_duplicates = [
         'Categories',
     ];
 
     /**
      * @var array
      */
-    private static $cascade_deletes = [
+    private static array $cascade_deletes = [
         'Children',
     ];
 
     /**
      * @var array
      */
-    private static $summary_fields = [
+    private static array $summary_fields = [
         'Title' => 'Title',
         'GridFieldDate' => 'Date',
         'GridFieldTime' => 'Time',
@@ -176,7 +176,7 @@ class EventPage extends \Page
     /**
      * @var array
      */
-    private static $recursion_days = [
+    private static array $recursion_days = [
         '1' => 'Monday',
         '2' => 'Tuesday',
         '3' => 'Wednesday',
@@ -189,7 +189,7 @@ class EventPage extends \Page
     /**
      * @var array
      */
-    private static $recursion_changed = [
+    private static array $recursion_changed = [
         'StartDate',
         'StartTime',
         'EndDate',
@@ -202,7 +202,7 @@ class EventPage extends \Page
     /**
      * @return string
      */
-    public function getGridFieldDate()
+    public function getGridFieldDate(): string
     {
         /** @var DBDate $date */
         $date = DBField::create_field(DBDate::class, $this->StartDate);

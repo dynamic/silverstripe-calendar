@@ -5,6 +5,7 @@ namespace Dynamic\Calendar\Page;
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
 use SilverStripe\Lumberjack\Model\Lumberjack;
+use SilverStripe\ORM\DataList;
 
 /**
  * Class Calendar
@@ -15,66 +16,68 @@ class Calendar extends \Page
     /**
      * @var string
      */
-    private static $table_name = 'Calendar';
+    private static string $table_name = 'Calendar';
 
     /**
      * @var string
      */
-    private static $singular_name = 'Calendar';
+    private static string $singular_name = 'Calendar';
 
     /**
      * @var string
      */
-    private static $plural_name = 'Calendars';
+    private static string $plural_name = 'Calendars';
 
     /**
      * @var string
      */
-    private static $icon_class = 'font-icon-p-event-alt';
+    private static string $icon_class = 'font-icon-p-event-alt';
 
     /**
      * @var array
      */
-    private static $casting = [
+    private static array $casting = [
         'NextDate' => 'Date',
     ];
 
     /**
      * @var array
      */
-    private static $allowed_children = [
+    private static array $allowed_children = [
         EventPage::class,
     ];
 
     /**
      * @var array
      */
-    private static $extensions = [
+    private static array $extensions = [
         Lumberjack::class,
     ];
 
     /**
      * @var int
+     *
+     * @todo move to CMS
      */
-    private static $events_per_page = 12;
+    private static int $events_per_page = 12;
 
     /**
      * @var bool
      */
-    private static $include_child_categories = false;
+    private static bool $include_child_categories = false;
 
     /**
      * @return string
      */
-    public function getLumberjackTitle()
+    public function getLumberjackTitle(): string
     {
         return 'Events';
     }
 
     /**
-     * @return \SilverStripe\ORM\DataList
+     * @return DataList
      */
-    public function getLumberjackPagesForGridfield()
+    public function getLumberjackPagesForGridfield(): DataList
     {
         return EventPage::get()->filter([
             'ParentID' => $this->ID,
@@ -89,7 +92,7 @@ class Calendar extends \Page
      * @param $array
      * @return int
      */
-    public static function preg_array_key_exists($pattern, $array)
+    public static function preg_array_key_exists($pattern, $array): int
     {
         $keys = array_keys($array);
 
@@ -117,7 +120,7 @@ class Calendar extends \Page
     /**
      * @return string
      */
-    public function getControllerName()
+    public function getControllerName(): string
     {
         return CalendarController::class;
     }

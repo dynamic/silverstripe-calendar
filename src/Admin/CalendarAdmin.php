@@ -14,17 +14,17 @@ class CalendarAdmin extends ModelAdmin
     /**
      * @var string
      */
-    private static $menu_title = 'Calendar';
+    private static string $menu_title = 'Calendar';
 
     /**
      * @var string
      */
-    private static $url_segment = 'calendar-admin';
+    private static string $url_segment = 'calendar-admin';
 
     /**
      * @var array
      */
-    private static $managed_models = [
+    private static array $managed_models = [
         Category::class,
     ];
 }

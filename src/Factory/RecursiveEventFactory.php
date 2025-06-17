@@ -45,7 +45,7 @@ class RecursiveEventFactory
      * @param EventPage $event
      * @return $this
      */
-    public function setEvent(EventPage $event)
+    public function setEvent(EventPage $event): self
     {
         $this->event = $event;
 
@@ -55,7 +55,7 @@ class RecursiveEventFactory
     /**
      * @return EventPage
      */
-    protected function getEvent()
+    protected function getEvent(): EventPage
     {
         return $this->event;
     }
@@ -64,7 +64,7 @@ class RecursiveEventFactory
      * @param string $date
      * @return $this
      */
-    public function setDate($date)
+    public function setDate($date): self
     {
         $this->date = $date;
 
@@ -74,7 +74,7 @@ class RecursiveEventFactory
     /**
      * @return mixed
      */
-    protected function getDate()
+    protected function getDate(): mixed
     {
         return $this->date;
     }
@@ -82,7 +82,7 @@ class RecursiveEventFactory
     /**
      * @return array
      */
-    protected function getEventCloneData()
+    protected function getEventCloneData(): array
     {
         $eventCloneData = $this->config()->get('event_clone_data');
 
@@ -94,7 +94,7 @@ class RecursiveEventFactory
     /**
      * @return array
      */
-    protected function getCleanMap()
+    protected function getCleanMap(): array
     {
         $map = $this->getEvent()->toMap();
 
@@ -112,7 +112,7 @@ class RecursiveEventFactory
     /**
      * @return RecursiveEvent
      */
-    public function createEvent()
+    public function createEvent(): RecursiveEvent
     {
         $event = $this->getEvent();
         $findFilter = [
@@ -121,7 +121,6 @@ class RecursiveEventFactory
         ];
 
         if (!$recursion = RecursiveEvent::get()->filter($findFilter)->first()) {
-            /** @var RecursiveEvent $recursion */
             $recursion = RecursiveEvent::create($this->getCleanMap());
             $recursion->ID = null;
             $recursion->ParentID = $event->ID;
@@ -136,7 +135,7 @@ class RecursiveEventFactory
      * @param $list
      * @return \Generator
      */
-    protected function yieldSingle($list)
+    protected function yieldSingle($list): \Generator
     {
         foreach ($list as $item) {
             yield $item;

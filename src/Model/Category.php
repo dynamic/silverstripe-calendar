@@ -14,6 +14,7 @@ use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
+use SilverStripe\ORM\ValidationResult;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionProvider;
 
@@ -38,7 +39,7 @@ class Category extends DataObject implements PermissionProvider
     /**
      * @var array
      */
-    private static $db = [
+    private static array $db = [
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
@@ -47,28 +48,28 @@ class Category extends DataObject implements PermissionProvider
     /**
      * @var array
      */
-    private static $has_one = [
+    private static array $has_one = [
         'Parent' => Category::class,
     ];
 
     /**
      * @var array
      */
-    private static $belongs_many_many = [
+    private static array $belongs_many_many = [
         'Events' => EventPage::class,
     ];
 
     /**
      * @var array
      */
-    private static $extensions = [
+    private static array $extensions = [
         Hierarchy::class,
     ];
 
     /**
      * @var array
      */
-    private static $indexes = [
+    private static array $indexes = [
         'Title' => true,
         'URLSegment' => true,
     ];
@@ -76,7 +77,7 @@ class Category extends DataObject implements PermissionProvider
     /**
      * @var array
      */
-    private static $summary_fields = [
+    private static array $summary_fields = [
         'Title' => 'Name',
         'Description' => 'Description',
         'Parent.Title' => 'Parent',
@@ -85,19 +86,19 @@ class Category extends DataObject implements PermissionProvider
     /**
      * @var array
      */
-    private static $casting = [
+    private static array $casting = [
         'IsSubcategory' => 'Boolean',
     ];
 
     /**
      * @var string
      */
-    private static $table_name = 'Category';
+    private static string $table_name = 'Category';
 
     /**
-     * @return \SilverStripe\Forms\FieldList
+     * @return FieldList
      */
-    public function getCMSFields()
+    public function getCMSFields(): FieldList
     {
         $this->beforeUpdateCMSFields(function (FieldList $fields) {
             $remove = [
@@ -142,9 +143,9 @@ class Category extends DataObject implements PermissionProvider
      * This function allows the validation of Category data
      * on save attempt
      *
-     * @return \SilverStripe\ORM\ValidationResult
+     * @return ValidationResult
      */
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = parent::validate();
 
@@ -160,9 +161,9 @@ class Category extends DataObject implements PermissionProvider
     }
 
     /**
-     *
+     * @return void
      */
-    public function onBeforeWrite()
+    public function onBeforeWrite(): void
     {
         parent::onBeforeWrite();
 
@@ -187,7 +188,7 @@ class Category extends DataObject implements PermissionProvider
      *
      * @return bool|int
      */
-    public function canCreate($member = null, $context = [])
+    public function canCreate($member = null, $context = []): bool|int
     {
         return Permission::check('CREATE_CATEGORY', 'any', $member);
     }
@@ -201,7 +202,7 @@ class Category extends DataObject implements PermissionProvider
      *
      * @return bool|int
      */
-    public function canEdit($member = null, $context = [])
+    public function canEdit($member = null, $context = []): bool|int
     {
         return Permission::check('EDIT_CATEGORY', 'any', $member);
     }
@@ -215,7 +216,7 @@ class Category extends DataObject implements PermissionProvider
      *
      * @return bool|int
      */
-    public function canDelete($member = null, $context = [])
+    public function canDelete($member = null, $context = []): bool|int
     {
         return Permission::check('DELETE_CATEGORY', 'any', $member);
     }
@@ -229,7 +230,7 @@ class Category extends DataObject implements PermissionProvider
      *
      * @return bool
      */
-    public function canView($member = null, $context = [])
+    public function canView($member = null, $context = []): bool
     {
         return true;
     }
@@ -242,7 +243,7 @@ class Category extends DataObject implements PermissionProvider
      *
      * @return array
      */
-    public function providePermissions()
+    public function providePermissions(): array
     {
         return [
             "CREATE_CATEGORY" => [
@@ -269,7 +270,7 @@ class Category extends DataObject implements PermissionProvider
     /**
      * @return bool
      */
-    public function validURLSegment()
+    public function validURLSegment(): bool
     {
         $exclude = [];
         if ($this->ID != 0) {
@@ -285,15 +286,15 @@ class Category extends DataObject implements PermissionProvider
      *
      * @return bool
      */
-    public function getIsSubcategory()
+    public function getIsSubcategory(): bool
     {
         return ($this->ParentID != 0);
     }
 
     /**
-     * @return String
+     * @return string
      */
-    public function Link()
+    public function Link(): string
     {
         /** @var Calendar $cal */
         $cal = Calendar::get()->first();
@@ -322,7 +323,7 @@ class Category extends DataObject implements PermissionProvider
     /**
      * @return bool
      */
-    public function getIsActiveFilter()
+    public function getIsActiveFilter(): bool
     {
         $requestVars = CalendarController::clean_request_vars(Controller::curr()->getRequest()->getVars());
 

@@ -32,12 +32,12 @@ class CalendarController extends \PageController
     /**
      * @var array
      */
-    private $default_filter;
+    private array $default_filter;
 
     /**
      * @var string
      */
-    private $view_type;
+    private string $view_type;
 
     /**
      * The Public stage.
@@ -52,12 +52,12 @@ class CalendarController extends \PageController
     /**
      * @var string
      */
-    private $grid_link;
+    private string $grid_link;
 
     /**
      * @var string
      */
-    private $list_link;
+    private string $list_link;
 
     /**
      * @var
@@ -67,13 +67,13 @@ class CalendarController extends \PageController
     /**
      * @var string
      */
-    private static $view_session = 'Calendar.VIEW';
+    private static string $view_session = 'Calendar.VIEW';
 
     /**
      * @param bool $global
      * @return $this
      */
-    public function setDefaultFilter($global = false)
+    public function setDefaultFilter($global = false): self
     {
         $filter = [];
 
@@ -89,7 +89,7 @@ class CalendarController extends \PageController
     /**
      * @return array
      */
-    public function getDefaultFilter()
+    public function getDefaultFilter(): array
     {
         if (!$this->default_filter) {
             $this->setDefaultFilter();
@@ -101,7 +101,7 @@ class CalendarController extends \PageController
     /**
      * @return $this
      */
-    protected function setEvents()
+    protected function setEvents(): self
     {
         $events = EventPage::get()
             ->filterAny([
@@ -125,7 +125,7 @@ class CalendarController extends \PageController
     /**
      * @return |null
      */
-    public function getEvents()
+    public function getEvents(): ?DataList
     {
         if ($this->events === null) {
             $this->setEvents();
@@ -137,7 +137,7 @@ class CalendarController extends \PageController
     /**
      * @return PaginatedList
      */
-    public function getPaginatedEvents()
+    public function getPaginatedEvents(): PaginatedList
     {
         return PaginatedList::create($this->getEvents(), $this->getRequest())
             ->setPageLength($this->data()->config()->get('events_per_page'));
@@ -146,7 +146,7 @@ class CalendarController extends \PageController
     /**
      * @return string
      */
-    protected function getStartDate()
+    protected function getStartDate(): string
     {
         if (!$this->start_date) {
             $this->setStartDate();
@@ -158,7 +158,7 @@ class CalendarController extends \PageController
     /**
      * @return $this
      */
-    protected function setStartDate()
+    protected function setStartDate(): self
     {
         $this->start_date = ($startDate = $this->getRequest()->getVar('StartDate'))
             ? Carbon::parse($startDate)->setTimeFrom(Carbon::now())->format(Carbon::MOCK_DATETIME_FORMAT)
@@ -171,7 +171,7 @@ class CalendarController extends \PageController
      * @param DataList $events
      * @return mixed
      */
-    protected function filterByRequest($events)
+    protected function filterByRequest(Datalist $events): mixed
     {
         if (!$events->exists()) {
             return $events;
@@ -200,9 +200,9 @@ class CalendarController extends \PageController
     }
 
     /**
-     * @return \SilverStripe\Forms\Form
+     * @return Form
      */
-    public function EventFilterForm()
+    public function EventFilterForm(): Form
     {
         $fields = FieldList::create(
             TextField::create('Title')
@@ -250,7 +250,7 @@ class CalendarController extends \PageController
     /**
      * @return $this
      */
-    protected function setGridLink()
+    protected function setGridLink(): self
     {
         $getVars = $this->getRequest()->getVars();
         $getVars['view'] = static::GRIDVIEW;
@@ -263,7 +263,7 @@ class CalendarController extends \PageController
     /**
      * @return string
      */
-    public function getGridLink()
+    public function getGridLink(): string
     {
         if (!$this->grid_link) {
             $this->setGridLink();
@@ -275,7 +275,7 @@ class CalendarController extends \PageController
     /**
      * @return $this
      */
-    protected function setListLink()
+    protected function setListLink(): self
     {
         $getVars = $this->getRequest()->getVars();
         $getVars['view'] = static::LISTVIEW;
@@ -288,7 +288,7 @@ class CalendarController extends \PageController
     /**
      * @return string
      */
-    public function getListLink()
+    public function getListLink(): string
     {
         if (!$this->list_link) {
             $this->setListLink();
@@ -300,7 +300,7 @@ class CalendarController extends \PageController
     /**
      * @return string
      */
-    public function getViewType()
+    public function getViewType(): string
     {
         if (!$this->view_type) {
             $this->setViewType();
@@ -312,7 +312,7 @@ class CalendarController extends \PageController
     /**
      * @return $this
      */
-    protected function setViewType()
+    protected function setViewType(): self
     {
         if (($view = $this->getRequest()->getVar('view')) && $this->validView($view)) {
             $this->getRequest()->getSession()->set($this->config()->get('calendar_session'), $view);
@@ -332,7 +332,7 @@ class CalendarController extends \PageController
      * @param $view
      * @return bool
      */
-    protected function validView($view)
+    protected function validView($view): bool
     {
         return $view == static::LISTVIEW || $view == static::GRIDVIEW;
     }

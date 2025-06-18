@@ -3,6 +3,12 @@
 namespace Dynamic\Calendar\Model;
 
 use Dynamic\Calendar\Page\EventPage;
+use SilverStripe\Forms\CheckboxField;
+use SilverStripe\Forms\DateField;
+use SilverStripe\Forms\DropdownField;
+use SilverStripe\Forms\HTMLEditor\HTMLEditorField;
+use SilverStripe\Forms\TextField;
+use SilverStripe\Forms\TimeField;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionProvider;
@@ -59,6 +65,8 @@ class EventException extends DataObject implements PermissionProvider
         'ModifiedEndDate' => 'Date',
         'ModifiedAllDay' => 'Boolean',
         'Reason' => 'Text',
+        // Add 'IsModified' property to track modification state
+        'IsModified' => 'Boolean',
     ];
 
     /**
@@ -189,6 +197,9 @@ class EventException extends DataObject implements PermissionProvider
 
         foreach ($overridableFields as $property => $overrideField) {
             if ($this->hasOverride($property)) {
+                // Debugging: Log the Action property value
+                error_log('Getting override for property: ' . $property . ', Action: ' . $this->Action);
+
                 $overrides[$property] = $this->getOverride($property);
             }
         }
@@ -313,6 +324,10 @@ class EventException extends DataObject implements PermissionProvider
      */
     public function canView($member = null): bool
     {
+        if (Permission::check('ADMIN', 'any', $member)) {
+            return true;
+        }
+
         $originalEvent = $this->OriginalEvent();
         return $originalEvent && $originalEvent->exists() && $originalEvent->canView($member);
     }
@@ -323,7 +338,7 @@ class EventException extends DataObject implements PermissionProvider
      */
     public function canEdit($member = null): bool
     {
-        if (Permission::check('EDIT_EVENT_EXCEPTIONS', 'any', $member)) {
+        if (Permission::check('ADMIN', 'any', $member) || Permission::check('EDIT_EVENT_EXCEPTIONS', 'any', $member)) {
             return true;
         }
 
@@ -337,7 +352,10 @@ class EventException extends DataObject implements PermissionProvider
      */
     public function canDelete($member = null): bool
     {
-        if (Permission::check('DELETE_EVENT_EXCEPTIONS', 'any', $member)) {
+        if (
+            Permission::check('ADMIN', 'any', $member)
+            || Permission::check('DELETE_EVENT_EXCEPTIONS', 'any', $member)
+        ) {
             return true;
         }
 
@@ -346,12 +364,112 @@ class EventException extends DataObject implements PermissionProvider
     }
 
     /**
+     * @return FieldList
+     */
+    public function getCMSFields()
+    {
+        $fields = parent::getCMSFields();
+
+        // Remove the OriginalEventID field as it's managed by the relationship
+        $fields->removeByName('OriginalEventID');
+
+        // Get the original event to populate instance dropdown
+        $originalEvent = $this->OriginalEvent();
+        $instanceOptions = [];
+
+        if ($originalEvent && $originalEvent->exists() && $originalEvent->eventRecurs()) {
+            // Get future instances for the next 12 months
+            $endDate = new \DateTime('+12 months');
+            $instances = $originalEvent->getOccurrences(new \DateTime(), $endDate);
+
+            foreach ($instances as $instance) {
+                $instanceDate = $instance->getInstanceDate();
+                $formattedDate = $instanceDate->format('Y-m-d');
+                $displayDate = $instanceDate->format('l, F j, Y'); // e.g., "Wednesday, June 25, 2025"
+                $instanceOptions[$formattedDate] = $displayDate;
+            }
+        }
+
+        // Create instance selection field
+        if (!empty($instanceOptions)) {
+            $instanceField = DropdownField::create('InstanceDate', 'Event Instance')
+                ->setSource($instanceOptions)
+                ->setDescription('Select the specific event instance this exception applies to')
+                ->setEmptyString('-- Select an instance --');
+        } else {
+            // Fallback to date field if no instances available
+            $instanceField = DateField::create('InstanceDate', 'Instance Date')
+                ->setDescription('The date of the event instance this exception applies to')
+                ->setHTML5(true);
+        }
+
+        // Add more user-friendly field configuration
+        $fields->addFieldsToTab('Root.Main', [
+            $instanceField,
+            DropdownField::create('Action', 'Exception Type')
+                ->setSource([
+                    'MODIFIED' => 'Modify this instance',
+                    'DELETED' => 'Delete this instance'
+                ])
+                ->setDescription('Choose whether to modify or delete this specific event instance'),
+            TextField::create('Reason', 'Reason')
+                ->setDescription('Optional reason for this exception')
+        ]);
+
+        // Group modification fields
+        $fields->addFieldsToTab(
+            'Root.Modifications',
+            [
+                TextField::create('ModifiedTitle', 'Modified Title')
+                    ->setDescription('Leave empty to use the original event title'),
+                HTMLEditorField::create('ModifiedContent', 'Modified Content')
+                    ->setDescription('Leave empty to use the original event content'),
+                DateField::create('ModifiedStartDate', 'Modified Start Date')
+                    ->setDescription('Leave empty to use the original start date')
+                    ->setHTML5(true),
+                TimeField::create('ModifiedStartTime', 'Modified Start Time')
+                    ->setDescription('Leave empty to use the original start time'),
+                DateField::create('ModifiedEndDate', 'Modified End Date')
+                    ->setDescription('Leave empty to use the original end date')
+                    ->setHTML5(true),
+                TimeField::create('ModifiedEndTime', 'Modified End Time')
+                    ->setDescription('Leave empty to use the original end time'),
+                CheckboxField::create('ModifiedAllDay', 'All Day Event')
+                    ->setDescription('Override the all-day setting for this instance'),
+            ]
+        );
+
+        // Show modification fields only when Action is MODIFIED
+        $modificationTab = $fields->fieldByName('Root.Modifications');
+        if ($modificationTab) {
+            $modificationTab->displayIf('Action')->isEqualTo('MODIFIED');
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Get a human-readable title for this exception
+     *
+     * @return string
+     */
+    public function getTitle()
+    {
+        $event = $this->OriginalEvent();
+        $eventTitle = $event && $event->exists() ? $event->Title : 'Unknown Event';
+        $action = $this->Action === 'DELETED' ? 'Delete' : 'Modify';
+
+        return "{$action} {$eventTitle} on {$this->InstanceDate}";
+    }
+
+    /**
      * @param null $member
      * @return bool
      */
     public function canCreate($member = null, $context = []): bool
     {
-        return Permission::check('CREATE_EVENT_EXCEPTIONS', 'any', $member);
+        return Permission::check('ADMIN', 'any', $member)
+            || Permission::check('CREATE_EVENT_EXCEPTIONS', 'any', $member);
     }
 
     /**

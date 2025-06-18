@@ -45,7 +45,7 @@ class CalendarControllerTest extends FunctionalTest
         $this->calendar->write();
         $this->calendar->publishRecursive();
 
-        $this->controller = new CalendarController($this->calendar);
+        $this->controller = CalendarController::create($this->calendar);
     }
 
     /**

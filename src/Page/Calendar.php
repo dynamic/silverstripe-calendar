@@ -5,6 +5,7 @@ namespace Dynamic\Calendar\Page;
 use Carbon\Carbon;
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
+use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\ArrayList;
@@ -95,7 +96,7 @@ class Calendar extends \Page
      * @param $array
      * @return int
      */
-    public static function preg_array_key_exists($pattern, $array): int
+    public static function pregArrayKeyExists($pattern, $array): int
     {
         $keys = array_keys($array);
 
@@ -109,7 +110,7 @@ class Calendar extends \Page
      * @param $filterAny
      * @return mixed
      */
-    private static function augment_category_filtering($filterAny)
+    private static function augmentCategoryFiltering($filterAny)
     {
         if (isset($filterAny['Categories.ID'])) {
             $categories = Category::get()->byIDs($filterAny['Categories.ID']);
@@ -172,7 +173,43 @@ class Calendar extends \Page
             // Get occurrences within the date range using Carbon recursion
             $occurrences = $event->getOccurrences($fromDate, $toDate);
 
+            // Get event exceptions for this event
+            $exceptions = $event->EventExceptions();
+            $exceptionsByDate = [];
+
+            foreach ($exceptions as $exception) {
+                $exceptionsByDate[$exception->InstanceDate] = $exception;
+            }
+
             foreach ($occurrences as $occurrence) {
+                $instanceDate = $occurrence->getInstanceDate()->format('Y-m-d');
+
+                // Check if this instance has an exception
+                if (isset($exceptionsByDate[$instanceDate])) {
+                    $exception = $exceptionsByDate[$instanceDate];
+
+                    // Skip deleted instances
+                    if ($exception->isDeleted()) {
+                        continue;
+                    }
+
+                    // Apply modifications for modified instances
+                    if ($exception->isModified()) {
+                        // Debugging: Log when an exception modifies an event
+                        error_log('Applying modification exception for date: ' . $instanceDate);
+                        // Apply any modifications from the exception
+                        $modifications = $exception->getOverrides();
+                        foreach ($modifications as $property => $value) {
+                            if ($value !== null && $value !== '') {
+                                $occurrence->$property = $value;
+                            }
+                        }
+                        // Set a flag so we know this instance is modified
+                        $occurrence->IsModified = true;
+                        $occurrence->Exception = $exception;
+                    }
+                }
+
                 $allEvents->push($occurrence);
             }
         }

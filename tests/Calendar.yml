@@ -5,13 +5,29 @@ Dynamic\Calendar\Page\Calendar:
 Dynamic\Calendar\Page\EventPage:
   one:
     Title: 'Main Event'
-    StartDate: '2019-07-04'
+    StartDate: '2025-06-18'
     StartTime: '09:00:00'
     AllDay: 0
     Parent: =>Dynamic\Calendar\Page\Calendar.one
+    Recursion: 'WEEKLY'
+    RecursionEndDate: '2025-07-30'
   two:
     Title: 'All Day Event'
-    StartDate: '2019-01-01'
+    StartDate: '2025-06-20'
     StartTime: '00:00:00'
     AllDay: 1
     Parent: =>Dynamic\Calendar\Page\Calendar.one
+
+Dynamic\Calendar\Model\EventException:
+  one:
+    OriginalEvent: =>Dynamic\Calendar\Page\EventPage.one
+    InstanceDate: '2025-06-25'
+    Action: 'DELETED'
+  mod:
+    OriginalEvent: =>Dynamic\Calendar\Page\EventPage.one
+    InstanceDate: '2025-07-02'
+    Action: 'MODIFIED'
+    ModifiedTitle: 'Modified Event Title'
+    ModifiedStartTime: '10:00:00'
+    ModifiedEndTime: '11:00:00'
+    IsModified: 1

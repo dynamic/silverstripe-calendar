@@ -326,7 +326,7 @@ class EventException extends DataObject implements PermissionProvider
         if (Permission::check('EDIT_EVENT_EXCEPTIONS', 'any', $member)) {
             return true;
         }
-        
+
         $originalEvent = $this->OriginalEvent();
         return $originalEvent && $originalEvent->exists() && $originalEvent->canEdit($member);
     }
@@ -340,7 +340,7 @@ class EventException extends DataObject implements PermissionProvider
         if (Permission::check('DELETE_EVENT_EXCEPTIONS', 'any', $member)) {
             return true;
         }
-        
+
         $originalEvent = $this->OriginalEvent();
         return $originalEvent && $originalEvent->exists() && $originalEvent->canDelete($member);
     }

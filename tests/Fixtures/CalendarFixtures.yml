@@ -1,0 +1,28 @@
+EventPage:
+  event1:
+    Title: 'Sample Event'
+    ParentID: '%ID'  # Reference to Calendar fixture
+    StartDate: '2025-06-18'
+    EndDate: '2025-06-25'
+    StartTime: '10:00:00'
+    EndTime: '11:00:00'
+    Recursion: 'WEEKLY'
+    RecursionEndDate: '2025-12-18'
+
+EventException:
+  exception1:
+    OriginalEventID: '%ID'  # Reference to event1
+    InstanceDate: '2025-06-25'
+    Action: 'DELETED'
+    Reason: 'Test deletion'
+  one:
+    OriginalEventID: 'event1'
+    InstanceDate: '2025-06-25'
+    Action: 'MODIFIED'
+    ModifiedTitle: 'Modified Test Event'
+    IsModified: true
+
+Calendar:
+  calendar1:
+    Title: 'Test Calendar'
+    URLSegment: 'test-calendar'

@@ -38,9 +38,5 @@
             "Dynamic\\Calendar\\": "src/",
             "Dynamic\\Calendar\\Tests\\": "tests/"
         }
-    },
-    "scripts": {
-        "lint": "vendor/bin/phpcs src/ tests/",
-        "lint-clean": "vendor/bin/phpcbf src/ tests/"
     }
 }

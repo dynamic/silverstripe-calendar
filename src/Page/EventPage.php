@@ -15,6 +15,7 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
+use SilverStripe\Forms\GridField\GridFieldConfig_RelationEditor;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TreeMultiselectField;
@@ -148,6 +149,13 @@ class EventPage extends \Page
         'Categories' => [
             'SortOrder' => 'Int',
         ],
+    ];
+
+    /**
+     * @var array
+     */
+    private static array $has_many = [
+        'EventExceptions' => EventException::class . '.OriginalEvent',
     ];
 
     /**
@@ -341,6 +349,20 @@ class EventPage extends \Page
 
         if (!$this->config()->get('recursion')) {
             $fields->removeByName('ChildPages');
+        }
+
+        // Add EventExceptions GridField for recurring event exceptions
+        if ($this->ID && $this->eventRecurs()) {
+            $exceptionsConfig = GridFieldConfig_RelationEditor::create();
+
+            $exceptionsGrid = \SilverStripe\Forms\GridField\GridField::create(
+                'EventExceptions',
+                'Event Exceptions',
+                $this->EventExceptions(),
+                $exceptionsConfig
+            );
+
+            $fields->addFieldToTab('Root.Exceptions', $exceptionsGrid);
         }
 
         return $fields;
@@ -639,7 +661,7 @@ class EventPage extends \Page
      *
      * @return \SilverStripe\ORM\ArrayList|\SilverStripe\ORM\DataList
      */
-    public function AllChildren()
+    public function allChildren()
     {
         if ($this->config()->get('recursion_system') === 'carbon') {
             // For Carbon system, use virtual instances

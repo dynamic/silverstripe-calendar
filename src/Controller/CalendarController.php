@@ -212,4 +212,24 @@ class CalendarController extends \PageController
     {
         return $this->calendar;
     }
+
+    /**
+     * Clean and sanitize request variables
+     *
+     * @param array $vars
+     * @return array
+     */
+    public static function clean_request_vars(array $vars): array
+    {
+        // Remove any potentially dangerous variables
+        $cleanVars = [];
+        foreach ($vars as $key => $value) {
+            if (is_string($key) && is_scalar($value)) {
+                $cleanVars[$key] = $value;
+            } elseif (is_string($key) && is_array($value)) {
+                $cleanVars[$key] = self::clean_request_vars($value);
+            }
+        }
+        return $cleanVars;
+    }
 }

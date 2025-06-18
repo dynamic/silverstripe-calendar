@@ -26,6 +26,7 @@
         "unclecheese/display-logic": "^3.0"
     },
     "require-dev": {
+        "cambis/silverstan":"^2.1",
         "phpstan/extension-installer": "^1.3",
         "silverstripe/recipe-testing": "^3",
         "silverstripe/standards": "^1",

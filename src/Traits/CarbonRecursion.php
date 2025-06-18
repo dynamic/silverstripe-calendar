@@ -184,7 +184,7 @@ trait CarbonRecursion
      */
     protected function createVirtualInstance(Carbon $date, ?EventException $exception = null): EventInstance
     {
-        return new EventInstance($this, $date, $exception);
+        return EventInstance::create($this, $date, $exception);
     }
 
     /**

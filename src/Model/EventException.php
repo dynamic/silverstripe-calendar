@@ -313,7 +313,8 @@ class EventException extends DataObject implements PermissionProvider
      */
     public function canView($member = null): bool
     {
-        return $this->OriginalEvent()->canView($member);
+        $originalEvent = $this->OriginalEvent();
+        return $originalEvent && $originalEvent->exists() && $originalEvent->canView($member);
     }
 
     /**
@@ -322,8 +323,12 @@ class EventException extends DataObject implements PermissionProvider
      */
     public function canEdit($member = null): bool
     {
-        return Permission::check('EDIT_EVENT_EXCEPTIONS', 'any', $member) ||
-               $this->OriginalEvent()->canEdit($member);
+        if (Permission::check('EDIT_EVENT_EXCEPTIONS', 'any', $member)) {
+            return true;
+        }
+        
+        $originalEvent = $this->OriginalEvent();
+        return $originalEvent && $originalEvent->exists() && $originalEvent->canEdit($member);
     }
 
     /**
@@ -332,8 +337,12 @@ class EventException extends DataObject implements PermissionProvider
      */
     public function canDelete($member = null): bool
     {
-        return Permission::check('DELETE_EVENT_EXCEPTIONS', 'any', $member) ||
-               $this->OriginalEvent()->canDelete($member);
+        if (Permission::check('DELETE_EVENT_EXCEPTIONS', 'any', $member)) {
+            return true;
+        }
+        
+        $originalEvent = $this->OriginalEvent();
+        return $originalEvent && $originalEvent->exists() && $originalEvent->canDelete($member);
     }
 
     /**

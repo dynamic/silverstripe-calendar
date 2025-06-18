@@ -49,7 +49,7 @@ class EventPage extends \Page
     /**
      * array
      */
-    const RRULE = [
+    private const RRULE = [
         'DAILY' => 'Day(s)',
         'WEEKLY' => 'Week(s)',
         'MONTHLY' => 'Month(s)',
@@ -325,7 +325,8 @@ class EventPage extends \Page
         $fields = parent::getCMSFields();
 
         if (($children = $fields->dataFieldByName('ChildPages')) && $children instanceof GridField) {
-            if (($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class))
+            if (
+                ($component = $children->getConfig()->getComponentByType(GridFieldPaginator::class))
                 && $component instanceof GridFieldPaginator
             ) {
                 // Set items per page for paginator

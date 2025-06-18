@@ -135,7 +135,8 @@ class CarbonRecursionMigrationTask extends BuildTask
         $originalCategories = $originalEvent->Categories()->column('ID');
         $recursiveCategories = $recursiveEvent->Categories()->column('ID');
 
-        if (array_diff($originalCategories, $recursiveCategories) ||
+        if (
+            array_diff($originalCategories, $recursiveCategories) ||
             array_diff($recursiveCategories, $originalCategories)
         ) {
             return true;

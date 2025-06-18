@@ -38,11 +38,5 @@
             "Dynamic\\Calendar\\": "src/",
             "Dynamic\\Calendar\\Tests\\": "tests/"
         }
-    },
-    "scripts": {
-        "lint": "vendor/bin/phpcs src/ tests/",
-        "lint-clean": "vendor/bin/phpcbf src/ tests/",
-        "test": "vendor/bin/phpunit",
-        "phpstan": "vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=2G src/ tests/"
     }
 }

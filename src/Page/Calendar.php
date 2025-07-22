@@ -7,6 +7,11 @@ use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\EventPage;
+use SilverStripe\Forms\CheckboxField;
+use SilverStripe\Forms\CheckboxSetField;
+use SilverStripe\Forms\FieldList;
+use SilverStripe\Forms\HeaderField;
+use SilverStripe\Forms\NumericField;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;
@@ -47,6 +52,37 @@ class Calendar extends \Page
     /**
      * @var array
      */
+    private static array $db = [
+        'EventsPerPage' => 'Int',
+        'ShowCategoryFilter' => 'Boolean',
+        'ShowEventTypeFilter' => 'Boolean',
+        'ShowAllDayFilter' => 'Boolean',
+        'DefaultFromDateMonths' => 'Int',
+        'DefaultToDateMonths' => 'Int',
+    ];
+
+    /**
+     * @var array
+     */
+    private static array $defaults = [
+        'EventsPerPage' => 12,
+        'ShowCategoryFilter' => true,
+        'ShowEventTypeFilter' => true,
+        'ShowAllDayFilter' => false,
+        'DefaultFromDateMonths' => 0,
+        'DefaultToDateMonths' => 6,
+    ];
+
+    /**
+     * @var array
+     */
+    private static array $many_many = [
+        'DefaultCategories' => Category::class,
+    ];
+
+    /**
+     * @var array
+     */
     private static array $allowed_children = [
         EventPage::class,
     ];
@@ -76,6 +112,55 @@ class Calendar extends \Page
     public function getLumberjackTitle(): string
     {
         return 'Events';
+    }
+
+    /**
+     * @return FieldList
+     */
+    public function getCMSFields(): FieldList
+    {
+        $fields = parent::getCMSFields();
+
+        // Add filtering configuration fields
+        $fields->addFieldsToTab('Root.FilterSettings', [
+            HeaderField::create('FilterOptionsHeader', 'Event Filtering Options'),
+            
+            CheckboxField::create('ShowCategoryFilter')
+                ->setTitle('Show Category Filter')
+                ->setDescription('Allow visitors to filter events by category'),
+                
+            CheckboxField::create('ShowEventTypeFilter')
+                ->setTitle('Show Event Type Filter')
+                ->setDescription('Allow visitors to filter between one-time and recurring events'),
+                
+            CheckboxField::create('ShowAllDayFilter')
+                ->setTitle('Show All-Day Filter')
+                ->setDescription('Allow visitors to filter between all-day and timed events'),
+                
+            HeaderField::create('DefaultSettingsHeader', 'Default Settings'),
+            
+            NumericField::create('EventsPerPage')
+                ->setTitle('Events Per Page')
+                ->setDescription('Number of events to display per page (default: 12)'),
+                
+            NumericField::create('DefaultFromDateMonths')
+                ->setTitle('Default Start Date (Months from Now)')
+                ->setDescription('How many months from current date to start showing events (0 = current month)'),
+                
+            NumericField::create('DefaultToDateMonths')
+                ->setTitle('Default End Date (Months from Now)')
+                ->setDescription('How many months from current date to show events until (6 = 6 months from now)'),
+                
+            HeaderField::create('CategoryDefaultsHeader', 'Default Category Selection'),
+            
+            CheckboxSetField::create('DefaultCategories')
+                ->setTitle('Default Selected Categories')
+                ->setDescription('Categories that will be pre-selected when visitors first view the calendar')
+                ->setSource(Category::get()->map('ID', 'Title'))
+                ->setDescription('Leave empty to show all categories by default'),
+        ]);
+
+        return $fields;
     }
 
     /**

@@ -10,21 +10,40 @@
 
       <!-- Calendar Filters -->
       <div class="row mb-4">
-        <div class="col-md-6">
-          <div class="card">
+        <div class="col-12">
+          <div class="card calendar-filters">
             <div class="card-body">
               <h5 class="card-title">Filter Events</h5>
-              <form method="get" class="row g-3">
-                <div class="col-md-6">
+              <form method="get" class="row g-3" data-auto-submit="false">
+                <div class="col-md-4">
                   <label for="from" class="form-label">From Date</label>
                   <input type="date" class="form-control" id="from" name="from" value="$CurrentFromDate">
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label for="to" class="form-label">To Date</label>
                   <input type="date" class="form-control" id="to" name="to" value="$CurrentToDate">
                 </div>
+                
+                <% if $ShowCategoryFilter && $AvailableCategories.Count %>
+                <div class="col-md-4">
+                  <label class="form-label">Categories</label>
+                  <div class="category-filter">
+                    <% loop $AvailableCategories %>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" 
+                             id="category_{$ID}" name="categories[]" value="$ID"
+                             <% if $IsSelected %>checked<% end_if %>>
+                      <label class="form-check-label" for="category_{$ID}">
+                        $Title
+                      </label>
+                    </div>
+                    <% end_loop %>
+                  </div>
+                </div>
+                <% end_if %>
+                
                 <div class="col-12">
-                  <button type="submit" class="btn btn-primary">Filter Events</button>
+                  <button type="submit" class="btn btn-primary me-2">Filter Events</button>
                   <a href="$Link" class="btn btn-outline-secondary">Clear Filters</a>
                 </div>
               </form>

@@ -3,6 +3,7 @@
 namespace Dynamic\Calendar\Controller;
 
 use Carbon\Carbon;
+use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
@@ -109,8 +110,19 @@ class CalendarController extends \PageController
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
-        // Use the Calendar page's getEventsFeed method
-        $events = $this->calendar->getEventsFeed(null, null, $fromDate, $toDate);
+        // Get category filter
+        $categoryIDs = $request->getVar('categories');
+        $categories = null;
+        
+        if ($categoryIDs) {
+            if (!is_array($categoryIDs)) {
+                $categoryIDs = [$categoryIDs];
+            }
+            $categories = Category::get()->byIDs($categoryIDs);
+        }
+
+        // Use the Calendar page's getEventsFeed method with category filtering
+        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
 
         // Create paginated list
         $paginatedEvents = PaginatedList::create($events, $request);
@@ -123,6 +135,9 @@ class CalendarController extends \PageController
             'CurrentToDate' => $toDate->format('Y-m-d'),
             'RecurringEventsCount' => $this->getRecurringEventsCount(),
             'OneTimeEventsCount' => $this->getOneTimeEventsCount(),
+            'AvailableCategories' => $this->getAvailableCategoriesForTemplate($request),
+            'ShowCategoryFilter' => $this->calendar->ShowCategoryFilter,
+            'DebugCategories' => $this->getDebugCategoryInfo($request),
         ];
     }
 
@@ -214,6 +229,77 @@ class CalendarController extends \PageController
     }
 
     /**
+     * Get available categories for template with selection state
+     *
+     * @param HTTPRequest $request
+     * @return ArrayList
+     */
+    protected function getAvailableCategoriesForTemplate(HTTPRequest $request): ArrayList
+    {
+        $selectedCategoryIDs = $request->getVar('categories') ?: [];
+        if (!is_array($selectedCategoryIDs)) {
+            $selectedCategoryIDs = [$selectedCategoryIDs];
+        }
+
+        // Get categories that are actually used by events in this calendar
+        // Start from EventPages and get their categories
+        $eventsInCalendar = EventPage::get()->filter(['ParentID' => $this->calendar->ID]);
+        $categoryIDs = [];
+        
+        foreach ($eventsInCalendar as $event) {
+            foreach ($event->Categories() as $category) {
+                $categoryIDs[] = $category->ID;
+            }
+        }
+        
+        // Remove duplicates
+        $categoryIDs = array_unique($categoryIDs);
+        
+        // Get the category objects
+        $availableCategories = ArrayList::create();
+        if (!empty($categoryIDs)) {
+            $categories = Category::get()->byIDs($categoryIDs)->sort('Title ASC');
+            
+            foreach ($categories as $category) {
+                $categoryData = ArrayData::create([
+                    'ID' => $category->ID,
+                    'Title' => $category->Title,
+                    'IsSelected' => in_array($category->ID, $selectedCategoryIDs),
+                ]);
+                $availableCategories->push($categoryData);
+            }
+        }
+
+        return $availableCategories;
+    }
+
+    /**
+     * Debug method to check category configuration
+     *
+     * @param HTTPRequest $request
+     * @return ArrayData
+     */
+    protected function getDebugCategoryInfo(HTTPRequest $request): ArrayData
+    {
+        $allCategories = Category::get();
+        $allEventsInCalendar = EventPage::get()->filter(['ParentID' => $this->calendar->ID]);
+        $eventsWithCategories = EventPage::get()
+            ->filter(['ParentID' => $this->calendar->ID])
+            ->innerJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"');
+
+        return ArrayData::create([
+            'CalendarID' => $this->calendar->ID,
+            'CalendarTitle' => $this->calendar->Title,
+            'ShowCategoryFilter' => (bool)$this->calendar->ShowCategoryFilter,
+            'TotalCategories' => $allCategories->count(),
+            'TotalEventsInCalendar' => $allEventsInCalendar->count(),
+            'EventsWithCategories' => $eventsWithCategories->count(),
+            'AllCategoryTitles' => $allCategories->column('Title'),
+        ]);
+    }
+
+    /**
+     * Clean and sanitize request variables    /**
      * Clean and sanitize request variables
      *
      * @param array $vars

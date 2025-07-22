@@ -200,9 +200,6 @@ class EventException extends DataObject implements PermissionProvider
 
         foreach ($overridableFields as $property => $overrideField) {
             if ($this->hasOverride($property)) {
-                // Debugging: Log the Action property value
-                error_log('Getting override for property: ' . $property . ', Action: ' . $this->Action);
-
                 $overrides[$property] = $this->getOverride($property);
             }
         }

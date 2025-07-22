@@ -3,9 +3,11 @@
 namespace Dynamic\Calendar\Controller;
 
 use Carbon\Carbon;
+use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
+use Dynamic\Calendar\Form\CalendarFilterForm;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\PaginatedList;
@@ -99,6 +101,16 @@ class CalendarController extends \PageController
     }
 
     /**
+     * Get the calendar filter form
+     *
+     * @return CalendarFilterForm
+     */
+    public function FilterForm(): CalendarFilterForm
+    {
+        return new CalendarFilterForm($this, 'FilterForm', $this->calendar, $this->getRequest());
+    }
+
+    /**
      * Render the calendar with events
      *
      * @param HTTPRequest $request
@@ -109,8 +121,19 @@ class CalendarController extends \PageController
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
-        // Use the Calendar page's getEventsFeed method
-        $events = $this->calendar->getEventsFeed(null, null, $fromDate, $toDate);
+        // Get category filter
+        $categoryIDs = $request->getVar('categories');
+        $categories = null;
+
+        if ($categoryIDs) {
+            if (!is_array($categoryIDs)) {
+                $categoryIDs = [$categoryIDs];
+            }
+            $categories = Category::get()->byIDs($categoryIDs);
+        }
+
+        // Use the Calendar page's getEventsFeed method with category filtering
+        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
 
         // Create paginated list
         $paginatedEvents = PaginatedList::create($events, $request);
@@ -123,6 +146,8 @@ class CalendarController extends \PageController
             'CurrentToDate' => $toDate->format('Y-m-d'),
             'RecurringEventsCount' => $this->getRecurringEventsCount(),
             'OneTimeEventsCount' => $this->getOneTimeEventsCount(),
+            'AvailableCategories' => $this->getAvailableCategoriesForTemplate($request),
+            'ShowCategoryFilter' => $this->calendar->ShowCategoryFilter,
         ];
     }
 
@@ -211,6 +236,48 @@ class CalendarController extends \PageController
     public function getCalendar(): Calendar
     {
         return $this->calendar;
+    }
+
+    /**
+     * Get available categories for template with selection state
+     *
+     * @param HTTPRequest $request
+     * @return ArrayList
+     */
+    protected function getAvailableCategoriesForTemplate(HTTPRequest $request): ArrayList
+    {
+        $selectedCategoryIDs = $request->getVar('categories') ?: [];
+        if (!is_array($selectedCategoryIDs)) {
+            $selectedCategoryIDs = [$selectedCategoryIDs];
+        }
+
+        // Get categories that are actually used by events in this calendar
+        // Use efficient join query to avoid N+1 problem
+        $categoryIDs = EventPage::get()
+            ->filter(['ParentID' => $this->calendar->ID])
+            ->leftJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"')
+            ->leftJoin('Category', '"EventPage_Categories"."CategoryID" = "Category"."ID"')
+            ->column('Category.ID');
+
+        // Remove duplicates and null values
+        $categoryIDs = array_unique(array_filter($categoryIDs));
+
+        // Get the category objects
+        $availableCategories = ArrayList::create();
+        if (!empty($categoryIDs)) {
+            $categories = Category::get()->byIDs($categoryIDs)->sort('Title ASC');
+
+            foreach ($categories as $category) {
+                $categoryData = ArrayData::create([
+                    'ID' => $category->ID,
+                    'Title' => $category->Title,
+                    'IsSelected' => in_array($category->ID, $selectedCategoryIDs),
+                ]);
+                $availableCategories->push($categoryData);
+            }
+        }
+
+        return $availableCategories;
     }
 
     /**

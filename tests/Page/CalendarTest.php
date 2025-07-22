@@ -58,7 +58,12 @@ class CalendarTest extends SapphireTest
     public function testGetEventsFeedWithRegularEvents()
     {
         $event = $this->objFromFixture(EventPage::class, 'two');
-        $events = $this->calendar->getEventsFeed();
+
+        // Use specific date range to ensure we capture the test events
+        $fromDate = Carbon::parse('2025-06-01');
+        $toDate = Carbon::parse('2025-12-31');
+        $events = $this->calendar->getEventsFeed(null, null, $fromDate, $toDate);
+
         $found = $events->find('Title', 'All Day Event');
         $this->assertNotNull($found, 'All Day Event should be present');
         $this->assertEquals('All Day Event', $found->Title);
@@ -77,9 +82,9 @@ class CalendarTest extends SapphireTest
     }
 
     /**
-     * Test getEventsFeed with category filtering
+     * Test getEventsFeed with basic category filtering
      */
-    public function testGetEventsFeedWithCategoryFiltering()
+    public function testGetEventsFeedWithBasicCategoryFiltering()
     {
         $category = Category::get()->first();
         $categories = ArrayList::create([$category]);
@@ -130,5 +135,64 @@ class CalendarTest extends SapphireTest
             }
         }
         $this->assertTrue($modified, 'Modified instance should be present');
+    }
+
+    /**
+     * Test Calendar filtering configuration fields
+     */
+    public function testCalendarFilteringConfiguration()
+    {
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $this->assertEquals(1, $calendar->ShowCategoryFilter);
+        $this->assertEquals(1, $calendar->ShowEventTypeFilter);
+        $this->assertEquals(1, $calendar->ShowAllDayFilter);
+        $this->assertEquals(10, $calendar->EventsPerPage);
+        $this->assertEquals(0, $calendar->DefaultFromDateMonths);
+        $this->assertEquals(6, $calendar->DefaultToDateMonths);
+    }
+
+    /**
+     * Test CMS fields include filtering options
+     */
+    public function testCMSFieldsIncludeFilteringOptions()
+    {
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+        $fields = $calendar->getCMSFields();
+
+        $this->assertNotNull($fields->dataFieldByName('ShowCategoryFilter'));
+        $this->assertNotNull($fields->dataFieldByName('ShowEventTypeFilter'));
+        $this->assertNotNull($fields->dataFieldByName('ShowAllDayFilter'));
+        $this->assertNotNull($fields->dataFieldByName('EventsPerPage'));
+        $this->assertNotNull($fields->dataFieldByName('DefaultFromDateMonths'));
+        $this->assertNotNull($fields->dataFieldByName('DefaultToDateMonths'));
+    }
+
+    /**
+     * Test getEventsFeed with category filtering
+     */
+    public function testGetEventsFeedWithCategoryFiltering()
+    {
+        $musicCategory = $this->objFromFixture(Category::class, 'music');
+        $sportsCategory = $this->objFromFixture(Category::class, 'sports');
+
+        $fromDate = Carbon::parse('2025-06-01');
+        $toDate = Carbon::parse('2025-06-30');
+
+        // Test with music category filter
+        $categories = ArrayList::create([$musicCategory]);
+        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+
+        $this->assertInstanceOf(ArrayList::class, $events);
+        // Should have at least the main event (which has music category)
+        $this->assertGreaterThan(0, $events->count());
+
+        // Test with sports category filter
+        $categories = ArrayList::create([$sportsCategory]);
+        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+
+        $this->assertInstanceOf(ArrayList::class, $events);
+        // Should have events with sports category
+        $this->assertGreaterThan(0, $events->count());
     }
 }

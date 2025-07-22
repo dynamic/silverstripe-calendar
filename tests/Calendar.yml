@@ -1,6 +1,20 @@
 Dynamic\Calendar\Page\Calendar:
   one:
     Title: 'Calendar'
+    EventsPerPage: 10
+    ShowCategoryFilter: 1
+    ShowEventTypeFilter: 1
+    ShowAllDayFilter: 1
+    DefaultFromDateMonths: 0
+    DefaultToDateMonths: 6
+
+Dynamic\Calendar\Model\Category:
+  music:
+    Title: 'Music Events'
+  sports:
+    Title: 'Sports Events'
+  community:
+    Title: 'Community Events'
 
 Dynamic\Calendar\Page\EventPage:
   one:
@@ -11,12 +25,30 @@ Dynamic\Calendar\Page\EventPage:
     Parent: =>Dynamic\Calendar\Page\Calendar.one
     Recursion: 'WEEKLY'
     RecursionEndDate: '2025-07-30'
+    Categories: =>Dynamic\Calendar\Model\Category.music
   two:
     Title: 'All Day Event'
     StartDate: '2025-06-20'
     StartTime: '00:00:00'
     AllDay: 1
     Parent: =>Dynamic\Calendar\Page\Calendar.one
+    Categories: =>Dynamic\Calendar\Model\Category.sports
+  three:
+    Title: 'Community Meeting'
+    StartDate: '2025-06-22'
+    StartTime: '18:00:00'
+    AllDay: 0
+    Parent: =>Dynamic\Calendar\Page\Calendar.one
+    Recursion: 'NONE'
+    Categories: =>Dynamic\Calendar\Model\Category.community
+  four:
+    Title: 'Sports Tournament'
+    StartDate: '2025-06-25'
+    StartTime: '10:00:00'
+    AllDay: 0
+    Parent: =>Dynamic\Calendar\Page\Calendar.one
+    Recursion: 'NONE'
+    Categories: =>Dynamic\Calendar\Model\Category.sports
 
 Dynamic\Calendar\Model\EventException:
   one:

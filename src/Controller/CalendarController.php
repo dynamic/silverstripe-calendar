@@ -242,18 +242,15 @@ class CalendarController extends \PageController
         }
 
         // Get categories that are actually used by events in this calendar
-        // Start from EventPages and get their categories
-        $eventsInCalendar = EventPage::get()->filter(['ParentID' => $this->calendar->ID]);
-        $categoryIDs = [];
+        // Use efficient join query to avoid N+1 problem
+        $categoryIDs = EventPage::get()
+            ->filter(['ParentID' => $this->calendar->ID])
+            ->leftJoin('EventPage_Categories', '"EventPage_Live"."ID" = "EventPage_Categories"."EventPageID"')
+            ->leftJoin('Category', '"EventPage_Categories"."CategoryID" = "Category"."ID"')
+            ->column('Category.ID');
         
-        foreach ($eventsInCalendar as $event) {
-            foreach ($event->Categories() as $category) {
-                $categoryIDs[] = $category->ID;
-            }
-        }
-        
-        // Remove duplicates
-        $categoryIDs = array_unique($categoryIDs);
+        // Remove duplicates and null values
+        $categoryIDs = array_unique(array_filter($categoryIDs));
         
         // Get the category objects
         $availableCategories = ArrayList::create();
@@ -299,7 +296,6 @@ class CalendarController extends \PageController
     }
 
     /**
-     * Clean and sanitize request variables    /**
      * Clean and sanitize request variables
      *
      * @param array $vars

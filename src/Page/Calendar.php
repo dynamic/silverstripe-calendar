@@ -51,7 +51,7 @@ class Calendar extends \Page
 
     /**
      * Database fields for Calendar filtering configuration
-     * 
+     *
      * - EventsPerPage: The number of events to display per page
      * - ShowCategoryFilter: Whether to show the category filter in the UI
      * - ShowEventTypeFilter: Whether to show the event type filter in the UI

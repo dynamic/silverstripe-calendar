@@ -23,7 +23,7 @@
                   <label for="to" class="form-label">To Date</label>
                   <input type="date" class="form-control" id="to" name="to" value="$CurrentToDate">
                 </div>
-                
+
                 <% if $ShowCategoryFilter && $AvailableCategories.Count %>
                 <div class="col-md-4">
                   <label for="categories" class="form-label">Categories</label>
@@ -35,7 +35,7 @@
                   <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple categories</small>
                 </div>
                 <% end_if %>
-                
+
                 <div class="col-12">
                   <button type="submit" class="btn btn-primary me-2">Filter Events</button>
                   <a href="$Link" class="btn btn-outline-secondary">Clear Filters</a>

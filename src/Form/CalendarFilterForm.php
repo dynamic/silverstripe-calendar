@@ -15,6 +15,7 @@ use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\OptionsetField;
 use SilverStripe\Forms\TextField;
+use DFT\SilverStripe\FrontendMultiSelectField\FrontendMultiSelectField;
 
 /**
  * Calendar Event Filtering Form
@@ -78,14 +79,15 @@ class CalendarFilterForm extends Form
             ->setAttribute('placeholder', 'Search event titles...')
             ->setAttribute('class', 'form-control'));
 
-                // Category filter (if enabled)
+        // Category filter (if enabled)
         if ($this->calendar->ShowCategoryFilter) {
             $availableCategories = $this->getAvailableCategories();
             if ($availableCategories->count()) {
-                $fields->push(CheckboxSetField::create('categories', 'Categories')
-                    ->setSource($availableCategories->map('ID', 'Title'))
+                $fields->push(FrontendMultiSelectField::create('categories', 'Categories')
+                    ->setSource($availableCategories->map('ID', 'Title')->toArray())
                     ->setValue($request->getVar('categories'))
-                    ->addExtraClass('compact-checkbox-set')
+                    ->setSearch(true) // Enable search functionality
+                    ->setSelectAll(true) // Enable select all button
                     ->setDescription('Select one or more categories to filter events'));
             }
         }

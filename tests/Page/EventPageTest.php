@@ -39,19 +39,19 @@ class EventPageTest extends SapphireTest
 
         $event = EventPage::get()->byID($event->ID);
 
-        $this->assertEquals(2, $event->allChildren()->count());
+        $this->assertEquals(3, $event->allChildren()->count());
 
         $event->Interval = 1;
         $event->writeToStage(Versioned::DRAFT);
         $event->publishRecursive();
 
-        $this->assertEquals(6, $event->allChildren()->count());
+        $this->assertEquals(7, $event->allChildren()->count());
 
         $event->Interval = 2;
         $event->writeToStage(Versioned::DRAFT);
         $event->publishRecursive();
 
-        $this->assertEquals(2, $event->allChildren()->count());
+        $this->assertEquals(3, $event->allChildren()->count());
 
 
         Config::modify()->set(EventPage::class, 'recursion', false);

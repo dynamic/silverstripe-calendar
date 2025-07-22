@@ -124,35 +124,35 @@ class Calendar extends \Page
         // Add filtering configuration fields
         $fields->addFieldsToTab('Root.FilterSettings', [
             HeaderField::create('FilterOptionsHeader', 'Event Filtering Options'),
-            
+
             CheckboxField::create('ShowCategoryFilter')
                 ->setTitle('Show Category Filter')
                 ->setDescription('Allow visitors to filter events by category'),
-                
+
             CheckboxField::create('ShowEventTypeFilter')
                 ->setTitle('Show Event Type Filter')
                 ->setDescription('Allow visitors to filter between one-time and recurring events'),
-                
+
             CheckboxField::create('ShowAllDayFilter')
                 ->setTitle('Show All-Day Filter')
                 ->setDescription('Allow visitors to filter between all-day and timed events'),
-                
+
             HeaderField::create('DefaultSettingsHeader', 'Default Settings'),
-            
+
             NumericField::create('EventsPerPage')
                 ->setTitle('Events Per Page')
                 ->setDescription('Number of events to display per page (default: 12)'),
-                
+
             NumericField::create('DefaultFromDateMonths')
                 ->setTitle('Default Start Date (Months from Now)')
                 ->setDescription('How many months from current date to start showing events (0 = current month)'),
-                
+
             NumericField::create('DefaultToDateMonths')
                 ->setTitle('Default End Date (Months from Now)')
                 ->setDescription('How many months from current date to show events until (6 = 6 months from now)'),
-                
+
             HeaderField::create('CategoryDefaultsHeader', 'Default Category Selection'),
-            
+
             CheckboxSetField::create('DefaultCategories')
                 ->setTitle('Default Selected Categories')
                 ->setDescription('Categories that will be pre-selected when visitors first view the calendar')
@@ -280,8 +280,6 @@ class Calendar extends \Page
 
                     // Apply modifications for modified instances
                     if ($exception->isModified()) {
-                        // Debugging: Log when an exception modifies an event
-                        error_log('Applying modification exception for date: ' . $instanceDate);
                         // Apply any modifications from the exception
                         $modifications = $exception->getOverrides();
                         foreach ($modifications as $property => $value) {

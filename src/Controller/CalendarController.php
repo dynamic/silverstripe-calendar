@@ -113,7 +113,7 @@ class CalendarController extends \PageController
         // Get category filter
         $categoryIDs = $request->getVar('categories');
         $categories = null;
-        
+
         if ($categoryIDs) {
             if (!is_array($categoryIDs)) {
                 $categoryIDs = [$categoryIDs];
@@ -137,7 +137,6 @@ class CalendarController extends \PageController
             'OneTimeEventsCount' => $this->getOneTimeEventsCount(),
             'AvailableCategories' => $this->getAvailableCategoriesForTemplate($request),
             'ShowCategoryFilter' => $this->calendar->ShowCategoryFilter,
-            'DebugCategories' => $this->getDebugCategoryInfo($request),
         ];
     }
 
@@ -245,18 +244,18 @@ class CalendarController extends \PageController
         // Use efficient join query to avoid N+1 problem
         $categoryIDs = EventPage::get()
             ->filter(['ParentID' => $this->calendar->ID])
-            ->leftJoin('EventPage_Categories', '"EventPage_Live"."ID" = "EventPage_Categories"."EventPageID"')
+            ->leftJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"')
             ->leftJoin('Category', '"EventPage_Categories"."CategoryID" = "Category"."ID"')
             ->column('Category.ID');
-        
+
         // Remove duplicates and null values
         $categoryIDs = array_unique(array_filter($categoryIDs));
-        
+
         // Get the category objects
         $availableCategories = ArrayList::create();
         if (!empty($categoryIDs)) {
             $categories = Category::get()->byIDs($categoryIDs)->sort('Title ASC');
-            
+
             foreach ($categories as $category) {
                 $categoryData = ArrayData::create([
                     'ID' => $category->ID,
@@ -268,31 +267,6 @@ class CalendarController extends \PageController
         }
 
         return $availableCategories;
-    }
-
-    /**
-     * Debug method to check category configuration
-     *
-     * @param HTTPRequest $request
-     * @return ArrayData
-     */
-    protected function getDebugCategoryInfo(HTTPRequest $request): ArrayData
-    {
-        $allCategories = Category::get();
-        $allEventsInCalendar = EventPage::get()->filter(['ParentID' => $this->calendar->ID]);
-        $eventsWithCategories = EventPage::get()
-            ->filter(['ParentID' => $this->calendar->ID])
-            ->innerJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"');
-
-        return ArrayData::create([
-            'CalendarID' => $this->calendar->ID,
-            'CalendarTitle' => $this->calendar->Title,
-            'ShowCategoryFilter' => (bool)$this->calendar->ShowCategoryFilter,
-            'TotalCategories' => $allCategories->count(),
-            'TotalEventsInCalendar' => $allEventsInCalendar->count(),
-            'EventsWithCategories' => $eventsWithCategories->count(),
-            'AllCategoryTitles' => $allCategories->column('Title'),
-        ]);
     }
 
     /**

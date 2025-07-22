@@ -17,7 +17,7 @@ use SilverStripe\Forms\TextField;
 
 /**
  * Calendar Event Filtering Form
- * 
+ *
  * Provides a structured form for filtering calendar events with various criteria
  * including categories, event types, date ranges, and search terms.
  */
@@ -149,9 +149,9 @@ class CalendarFilterForm extends Form
     {
         // The actual filtering is handled by the CalendarController
         // This method can be used for additional validation or processing
-        
+
         $controller = $this->getController();
-        
+
         // Redirect back to calendar with filter parameters
         return $controller->redirect($controller->Link() . '?' . http_build_query($data));
     }
@@ -165,13 +165,13 @@ class CalendarFilterForm extends Form
     public static function hasActiveFilters(HTTPRequest $request): bool
     {
         $filterVars = ['categories', 'eventType', 'allDay', 'search'];
-        
+
         foreach ($filterVars as $var) {
             if ($request->getVar($var)) {
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -185,29 +185,31 @@ class CalendarFilterForm extends Form
     public static function getFilterSummary(HTTPRequest $request, Calendar $calendar): array
     {
         $summary = [];
-        
+
         // Category filters
         if ($categoryIDs = $request->getVar('categories')) {
-            if (!is_array($categoryIDs)) $categoryIDs = [$categoryIDs];
+            if (!is_array($categoryIDs)) {
+                $categoryIDs = [$categoryIDs];
+            }
             $categories = Category::get()->byIDs($categoryIDs);
             $summary['categories'] = $categories->column('Title');
         }
-        
+
         // Event type filter
         if ($eventType = $request->getVar('eventType')) {
             $summary['eventType'] = $eventType;
         }
-        
+
         // All-day filter
         if ($allDay = $request->getVar('allDay')) {
             $summary['allDay'] = $allDay === '1' ? 'All-Day Events' : 'Timed Events';
         }
-        
+
         // Search filter
         if ($search = $request->getVar('search')) {
             $summary['search'] = $search;
         }
-        
+
         return $summary;
     }
 }

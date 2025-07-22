@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Form;
 
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Page\Calendar;
+use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Forms\CheckboxSetField;
@@ -51,7 +52,8 @@ class CalendarFilterForm extends Form
 
         // Set form method and CSS class
         $this->setFormMethod('GET');
-        $this->addExtraClass('calendar-filter-form');
+        $this->setFormAction($this->calendar->Link());
+        $this->addExtraClass('calendar-filter-form bg-light p-4 rounded shadow-sm mb-4');
     }
 
     /**
@@ -64,54 +66,72 @@ class CalendarFilterForm extends Form
     {
         $fields = FieldList::create();
 
-        // Date range fields
-        $fields->push(DateField::create('from', 'From Date')
-            ->setValue($request->getVar('from'))
-            ->setAttribute('class', 'form-control'));
-
-        $fields->push(DateField::create('to', 'To Date')
-            ->setValue($request->getVar('to'))
-            ->setAttribute('class', 'form-control'));
-
-        // Search field
-        $fields->push(TextField::create('search', 'Search')
+        // Primary filters row - most commonly used
+        $fields->push(TextField::create('search', 'Search Events')
             ->setValue($request->getVar('search'))
-            ->setAttribute('placeholder', 'Search event titles...')
-            ->setAttribute('class', 'form-control'));
+            ->setAttribute('placeholder', 'Search event titles and descriptions...')
+            ->setAttribute('class', 'form-control form-control-lg')
+            ->addExtraClass('mb-3'));
 
-        // Category filter (if enabled)
+        // Category filter (if enabled) - prominent placement
         if ($this->calendar->ShowCategoryFilter) {
             $availableCategories = $this->getAvailableCategories();
             if ($availableCategories->count()) {
-                $fields->push(FrontendMultiSelectField::create('categories', 'Categories')
+                $fields->push(FrontendMultiSelectField::create('categories', 'Filter by Category')
                     ->setSource($availableCategories->map('ID', 'Title')->toArray())
                     ->setValue($request->getVar('categories'))
-                    ->setSearch(true) // Enable search functionality
-                    ->setSelectAll(true) // Enable select all button
-                    ->setDescription('Select one or more categories to filter events'));
+                    ->setSearch(true)
+                    ->setSelectAll(true)
+                    ->setDescription('Choose one or more categories')
+                    ->addExtraClass('mb-3'));
             }
         }
 
-        // Event type filter (if enabled)
-        if ($this->calendar->ShowEventTypeFilter) {
-            $fields->push(OptionsetField::create('eventType', 'Event Type')
-                ->setSource([
-                    '' => 'All Events',
-                    'one-time' => 'One-Time Events',
-                    'recurring' => 'Recurring Events'
-                ])
-                ->setValue($request->getVar('eventType')));
-        }
+        // Date range in a compact row
+        $fields->push(DateField::create('from', 'From Date')
+            ->setValue($request->getVar('from'))
+            ->setAttribute('class', 'form-control')
+            ->addExtraClass('col-md-6 d-inline-block'));
 
-        // All-day filter (if enabled)
-        if ($this->calendar->ShowAllDayFilter) {
-            $fields->push(OptionsetField::create('allDay', 'Event Duration')
-                ->setSource([
-                    '' => 'All Events',
-                    '1' => 'All-Day Events',
-                    '0' => 'Timed Events'
-                ])
-                ->setValue($request->getVar('allDay')));
+        $fields->push(DateField::create('to', 'To Date')
+            ->setValue($request->getVar('to'))
+            ->setAttribute('class', 'form-control')
+            ->addExtraClass('col-md-6 d-inline-block'));
+
+        // Advanced filters - collapsed by default (optional)
+        if ($this->calendar->ShowEventTypeFilter || $this->calendar->ShowAllDayFilter) {
+            // Only show these if specifically enabled and user requests advanced options
+            $showAdvanced = $request->getVar('advanced') || 
+                           $request->getVar('eventType') || 
+                           $request->getVar('allDay');
+            
+            if ($showAdvanced) {
+                // Event type filter - more compact as dropdown
+                if ($this->calendar->ShowEventTypeFilter) {
+                    $fields->push(DropdownField::create('eventType', 'Event Type')
+                        ->setSource([
+                            '' => 'All Events',
+                            'one-time' => 'One-Time Events', 
+                            'recurring' => 'Recurring Events'
+                        ])
+                        ->setValue($request->getVar('eventType'))
+                        ->setAttribute('class', 'form-control form-control-sm')
+                        ->addExtraClass('col-md-6 d-inline-block mt-2'));
+                }
+
+                // All-day filter - more compact as dropdown  
+                if ($this->calendar->ShowAllDayFilter) {
+                    $fields->push(DropdownField::create('allDay', 'Duration')
+                        ->setSource([
+                            '' => 'All Events',
+                            '1' => 'All-Day Events',
+                            '0' => 'Timed Events'
+                        ])
+                        ->setValue($request->getVar('allDay'))
+                        ->setAttribute('class', 'form-control form-control-sm')
+                        ->addExtraClass('col-md-6 d-inline-block mt-2'));
+                }
+            }
         }
 
         return $fields;
@@ -126,9 +146,23 @@ class CalendarFilterForm extends Form
     {
         $actions = FieldList::create();
 
-        $actions->push(FormAction::create('doFilter', 'Filter Events')
-            ->addExtraClass('btn btn-primary')
-            ->setUseButtonTag(true));
+        $actions->push(FormAction::create('doFilter', 'Apply Filters')
+            ->addExtraClass('btn btn-primary btn-lg px-4')
+            ->setUseButtonTag(true)
+            ->setAttribute('title', 'Apply the selected filters to view matching events'));
+
+        // Clear filters link (if any filters are active)
+        // Only add this if we can safely get the controller and request
+        $controller = $this->getController();
+        if ($controller && $controller->getRequest()) {
+            $request = $controller->getRequest();
+            if (self::hasActiveFilters($request)) {
+                $actions->push(FormAction::create('clearFilters', 'Clear All')
+                    ->addExtraClass('btn btn-outline-secondary ms-2')
+                    ->setUseButtonTag(true)
+                    ->setAttribute('title', 'Remove all filters and show all events'));
+            }
+        }
 
         return $actions;
     }
@@ -140,11 +174,22 @@ class CalendarFilterForm extends Form
      */
     protected function getAvailableCategories()
     {
-        return Category::get()
-            ->innerJoin('EventPage_Categories', '"Category"."ID" = "EventPage_Categories"."CategoryID"')
-            ->innerJoin('EventPage', '"EventPage_Categories"."EventPageID" = "EventPage"."ID"')
-            ->filter(['EventPage.ParentID' => $this->calendar->ID])
-            ->sort('Title ASC');
+        // Get categories that are actually used by events in this calendar
+        // Use the same approach as CalendarController to avoid relation errors
+        $categoryIDs = EventPage::get()
+            ->filter(['ParentID' => $this->calendar->ID])
+            ->leftJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"')
+            ->leftJoin('Category', '"EventPage_Categories"."CategoryID" = "Category"."ID"')
+            ->column('Category.ID');
+
+        // Remove duplicates and null values
+        $categoryIDs = array_unique(array_filter($categoryIDs));
+
+        if (empty($categoryIDs)) {
+            return Category::get()->filter('ID', 0); // Return empty DataList
+        }
+
+        return Category::get()->byIDs($categoryIDs)->sort('Title ASC');
     }
 
     /**
@@ -163,6 +208,21 @@ class CalendarFilterForm extends Form
 
         // Redirect back to calendar with filter parameters
         return $controller->redirect($controller->Link() . '?' . http_build_query($data));
+    }
+
+    /**
+     * Handle clearing all filters
+     *
+     * @param array $data
+     * @param Form $form
+     * @return mixed
+     */
+    public function clearFilters($data, $form)
+    {
+        $controller = $this->getController();
+        
+        // Redirect back to calendar without any filter parameters
+        return $controller->redirect($controller->Link());
     }
 
     /**

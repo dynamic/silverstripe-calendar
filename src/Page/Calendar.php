@@ -50,9 +50,18 @@ class Calendar extends \Page
     ];
 
     /**
+     * Database fields for Calendar filtering configuration
+     * 
+     * - EventsPerPage: The number of events to display per page
+     * - ShowCategoryFilter: Whether to show the category filter in the UI
+     * - ShowEventTypeFilter: Whether to show the event type filter in the UI
+     * - ShowAllDayFilter: Whether to show the all-day event filter in the UI
+     * - DefaultFromDateMonths: The default number of months from current date for "from" filter
+     * - DefaultToDateMonths: The default number of months from current date for "to" filter
+     *
      * @var array
      */
-    private static array $db = [
+    private static $db = [
         'EventsPerPage' => 'Int',
         'ShowCategoryFilter' => 'Boolean',
         'ShowEventTypeFilter' => 'Boolean',
@@ -62,9 +71,11 @@ class Calendar extends \Page
     ];
 
     /**
+     * Default values for Calendar filtering configuration
+     *
      * @var array
      */
-    private static array $defaults = [
+    private static $defaults = [
         'EventsPerPage' => 12,
         'ShowCategoryFilter' => true,
         'ShowEventTypeFilter' => true,
@@ -74,9 +85,11 @@ class Calendar extends \Page
     ];
 
     /**
+     * Many-to-many relationships for Calendar
+     *
      * @var array
      */
-    private static array $many_many = [
+    private static $many_many = [
         'DefaultCategories' => Category::class,
     ];
 

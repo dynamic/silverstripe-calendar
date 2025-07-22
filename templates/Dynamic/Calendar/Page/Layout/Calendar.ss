@@ -26,19 +26,13 @@
                 
                 <% if $ShowCategoryFilter && $AvailableCategories.Count %>
                 <div class="col-md-4">
-                  <label class="form-label">Categories</label>
-                  <div class="category-filter">
+                  <label for="categories" class="form-label">Categories</label>
+                  <select class="form-select" id="categories" name="categories[]" multiple size="2" style="min-height: 75px;">
                     <% loop $AvailableCategories %>
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" 
-                             id="category_{$ID}" name="categories[]" value="$ID"
-                             <% if $IsSelected %>checked<% end_if %>>
-                      <label class="form-check-label" for="category_{$ID}">
-                        $Title
-                      </label>
-                    </div>
+                    <option value="$ID" <% if $IsSelected %>selected<% end_if %>>$Title</option>
                     <% end_loop %>
-                  </div>
+                  </select>
+                  <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple categories</small>
                 </div>
                 <% end_if %>
                 

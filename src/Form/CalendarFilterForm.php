@@ -8,6 +8,7 @@ use SilverStripe\Control\Controller;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\DateField;
+use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
@@ -24,6 +25,8 @@ use SilverStripe\Forms\TextField;
 class CalendarFilterForm extends Form
 {
     /**
+     * Calendar instance associated with this form
+     *
      * @var Calendar
      */
     protected $calendar;
@@ -75,13 +78,15 @@ class CalendarFilterForm extends Form
             ->setAttribute('placeholder', 'Search event titles...')
             ->setAttribute('class', 'form-control'));
 
-        // Category filter (if enabled)
+                // Category filter (if enabled)
         if ($this->calendar->ShowCategoryFilter) {
             $availableCategories = $this->getAvailableCategories();
             if ($availableCategories->count()) {
                 $fields->push(CheckboxSetField::create('categories', 'Categories')
                     ->setSource($availableCategories->map('ID', 'Title'))
-                    ->setValue($request->getVar('categories')));
+                    ->setValue($request->getVar('categories'))
+                    ->addExtraClass('compact-checkbox-set')
+                    ->setDescription('Select one or more categories to filter events'));
             }
         }
 
@@ -128,6 +133,8 @@ class CalendarFilterForm extends Form
 
     /**
      * Get available categories for this calendar
+     *
+     * @return DataList
      */
     protected function getAvailableCategories()
     {

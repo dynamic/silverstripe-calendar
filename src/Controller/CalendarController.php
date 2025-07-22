@@ -7,6 +7,7 @@ use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
+use Dynamic\Calendar\Form\CalendarFilterForm;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\PaginatedList;
@@ -97,6 +98,16 @@ class CalendarController extends \PageController
             'Events' => $events,
             'TotalEvents' => $events->count(),
         ];
+    }
+
+    /**
+     * Get the calendar filter form
+     *
+     * @return CalendarFilterForm
+     */
+    public function FilterForm(): CalendarFilterForm
+    {
+        return new CalendarFilterForm($this, 'FilterForm', $this->calendar, $this->getRequest());
     }
 
     /**

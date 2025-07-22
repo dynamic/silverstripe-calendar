@@ -58,7 +58,12 @@ class CalendarTest extends SapphireTest
     public function testGetEventsFeedWithRegularEvents()
     {
         $event = $this->objFromFixture(EventPage::class, 'two');
-        $events = $this->calendar->getEventsFeed();
+        
+        // Use specific date range to ensure we capture the test events
+        $fromDate = Carbon::parse('2025-06-01');
+        $toDate = Carbon::parse('2025-12-31');
+        $events = $this->calendar->getEventsFeed(null, null, $fromDate, $toDate);
+        
         $found = $events->find('Title', 'All Day Event');
         $this->assertNotNull($found, 'All Day Event should be present');
         $this->assertEquals('All Day Event', $found->Title);
@@ -77,9 +82,9 @@ class CalendarTest extends SapphireTest
     }
 
     /**
-     * Test getEventsFeed with category filtering
+     * Test getEventsFeed with basic category filtering
      */
-    public function testGetEventsFeedWithCategoryFiltering()
+    public function testGetEventsFeedWithBasicCategoryFiltering()
     {
         $category = Category::get()->first();
         $categories = ArrayList::create([$category]);
@@ -139,9 +144,9 @@ class CalendarTest extends SapphireTest
     {
         $calendar = $this->objFromFixture(Calendar::class, 'one');
         
-        $this->assertTrue($calendar->ShowCategoryFilter);
-        $this->assertTrue($calendar->ShowEventTypeFilter);
-        $this->assertTrue($calendar->ShowAllDayFilter);
+        $this->assertEquals(1, $calendar->ShowCategoryFilter);
+        $this->assertEquals(1, $calendar->ShowEventTypeFilter);
+        $this->assertEquals(1, $calendar->ShowAllDayFilter);
         $this->assertEquals(10, $calendar->EventsPerPage);
         $this->assertEquals(0, $calendar->DefaultFromDateMonths);
         $this->assertEquals(6, $calendar->DefaultToDateMonths);

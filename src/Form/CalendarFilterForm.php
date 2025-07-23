@@ -14,9 +14,11 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\HiddenField;
+use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\OptionsetField;
 use SilverStripe\Forms\TextField;
-use DFT\SilverStripe\FrontendMultiSelectField\FrontendMultiSelectField;
+use SilverStripe\View\Requirements;
+use Exception;
 
 /**
  * Calendar Event Filtering Form
@@ -53,7 +55,7 @@ class CalendarFilterForm extends Form
         // Set form method and CSS class
         $this->setFormMethod('GET');
         $this->setFormAction($this->calendar->Link());
-        $this->addExtraClass('calendar-filter-form bg-light p-4 rounded shadow-sm mb-4');
+        $this->addExtraClass('calendar-filter-form bg-light p-4 rounded shadow-sm mb-4 horizontal-form');
     }
 
     /**
@@ -66,60 +68,126 @@ class CalendarFilterForm extends Form
     {
         $fields = FieldList::create();
 
-        // Primary filters row - most commonly used
+        // Load Choices.js for enhanced multi-select dropdowns
+        Requirements::javascript('https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js');
+        Requirements::css('https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css');
+
+        // Add CSS for horizontal layout and Clear Filters functionality
+        $fields->push(LiteralField::create('horizontalCSS', '
+            <style>
+            .horizontal-form fieldset { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; }
+            .horizontal-form .field { flex: 1; min-width: 200px; margin-bottom: 0 !important; }
+            .horizontal-form .field.col-md-4 { flex: 2; }
+            .horizontal-form .field.col-md-3 { flex: 1.5; }
+            .horizontal-form .field.col-md-2 { flex: 1; }
+            .horizontal-form .form-actions { margin-top: 1rem; }
+            .horizontal-form .btn-toolbar { display: flex; gap: 0.5rem; align-items: center; }
+            @media (max-width: 768px) {
+                .horizontal-form fieldset { flex-direction: column; }
+                .horizontal-form .field { width: 100%; }
+            }
+            </style>
+            <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                // Add Clear Filters button if URL has search parameters (indicating active filters)
+                const urlParams = new URLSearchParams(window.location.search);
+                const hasFilters = urlParams.has("search") || urlParams.has("categories") ||
+                                 urlParams.has("from") || urlParams.has("to") ||
+                                 urlParams.has("eventType") || urlParams.has("allDay");
+
+                if (hasFilters) {
+                    const actionsDiv = document.querySelector(".btn-toolbar.form-actions");
+                    if (actionsDiv) {
+                        const clearLink = document.createElement("a");
+                        clearLink.href = window.location.pathname;
+                        clearLink.className = "btn btn-outline-secondary";
+                        clearLink.title = "Remove all filters and show all events";
+                        clearLink.textContent = "Clear All";
+                        actionsDiv.appendChild(clearLink);
+                    }
+                }
+
+                // Initialize Choices.js on multi-select dropdowns
+                if (typeof Choices !== "undefined") {
+                    const multiSelectElements = document.querySelectorAll(".js-choice");
+                    multiSelectElements.forEach(function(element) {
+                        // Only initialize on select elements, not wrapper divs
+                        if (element.tagName === "SELECT") {
+                            new Choices(element, {
+                                removeItemButton: true,
+                                searchEnabled: true,
+                                searchChoices: true,
+                                placeholderValue: "Choose categories",
+                                noChoicesText: "No categories available",
+                                itemSelectText: "Press to select",
+                                shouldSort: false,
+                                searchPlaceholderValue: "Search categories..."
+                            });
+                        }
+                    });
+                } else {
+                    console.log("Choices.js library not loaded, falling back to native multi-select");
+                }
+            });
+            </script>
+        '));
+
+        // Row 1: Horizontal layout with main filters
+        // Search field - takes up more space
         $fields->push(TextField::create('search', 'Search Events')
             ->setValue($request->getVar('search'))
             ->setAttribute('placeholder', 'Search event titles and descriptions...')
-            ->setAttribute('class', 'form-control form-control-lg')
-            ->addExtraClass('mb-3'));
+            ->setAttribute('class', 'form-control')
+            ->addExtraClass('col-md-4 mb-3'));
 
-        // Category filter (if enabled) - prominent placement
+        // Category filter (if enabled) - medium width
         if ($this->calendar->ShowCategoryFilter) {
             $availableCategories = $this->getAvailableCategories();
             if ($availableCategories->count()) {
-                $fields->push(FrontendMultiSelectField::create('categories', 'Filter by Category')
+                $fields->push(DropdownField::create('categories', 'Filter by Category')
                     ->setSource($availableCategories->map('ID', 'Title')->toArray())
                     ->setValue($request->getVar('categories'))
-                    ->setSearch(true)
-                    ->setSelectAll(true)
-                    ->setDescription('Choose one or more categories')
-                    ->addExtraClass('mb-3'));
+                    ->setAttribute('multiple', 'multiple')
+                    ->addExtraClass('js-choice col-md-3 mb-3'));
             }
         }
 
-        // Date range in a compact row
+        // Date range - compact side by side
         $fields->push(DateField::create('from', 'From Date')
             ->setValue($request->getVar('from'))
             ->setAttribute('class', 'form-control')
-            ->addExtraClass('col-md-6 d-inline-block'));
+            ->addExtraClass('col-md-2 mb-3'));
 
         $fields->push(DateField::create('to', 'To Date')
             ->setValue($request->getVar('to'))
             ->setAttribute('class', 'form-control')
-            ->addExtraClass('col-md-6 d-inline-block'));
+            ->addExtraClass('col-md-2 mb-3'));
 
-        // Advanced filters - collapsed by default (optional)
+        // Advanced filters - with simple toggle
         if ($this->calendar->ShowEventTypeFilter || $this->calendar->ShowAllDayFilter) {
-            // Only show these if specifically enabled and user requests advanced options
-            $showAdvanced = $request->getVar('advanced') || 
-                           $request->getVar('eventType') || 
+            $showAdvanced = $request->getVar('advanced') ||
+                           $request->getVar('eventType') ||
                            $request->getVar('allDay');
-            
+
+            // Always show the toggle button
+            $fields->push(HiddenField::create('advanced', 'advanced')
+                ->setValue($showAdvanced ? '1' : '0'));
+
             if ($showAdvanced) {
-                // Event type filter - more compact as dropdown
+                // Event type filter
                 if ($this->calendar->ShowEventTypeFilter) {
                     $fields->push(DropdownField::create('eventType', 'Event Type')
                         ->setSource([
                             '' => 'All Events',
-                            'one-time' => 'One-Time Events', 
+                            'one-time' => 'One-Time Events',
                             'recurring' => 'Recurring Events'
                         ])
                         ->setValue($request->getVar('eventType'))
-                        ->setAttribute('class', 'form-control form-control-sm')
+                        ->setAttribute('class', 'form-control')
                         ->addExtraClass('col-md-6 d-inline-block mt-2'));
                 }
 
-                // All-day filter - more compact as dropdown  
+                // All-day filter
                 if ($this->calendar->ShowAllDayFilter) {
                     $fields->push(DropdownField::create('allDay', 'Duration')
                         ->setSource([
@@ -128,7 +196,7 @@ class CalendarFilterForm extends Form
                             '0' => 'Timed Events'
                         ])
                         ->setValue($request->getVar('allDay'))
-                        ->setAttribute('class', 'form-control form-control-sm')
+                        ->setAttribute('class', 'form-control')
                         ->addExtraClass('col-md-6 d-inline-block mt-2'));
                 }
             }
@@ -146,23 +214,13 @@ class CalendarFilterForm extends Form
     {
         $actions = FieldList::create();
 
+        // Apply Filters button
         $actions->push(FormAction::create('doFilter', 'Apply Filters')
-            ->addExtraClass('btn btn-primary btn-lg px-4')
+            ->addExtraClass('btn btn-primary btn-lg px-4 me-2')
             ->setUseButtonTag(true)
             ->setAttribute('title', 'Apply the selected filters to view matching events'));
 
-        // Clear filters link (if any filters are active)
-        // Only add this if we can safely get the controller and request
-        $controller = $this->getController();
-        if ($controller && $controller->getRequest()) {
-            $request = $controller->getRequest();
-            if (self::hasActiveFilters($request)) {
-                $actions->push(FormAction::create('clearFilters', 'Clear All')
-                    ->addExtraClass('btn btn-outline-secondary ms-2')
-                    ->setUseButtonTag(true)
-                    ->setAttribute('title', 'Remove all filters and show all events'));
-            }
-        }
+        // Clear Filters button will be added via JavaScript to avoid timing issues
 
         return $actions;
     }
@@ -220,7 +278,7 @@ class CalendarFilterForm extends Form
     public function clearFilters($data, $form)
     {
         $controller = $this->getController();
-        
+
         // Redirect back to calendar without any filter parameters
         return $controller->redirect($controller->Link());
     }
@@ -233,10 +291,11 @@ class CalendarFilterForm extends Form
      */
     public static function hasActiveFilters(HTTPRequest $request): bool
     {
-        $filterVars = ['categories', 'eventType', 'allDay', 'search'];
+        $filterVars = ['categories', 'eventType', 'allDay', 'search', 'from', 'to'];
 
         foreach ($filterVars as $var) {
-            if ($request->getVar($var)) {
+            $value = $request->getVar($var);
+            if ($value && $value !== '') {
                 return true;
             }
         }
@@ -280,5 +339,56 @@ class CalendarFilterForm extends Form
         }
 
         return $summary;
+    }
+
+    /**
+     * Check if any filters are currently active (for template use)
+     * This method provides a safe way to check for active filters from templates
+     * without requiring direct access to the request object.
+     *
+     * @return bool
+     */
+    public function getHasActiveFilters(): bool
+    {
+        try {
+            // Try to get the request from the controller
+            $controller = $this->getController();
+            if ($controller && method_exists($controller, 'getRequest')) {
+                $request = $controller->getRequest();
+                if ($request && $request instanceof HTTPRequest) {
+                    return self::hasActiveFilters($request);
+                }
+            }
+
+            // Fallback: try to get request from current controller
+            if (class_exists('SilverStripe\Control\Controller')) {
+                $currentController = \SilverStripe\Control\Controller::curr();
+                if ($currentController && method_exists($currentController, 'getRequest')) {
+                    $request = $currentController->getRequest();
+                    if ($request && $request instanceof HTTPRequest) {
+                        return self::hasActiveFilters($request);
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            // Log the error for debugging but don't break the page
+            if (class_exists('SilverStripe\Core\Injector\Injector')) {
+                $logger = \SilverStripe\Core\Injector\Injector::inst()->get('Psr\Log\LoggerInterface');
+                $logger->warning('CalendarFilterForm: Could not check active filters - ' . $e->getMessage());
+            }
+        }
+
+        // Safe fallback - no filters are active if we can't determine
+        return false;
+    }
+
+    /**
+     * Get the clear filters link (for template use)
+     *
+     * @return string
+     */
+    public function getClearFiltersLink(): string
+    {
+        return $this->calendar->Link();
     }
 }

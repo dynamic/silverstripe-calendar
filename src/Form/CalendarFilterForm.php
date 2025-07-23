@@ -72,7 +72,7 @@ class CalendarFilterForm extends Form
         // TODO: Bundle locally for better security and offline capability
         Requirements::javascript('https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js');
         Requirements::css('https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css');
-        
+
         // Add SRI attributes for security
         Requirements::customScript('
             document.addEventListener("DOMContentLoaded", function() {
@@ -396,7 +396,9 @@ class CalendarFilterForm extends Form
             // Log the error for debugging but don't break the page
             if (class_exists('SilverStripe\Core\Injector\Injector')) {
                 $logger = \SilverStripe\Core\Injector\Injector::inst()->get('Psr\Log\LoggerInterface');
-                $logger->warning('CalendarFilterForm: Runtime error while checking active filters - ' . $e->getMessage());
+                $logger->warning(
+                    'CalendarFilterForm: Runtime error while checking active filters - ' . $e->getMessage()
+                );
             }
         }
 

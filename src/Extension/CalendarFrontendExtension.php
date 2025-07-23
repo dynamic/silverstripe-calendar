@@ -46,7 +46,10 @@ class CalendarFrontendExtension extends Extension
                 $elementalArea = $page->ElementalArea();
                 if (
                     $elementalArea &&
-                    $elementalArea->Elements()->filter('ClassName', 'Dynamic\Calendar\Element\CalendarElement')->exists()
+                    $elementalArea->Elements()->filter(
+                        'ClassName',
+                        'Dynamic\Calendar\Element\CalendarElement'
+                    )->exists()
                 ) {
                     return true;
                 }

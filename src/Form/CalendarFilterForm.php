@@ -68,16 +68,31 @@ class CalendarFilterForm extends Form
     {
         $fields = FieldList::create();
 
-        // Load Choices.js for enhanced multi-select dropdowns
-        // TODO: Bundle locally for better security and offline capability
-        Requirements::javascript('https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js');
-        Requirements::css('https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css');
+        // Load the bundled calendar assets (includes Choices.js and all dependencies)
+        Requirements::javascript('dynamic/silverstripe-calendar:client/dist/js/calendar.bundle.js');
+        Requirements::css('dynamic/silverstripe-calendar:client/dist/css/calendar.bundle.css');
 
-        // Add SRI attributes for security
+        // Configuration data for Choices.js (CSP-compliant)
+        $choicesConfig = [
+            'removeItemButton' => true,
+            'searchEnabled' => true,
+            'searchChoices' => true,
+            'placeholderValue' => 'Choose categories',
+            'noChoicesText' => 'No categories available',
+            'itemSelectText' => 'Press to select',
+            'shouldSort' => false,
+            'searchPlaceholderValue' => 'Search categories...'
+        ];
+
         Requirements::customScript('
             document.addEventListener("DOMContentLoaded", function() {
-                // Add integrity attributes to external resources for security
-                const choicesScript = document.querySelector("script[src*=\"choices.js\"]");
+                // Initialize Choices.js with bundled library (no CDN required)
+                window.CalendarChoicesConfig = ' . json_encode($choicesConfig) . ';
+                
+                // The actual initialization is handled by calendar.bundle.js
+                if (typeof window.initializeChoicesJS === "function") {
+                    window.initializeChoicesJS();
+                }
                 if (choicesScript) {
                     choicesScript.crossOrigin = "anonymous";
                 }

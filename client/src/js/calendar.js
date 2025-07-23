@@ -2,12 +2,27 @@
 // Bootstrap 5.3 + FullCalendar integration for Dynamic SilverStripe Calendar
 
 import '../scss/calendar.scss';
+import Choices from 'choices.js';
+
 // Import components
 import './components/CalendarView';
 import './components/FullCalendarView';
 import './components/SmartFiltering';
 import './components/TouchInteractions';
 import './components/KeyboardNavigation';
+
+// Global function for Choices.js initialization (called by CalendarFilterForm)
+window.initializeChoicesJS = function() {
+  const multiSelectElements = document.querySelectorAll('.js-choice');
+  const config = window.CalendarChoicesConfig || {};
+  
+  multiSelectElements.forEach(function(element) {
+    if (element.tagName === 'SELECT' && !element.hasAttribute('data-choices-initialized')) {
+      new Choices(element, config);
+      element.setAttribute('data-choices-initialized', 'true');
+    }
+  });
+};
 
 class CalendarModule {
   constructor() {

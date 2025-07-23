@@ -328,4 +328,37 @@ class EventInstance extends ViewableData
             'OriginalEventID' => $this->originalEvent->ID,
         ];
     }
+
+    /**
+     * Create EventInstance from array data (for cache deserialization)
+     *
+     * @param array $data
+     * @return EventInstance|null
+     */
+    public static function fromArray(array $data): ?EventInstance
+    {
+        if (!isset($data['OriginalEventID']) || !isset($data['StartDate'])) {
+            return null;
+        }
+
+        // Get the original event
+        $originalEvent = EventPage::get()->byID($data['OriginalEventID']);
+        if (!$originalEvent) {
+            return null;
+        }
+
+        // Parse the instance date
+        $instanceDate = Carbon::parse($data['StartDate']);
+
+        // Get any exception for this date (if modified/deleted)
+        $exception = null;
+        if ($data['IsModified'] || $data['IsDeleted']) {
+            $exception = EventException::get()->filter([
+                'OriginalEventID' => $originalEvent->ID,
+                'ExceptionDate' => $data['StartDate']
+            ])->first();
+        }
+
+        return new static($originalEvent, $instanceDate, $exception);
+    }
 }

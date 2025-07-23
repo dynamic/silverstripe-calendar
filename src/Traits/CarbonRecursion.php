@@ -7,6 +7,7 @@ use Carbon\CarbonInterval;
 use Carbon\CarbonPeriod;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Model\EventInstance;
+use Dynamic\Calendar\Model\EventInstanceCache;
 use Generator;
 
 /**
@@ -23,6 +24,51 @@ trait CarbonRecursion
      * @var array Cache for occurrence calculations
      */
     protected array $occurrenceCache = [];
+
+    /**
+     * Get cached event occurrences for better performance
+     *
+     * @param Carbon|string|null $startDate
+     * @param Carbon|string|null $endDate
+     * @param int|null $limit
+     * @return Generator<EventInstance>
+     */
+    public function getCachedOccurrences($startDate = null, $endDate = null, ?int $limit = null): Generator
+    {
+        $start = $startDate ? Carbon::parse($startDate)->format('Y-m-d') : Carbon::now()->subMonth()->format('Y-m-d');
+        $end = $endDate ? Carbon::parse($endDate)->format('Y-m-d') : Carbon::now()->addYear()->format('Y-m-d');
+
+        // Try to get from cache first
+        $cached = EventInstanceCache::getCachedInstances($this, $start, $end);
+
+        if ($cached !== null) {
+            $count = 0;
+            foreach ($cached as $instanceData) {
+                yield EventInstance::fromArray($instanceData);
+
+                if ($limit && ++$count >= $limit) {
+                    break;
+                }
+            }
+            return;
+        }
+
+        // Generate fresh occurrences and cache them
+        $instances = [];
+        $count = 0;
+
+        foreach ($this->getOccurrences($startDate, $endDate, $limit) as $instance) {
+            $instances[] = $instance->toArray();
+            yield $instance;
+
+            if ($limit && ++$count >= $limit) {
+                break;
+            }
+        }
+
+        // Cache the results for future requests
+        EventInstanceCache::setCachedInstances($this, $start, $end, $instances);
+    }
 
     /**
      * Generate event occurrences using Carbon periods

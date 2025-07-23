@@ -26,18 +26,23 @@
             </div>
             <% end_if %>
 
+        </div>
+
+        <% if $Fields.find('Name', 'eventType') || $Fields.find('Name', 'allDay') %>
+        <div class="row g-3 mt-2">
             <% if $Fields.find('Name', 'eventType') %>
-            <div class="col-md-6 mt-2">
+            <div class="col-md-6">
                 $Fields.find('Name', 'eventType')
             </div>
             <% end_if %>
 
             <% if $Fields.find('Name', 'allDay') %>
-            <div class="col-md-6 mt-2">
+            <div class="col-md-6">
                 $Fields.find('Name', 'allDay')
             </div>
             <% end_if %>
         </div>
+        <% end_if %>
 
         <div class="row mt-3">
             <div class="col-12">
@@ -45,7 +50,7 @@
                     $Field
                 <% end_loop %>
                 <% if $HasActiveFilters %>
-                    <a href="$ClearFiltersLink" class="btn btn-outline-secondary" title="Remove all filters and show all events">Clear All</a>
+                    <a href="$ClearFiltersLink.ATT" class="btn btn-outline-secondary" title="Remove all filters and show all events">Clear All</a>
                 <% end_if %>
             </div>
         </div>

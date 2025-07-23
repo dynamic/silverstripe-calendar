@@ -21,40 +21,40 @@ class CalendarFilterFormTest extends SapphireTest
     // protected static $fixture_file = '../Fixtures/CalendarFixtures.yml';
 
     /**
-     * Test the static hasActiveFilters method with various filter parameters
+     * Test the static hasActiveFiltersStatic method with various filter parameters
      */
     public function testHasActiveFiltersStatic()
     {
         // Test with no filters
         $request = new HTTPRequest('GET', '/calendar');
-        $this->assertFalse(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertFalse(CalendarFilterForm::hasActiveFiltersStatic($request));
 
         // Test with search filter
         $request = new HTTPRequest('GET', '/calendar', ['search' => 'test']);
-        $this->assertTrue(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
 
         // Test with category filter
         $request = new HTTPRequest('GET', '/calendar', ['categories' => ['1']]);
-        $this->assertTrue(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
 
         // Test with date range filters
         $request = new HTTPRequest('GET', '/calendar', ['from' => '2025-01-01']);
-        $this->assertTrue(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
 
         $request = new HTTPRequest('GET', '/calendar', ['to' => '2025-12-31']);
-        $this->assertTrue(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
 
         // Test with event type filter
         $request = new HTTPRequest('GET', '/calendar', ['eventType' => 'one-time']);
-        $this->assertTrue(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
 
         // Test with all-day filter
         $request = new HTTPRequest('GET', '/calendar', ['allDay' => '1']);
-        $this->assertTrue(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
 
         // Test with empty string values (should return false)
         $request = new HTTPRequest('GET', '/calendar', ['search' => '']);
-        $this->assertFalse(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertFalse(CalendarFilterForm::hasActiveFiltersStatic($request));
 
         // Test with multiple filters
         $request = new HTTPRequest('GET', '/calendar', [
@@ -62,7 +62,7 @@ class CalendarFilterFormTest extends SapphireTest
             'categories' => ['1', '2'],
             'from' => '2025-01-01'
         ]);
-        $this->assertTrue(CalendarFilterForm::hasActiveFilters($request));
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
     }
 
     /**
@@ -129,7 +129,7 @@ class CalendarFilterFormTest extends SapphireTest
         $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         // Test the static method directly with null to ensure it handles it
-        $result = CalendarFilterForm::hasActiveFilters($request);
+        $result = CalendarFilterForm::hasActiveFiltersStatic($request);
         $this->assertFalse($result);
     }
 

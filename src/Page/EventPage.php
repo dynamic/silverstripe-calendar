@@ -692,4 +692,27 @@ class EventPage extends \Page
             return RecursiveEvent::get()->filter('ParentID', $this->ID);
         }
     }
+
+    /**
+     * Clear caches when event is modified
+     */
+    public function onAfterWrite(): void
+    {
+        parent::onAfterWrite();
+
+        // Clear caches if recursion-related fields changed
+        if ($this->recursionChanged()) {
+            \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
+        }
+    }
+
+    /**
+     * Clear caches when event is deleted
+     */
+    public function onAfterDelete(): void
+    {
+        parent::onAfterDelete();
+
+        \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
+    }
 }

@@ -1,6 +1,6 @@
 <div class="calendar-filter-form bg-light p-4 rounded shadow-sm mb-4">
-    <h5>Filter Events</h5>
-    <form $AttributesHTML>
+    <h5 id="filter-events-heading">Filter Events</h5>
+    <form $AttributesHTML aria-labelledby="filter-events-heading">
         <div class="row g-3">
             <% if $Fields.find('Name', 'search') %>
             <div class="col-md-4">
@@ -50,7 +50,7 @@
                     $Field
                 <% end_loop %>
                 <% if $HasActiveFilters %>
-                    <a href="$ClearFiltersLink.ATT" class="btn btn-outline-secondary" title="Remove all filters and show all events">Clear All</a>
+                    <a href="$ClearFiltersLink.ATT" class="btn btn-outline-secondary" role="button" aria-label="Remove all filters and show all events">Clear All</a>
                 <% end_if %>
             </div>
         </div>

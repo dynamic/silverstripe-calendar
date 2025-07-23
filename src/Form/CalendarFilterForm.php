@@ -72,7 +72,7 @@ class CalendarFilterForm extends Form
         // TODO: Bundle locally for better security and offline capability
         Requirements::javascript('https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js');
         Requirements::css('https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css');
-        
+
         // Add SRI attributes for security
         Requirements::customScript('
             document.addEventListener("DOMContentLoaded", function() {
@@ -300,12 +300,12 @@ class CalendarFilterForm extends Form
     }
 
     /**
-     * Check if any filters are currently active
+     * Check if any filters are currently active (static method)
      *
      * @param HTTPRequest $request
      * @return bool
      */
-    public static function hasActiveFilters(HTTPRequest $request): bool
+    public static function hasActiveFiltersStatic(HTTPRequest $request): bool
     {
         $filterVars = ['categories', 'eventType', 'allDay', 'search', 'from', 'to'];
 
@@ -316,6 +316,55 @@ class CalendarFilterForm extends Form
             }
         }
 
+        return false;
+    }
+
+    /**
+     * Instance method for hasActiveFilters that can be called from templates
+     * without parameters. This resolves the ArgumentCountError when templates
+     * call $hasActiveFilters instead of $HasActiveFilters.
+     *
+     * @return bool
+     */
+    public function hasActiveFilters(): bool
+    {
+        try {
+            // Try to get the request from the controller
+            $controller = $this->getController();
+            if ($controller && method_exists($controller, 'getRequest')) {
+                $request = $controller->getRequest();
+                if ($request && $request instanceof HTTPRequest) {
+                    return self::hasActiveFiltersStatic($request);
+                }
+            }
+
+            // Fallback: try to get request from current controller
+            if (class_exists('SilverStripe\Control\Controller')) {
+                $currentController = \SilverStripe\Control\Controller::curr();
+                if ($currentController && method_exists($currentController, 'getRequest')) {
+                    $request = $currentController->getRequest();
+                    if ($request && $request instanceof HTTPRequest) {
+                        return self::hasActiveFiltersStatic($request);
+                    }
+                }
+            }
+        } catch (\LogicException $e) {
+            // Log the error for debugging but don't break the page
+            if (class_exists('SilverStripe\Core\Injector\Injector')) {
+                $logger = \SilverStripe\Core\Injector\Injector::inst()->get('Psr\Log\LoggerInterface');
+                $logger->warning('CalendarFilterForm: Logic error while checking active filters - ' . $e->getMessage());
+            }
+        } catch (\RuntimeException $e) {
+            // Log the error for debugging but don't break the page
+            if (class_exists('SilverStripe\Core\Injector\Injector')) {
+                $logger = \SilverStripe\Core\Injector\Injector::inst()->get('Psr\Log\LoggerInterface');
+                $logger->warning(
+                    'CalendarFilterForm: Runtime error while checking active filters - ' . $e->getMessage()
+                );
+            }
+        }
+
+        // Safe fallback - no filters are active if we can't determine
         return false;
     }
 
@@ -372,7 +421,7 @@ class CalendarFilterForm extends Form
             if ($controller && method_exists($controller, 'getRequest')) {
                 $request = $controller->getRequest();
                 if ($request && $request instanceof HTTPRequest) {
-                    return self::hasActiveFilters($request);
+                    return self::hasActiveFiltersStatic($request);
                 }
             }
 
@@ -382,7 +431,7 @@ class CalendarFilterForm extends Form
                 if ($currentController && method_exists($currentController, 'getRequest')) {
                     $request = $currentController->getRequest();
                     if ($request && $request instanceof HTTPRequest) {
-                        return self::hasActiveFilters($request);
+                        return self::hasActiveFiltersStatic($request);
                     }
                 }
             }
@@ -396,7 +445,9 @@ class CalendarFilterForm extends Form
             // Log the error for debugging but don't break the page
             if (class_exists('SilverStripe\Core\Injector\Injector')) {
                 $logger = \SilverStripe\Core\Injector\Injector::inst()->get('Psr\Log\LoggerInterface');
-                $logger->warning('CalendarFilterForm: Runtime error while checking active filters - ' . $e->getMessage());
+                $logger->warning(
+                    'CalendarFilterForm: Runtime error while checking active filters - ' . $e->getMessage()
+                );
             }
         }
 

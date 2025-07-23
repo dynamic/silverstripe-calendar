@@ -107,7 +107,7 @@ class CalendarController extends \PageController
      */
     public function FilterForm(): CalendarFilterForm
     {
-        return new CalendarFilterForm($this, 'FilterForm', $this->calendar, $this->getRequest());
+        return CalendarFilterForm::create($this, 'FilterForm', $this->calendar, $this->getRequest());
     }
 
     /**

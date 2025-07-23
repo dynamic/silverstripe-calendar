@@ -12,7 +12,7 @@ use SilverStripe\Forms\Form;
 
 /**
  * Tests for CalendarFilterForm
- * 
+ *
  * Focuses on testing the bug fix for ArgumentCountError in hasActiveFilters method call
  */
 class CalendarFilterFormTest extends SapphireTest
@@ -77,12 +77,12 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar', ['search' => 'test']);
         $request->setSession(new Session([]));
         $controller->setRequest($request);
 
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         // This should not throw an ArgumentCountError
         $result = $form->getHasActiveFilters();
@@ -100,12 +100,12 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar');
         $request->setSession(new Session([]));
         $controller->setRequest($request);
 
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         $result = $form->getHasActiveFilters();
         $this->assertFalse($result);
@@ -123,10 +123,10 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar');
         $request->setSession(new Session([]));
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         // Test the static method directly with null to ensure it handles it
         $result = CalendarFilterForm::hasActiveFilters($request);
@@ -144,10 +144,10 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar');
         $request->setSession(new Session([]));
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         // Test the method works normally
         $result = $form->getHasActiveFilters();
@@ -165,10 +165,10 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar');
         $request->setSession(new Session([]));
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         // Test the method works normally
         $result = $form->getHasActiveFilters();
@@ -186,10 +186,10 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar');
         $request->setSession(new Session([]));
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         // Test the method works normally
         $result = $form->getHasActiveFilters();
@@ -206,10 +206,10 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar');
         $request->setSession(new Session([]));
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         $link = $form->getClearFiltersLink();
         $this->assertStringContainsString($calendar->URLSegment, $link);
@@ -225,12 +225,12 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar');
         $request->setSession(new Session([]));
 
         // This should not throw any errors
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         $this->assertInstanceOf(CalendarFilterForm::class, $form);
         $this->assertInstanceOf(Form::class, $form);
@@ -247,7 +247,7 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar';
         $calendar->write();
 
-        $controller = new Controller();
+        $controller = Controller::create();
         $request = new HTTPRequest('GET', '/calendar', [
             'search' => 'test event',
             'from' => '2025-01-01',
@@ -255,7 +255,7 @@ class CalendarFilterFormTest extends SapphireTest
         ]);
         $request->setSession(new Session([]));
 
-        $form = new CalendarFilterForm($controller, 'FilterForm', $calendar, $request);
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         // Check that fields have the correct values
         $searchField = $form->Fields()->dataFieldByName('search');

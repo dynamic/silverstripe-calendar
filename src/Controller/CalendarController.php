@@ -4,336 +4,299 @@ namespace Dynamic\Calendar\Controller;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Model\Category;
+use Dynamic\Calendar\Model\EventInstance;
+use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
-use SilverStripe\Control\Controller;
-use SilverStripe\Forms\CheckboxSetField;
-use SilverStripe\Forms\DateField;
-use SilverStripe\Forms\FieldGroup;
-use SilverStripe\Forms\FieldList;
-use SilverStripe\Forms\Form;
-use SilverStripe\Forms\FormAction;
-use SilverStripe\Forms\LiteralField;
-use SilverStripe\Forms\TextField;
-use SilverStripe\ORM\DataList;
+use Dynamic\Calendar\Form\CalendarFilterForm;
+use SilverStripe\Control\HTTPRequest;
+use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\PaginatedList;
+use SilverStripe\View\ArrayData;
 
 /**
- * Class CalendarController
+ * Calendar Controller
  *
- * @package calendar
+ * Handles the display and filtering of calendar events, including virtual instances
+ * created by the Carbon recursion system.
+ *
+ * @package Dynamic\Calendar\Controller
  */
 class CalendarController extends \PageController
 {
     /**
-     * @var
+     * @var Calendar
      */
-    private $events = null;
+    protected Calendar $calendar;
 
     /**
      * @var array
      */
-    private array $default_filter;
+    private static array $allowed_actions = [
+        'index',
+        'events',
+    ];
 
     /**
-     * @var string
+     * @var array
      */
-    private string $view_type;
+    private static array $url_handlers = [
+        '' => 'index',
+        'events' => 'events',
+    ];
 
     /**
-     * The Public stage.
+     * @var int
      */
-    const LISTVIEW = 'list';
+    private static int $events_per_page = 12;
 
     /**
-     * The draft (default) stage
+     * @var bool
      */
-    const GRIDVIEW = 'grid';
+    protected bool $useDefaultFilter = false;
 
     /**
-     * @var string
+     * @var ArrayList
      */
-    private string $grid_link;
+    protected $events;
 
     /**
-     * @var string
+     * Constructor
+     *
+     * @param Calendar $calendar
      */
-    private string $list_link;
-
-    /**
-     * @var
-     */
-    private $start_date;
-
-    /**
-     * @var string
-     */
-    private static string $view_session = 'Calendar.VIEW';
-
-    /**
-     * @param bool $global
-     * @return $this
-     */
-    public function setDefaultFilter($global = false): self
+    public function __construct(Calendar $calendar)
     {
-        $filter = [];
-
-        if (!$global) {
-            $filter['ParentID'] = $this->data()->ID;
-        }
-
-        $this->default_filter = !empty($filter) ? $filter : null;
-
-        return $this;
+        $this->calendar = $calendar;
+        parent::__construct($calendar);
     }
 
     /**
+     * Default action - display calendar with events
+     *
+     * @param HTTPRequest $request
      * @return array
      */
-    public function getDefaultFilter(): array
+    public function index(HTTPRequest $request): array
     {
-        if (!$this->default_filter) {
-            $this->setDefaultFilter();
+        return $this->renderCalendar($request);
+    }
+
+    /**
+     * Events action for AJAX requests
+     *
+     * @param HTTPRequest $request
+     * @return array
+     */
+    public function events(HTTPRequest $request): array
+    {
+        $fromDate = $this->getFromDate($request);
+        $toDate = $this->getToDate($request);
+
+        $events = $this->calendar->getEventsFeed(null, null, $fromDate, $toDate);
+
+        return [
+            'Events' => $events,
+            'TotalEvents' => $events->count(),
+        ];
+    }
+
+    /**
+     * Get the calendar filter form
+     *
+     * @return CalendarFilterForm
+     */
+    public function FilterForm(): CalendarFilterForm
+    {
+        return CalendarFilterForm::create($this, 'FilterForm', $this->calendar, $this->getRequest());
+    }
+
+    /**
+     * Render the calendar with events
+     *
+     * @param HTTPRequest $request
+     * @return array
+     */
+    protected function renderCalendar(HTTPRequest $request): array
+    {
+        $fromDate = $this->getFromDate($request);
+        $toDate = $this->getToDate($request);
+
+        // Get category filter
+        $categoryIDs = $request->getVar('categories');
+        $categories = null;
+
+        if ($categoryIDs) {
+            if (!is_array($categoryIDs)) {
+                $categoryIDs = [$categoryIDs];
+            }
+            $categories = Category::get()->byIDs($categoryIDs);
         }
 
-        return $this->default_filter;
+        // Use the Calendar page's getEventsFeed method with category filtering
+        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+
+        // Create paginated list
+        $paginatedEvents = PaginatedList::create($events, $request);
+        $paginatedEvents->setPageLength($this->config()->get('events_per_page'));
+
+        return [
+            'Calendar' => $this->calendar,
+            'Events' => $paginatedEvents,
+            'CurrentFromDate' => $fromDate->format('Y-m-d'),
+            'CurrentToDate' => $toDate->format('Y-m-d'),
+            'RecurringEventsCount' => $this->getRecurringEventsCount(),
+            'OneTimeEventsCount' => $this->getOneTimeEventsCount(),
+            'AvailableCategories' => $this->getAvailableCategoriesForTemplate($request),
+            'ShowCategoryFilter' => $this->calendar->ShowCategoryFilter,
+        ];
     }
 
     /**
-     * @return $this
+     * Get from date from request or default
+     *
+     * @param HTTPRequest $request
+     * @return Carbon
      */
-    protected function setEvents(): self
+    protected function getFromDate(HTTPRequest $request): Carbon
     {
-        $events = EventPage::get()
-            ->filterAny([
-                'StartDate:GreaterThanOrEqual' => $this->getStartDate(),
-                'EndDate:GreaterThanOrEqual' => date('Y-m-d', strtotime('now')),
-            ]);
+        $from = $request->getVar('from');
 
-        if ($this->getDefaultFilter() != null) {
-            $events->filter($this->getDefaultFilter());
+        if ($from && Carbon::hasFormat($from, 'Y-m-d')) {
+            return Carbon::createFromFormat('Y-m-d', $from);
         }
 
-        $events = $this->filterByRequest($events);
-
-        $this->extend('updateEvents', $events);
-
-        $this->events = $events;
-
-        return $this;
+        // Default to start of current month
+        return Carbon::now()->startOfMonth();
     }
 
     /**
-     * @return |null
+     * Get to date from request or default
+     *
+     * @param HTTPRequest $request
+     * @return Carbon
      */
-    public function getEvents(): ?DataList
+    protected function getToDate(HTTPRequest $request): Carbon
     {
-        if ($this->events === null) {
-            $this->setEvents();
+        $to = $request->getVar('to');
+
+        if ($to && Carbon::hasFormat($to, 'Y-m-d')) {
+            return Carbon::createFromFormat('Y-m-d', $to);
         }
 
-        return $this->events;
+        // Default to end of next month
+        return Carbon::now()->addMonth()->endOfMonth();
     }
 
     /**
-     * @return PaginatedList
+     * Get count of recurring events
+     *
+     * @return int
      */
-    public function getPaginatedEvents(): PaginatedList
+    protected function getRecurringEventsCount(): int
     {
-        return PaginatedList::create($this->getEvents(), $this->getRequest())
-            ->setPageLength($this->data()->config()->get('events_per_page'));
+        return EventPage::get()
+            ->filter([
+                'ParentID' => $this->calendar->ID,
+            ])
+            ->exclude('Recursion', 'NONE')
+            ->count();
     }
 
     /**
+     * Get count of one-time events
+     *
+     * @return int
+     */
+    protected function getOneTimeEventsCount(): int
+    {
+        return EventPage::get()
+            ->filter([
+                'ParentID' => $this->calendar->ID,
+                'Recursion' => 'NONE',
+            ])
+            ->count();
+    }
+
+    /**
+     * Get link to this calendar
+     *
+     * @param string $action
      * @return string
      */
-    protected function getStartDate(): string
+    public function Link($action = null): string
     {
-        if (!$this->start_date) {
-            $this->setStartDate();
+        return $this->calendar->Link($action);
+    }
+
+    /**
+     * Get the calendar page
+     *
+     * @return Calendar
+     */
+    public function getCalendar(): Calendar
+    {
+        return $this->calendar;
+    }
+
+    /**
+     * Get available categories for template with selection state
+     *
+     * @param HTTPRequest $request
+     * @return ArrayList
+     */
+    protected function getAvailableCategoriesForTemplate(HTTPRequest $request): ArrayList
+    {
+        $selectedCategoryIDs = $request->getVar('categories') ?: [];
+        if (!is_array($selectedCategoryIDs)) {
+            $selectedCategoryIDs = [$selectedCategoryIDs];
         }
 
-        return $this->start_date;
-    }
+        // Get categories that are actually used by events in this calendar
+        // Use efficient join query to avoid N+1 problem
+        $categoryIDs = EventPage::get()
+            ->filter(['ParentID' => $this->calendar->ID])
+            ->leftJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"')
+            ->leftJoin('Category', '"EventPage_Categories"."CategoryID" = "Category"."ID"')
+            ->column('Category.ID');
 
-    /**
-     * @return $this
-     */
-    protected function setStartDate(): self
-    {
-        $this->start_date = ($startDate = $this->getRequest()->getVar('StartDate'))
-            ? Carbon::parse($startDate)->setTimeFrom(Carbon::now())->format(Carbon::MOCK_DATETIME_FORMAT)
-            : Carbon::now()->format(Carbon::MOCK_DATETIME_FORMAT);
+        // Remove duplicates and null values
+        $categoryIDs = array_unique(array_filter($categoryIDs));
 
-        return $this;
-    }
+        // Get the category objects
+        $availableCategories = ArrayList::create();
+        if (!empty($categoryIDs)) {
+            $categories = Category::get()->byIDs($categoryIDs)->sort('Title ASC');
 
-    /**
-     * @param DataList $events
-     * @return mixed
-     */
-    protected function filterByRequest(Datalist $events): mixed
-    {
-        if (!$events->exists()) {
-            return $events;
+            foreach ($categories as $category) {
+                $categoryData = ArrayData::create([
+                    'ID' => $category->ID,
+                    'Title' => $category->Title,
+                    'IsSelected' => in_array($category->ID, $selectedCategoryIDs),
+                ]);
+                $availableCategories->push($categoryData);
+            }
         }
 
-        $request = $this->getRequest();
+        return $availableCategories;
+    }
 
-        if ($endDate = $request->getVar('EndDate')) {
-            $endDateTime = Carbon::parse($endDate)->endOfDay();
-
-            $events = $events->filter(
-                'EndDate:LessThanOrEqual',
-                $endDateTime->format(Carbon::MOCK_DATETIME_FORMAT)
-            );
+    /**
+     * Clean and sanitize request variables
+     *
+     * @param array $vars
+     * @return array
+     */
+    public static function clean_request_vars(array $vars): array
+    {
+        // Remove any potentially dangerous variables
+        $cleanVars = [];
+        foreach ($vars as $key => $value) {
+            if (is_string($key) && is_scalar($value)) {
+                $cleanVars[$key] = $value;
+            } elseif (is_string($key) && is_array($value)) {
+                $cleanVars[$key] = self::clean_request_vars($value);
+            }
         }
-
-        if ($title = $request->getVar('Title')) {
-            $events = $events->filter('Title:PartialMatch', $title);
-        }
-
-        if ($categories = $request->getVar('Categories')) {
-            $events = $events->filter(['Categories.ID' => $categories]);
-        }
-
-        return $events;
-    }
-
-    /**
-     * @return Form
-     */
-    public function EventFilterForm(): Form
-    {
-        $fields = FieldList::create(
-            TextField::create('Title')
-                ->setTitle('Title')
-                ->addExtraClass('largelabel')
-                ->addExtraClass('double-bottom'),
-            LiteralField::create(
-                'filterText',
-                '<div class="largelabel add-bottom labelborder"><label>Filters</label></div>'
-            ),
-            FieldGroup::create(
-                'dates',
-                FieldList::create(
-                    $date = DateField::create('StartDate')
-                        ->setTitle('')->addExtraClass('startdate'),
-                    LiteralField::create(
-                        'daterangemiddle',
-                        '<div class="daterangemiddle"><label>to</label></div>'
-                    ),
-                    DateField::create('EndDate')
-                        ->setTitle('')->addExtraClass('enddate')
-                )
-            )->setTitle('Date Range')->addExtraClass('double-bottom'),
-            CheckboxSetField::create('Categories')
-                ->setTitle('Categories')
-                ->setSource(Category::get()->map())
-        );
-
-        $actions = FieldList::create(
-            FormAction::create('doFilter')
-                ->setTitle('Filter')
-        );
-
-        $form = Form::create($this, __FUNCTION__, $fields, $actions)
-            ->setFormMethod('GET')
-            ->setFormAction($this->Link())
-            ->disableSecurityToken()
-            ->loadDataFrom($this->request->getVars());
-
-        $this->extend('updateEventSearchForm', $form);
-
-        return $form;
-    }
-
-    /**
-     * @return $this
-     */
-    protected function setGridLink(): self
-    {
-        $getVars = $this->getRequest()->getVars();
-        $getVars['view'] = static::GRIDVIEW;
-
-        $this->grid_link = Controller::join_links($this->Link(), http_build_query($getVars));
-
-        return $this;
-    }
-
-    /**
-     * @return string
-     */
-    public function getGridLink(): string
-    {
-        if (!$this->grid_link) {
-            $this->setGridLink();
-        }
-
-        return $this->grid_link;
-    }
-
-    /**
-     * @return $this
-     */
-    protected function setListLink(): self
-    {
-        $getVars = $this->getRequest()->getVars();
-        $getVars['view'] = static::LISTVIEW;
-
-        $this->list_link = Controller::join_links($this->Link(), http_build_query($getVars));
-
-        return $this;
-    }
-
-    /**
-     * @return string
-     */
-    public function getListLink(): string
-    {
-        if (!$this->list_link) {
-            $this->setListLink();
-        }
-
-        return $this->list_link;
-    }
-
-    /**
-     * @return string
-     */
-    public function getViewType(): string
-    {
-        if (!$this->view_type) {
-            $this->setViewType();
-        }
-
-        return $this->view_type;
-    }
-
-    /**
-     * @return $this
-     */
-    protected function setViewType(): self
-    {
-        if (($view = $this->getRequest()->getVar('view')) && $this->validView($view)) {
-            $this->getRequest()->getSession()->set($this->config()->get('calendar_session'), $view);
-            $this->view_type = $view;
-        } elseif (($view = $this->getRequest()->getSession()->get($this->config()->get('calendar_session')))
-            && $this->validView($view)
-        ) {
-            $this->view_type = $view;
-        } else {
-            $this->view_type = static::GRIDVIEW;
-        }
-
-        return $this;
-    }
-
-    /**
-     * @param $view
-     * @return bool
-     */
-    protected function validView($view): bool
-    {
-        return $view == static::LISTVIEW || $view == static::GRIDVIEW;
+        return $cleanVars;
     }
 }

@@ -1,0 +1,61 @@
+{
+  "name": "silverstripe-calendar-frontend",
+  "version": "1.0.0",
+  "description": "Modern frontend build system for Dynamic SilverStripe Calendar module",
+  "main": "webpack.config.js",
+  "scripts": {
+    "dev": "webpack --mode development --watch",
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "lint:js": "eslint client/src/js/**/*.js",
+    "lint:css": "stylelint client/src/scss/**/*.scss",
+    "clean": "rm -rf client/dist/*",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "install-playwright": "playwright install"
+  },
+  "dependencies": {
+    "@fullcalendar/bootstrap5": "^6.1.0",
+    "@fullcalendar/core": "^6.1.0",
+    "@fullcalendar/daygrid": "^6.1.0",
+    "@fullcalendar/interaction": "^6.1.0",
+    "@fullcalendar/list": "^6.1.0",
+    "@fullcalendar/timegrid": "^6.1.0",
+    "bootstrap": "^5.3.0",
+    "choices.js": "^10.2.0",
+    "flatpickr": "^4.6.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.22.0",
+    "@babel/preset-env": "^7.22.0",
+    "@playwright/test": "^1.40.0",
+    "babel-loader": "^9.1.0",
+    "css-loader": "^6.8.0",
+    "eslint": "^8.45.0",
+    "mini-css-extract-plugin": "^2.7.0",
+    "sass": "^1.89.2",
+    "sass-loader": "^13.3.0",
+    "style-loader": "^3.3.0",
+    "stylelint": "^15.10.0",
+    "stylelint-config-standard-scss": "^10.0.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ],
+  "keywords": [
+    "silverstripe",
+    "calendar",
+    "bootstrap",
+    "webpack",
+    "frontend",
+    "testing",
+    "playwright"
+  ],
+  "author": "Dynamic",
+  "license": "BSD-3-Clause"
+}

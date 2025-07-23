@@ -27,7 +27,7 @@ class CalendarModule {
         console.warn('Failed to parse calendar config:', e);
       }
     }
-    
+
     // Fallback configuration
     return {
       apiEndpoint: '/calendar/events',
@@ -142,7 +142,7 @@ class CalendarModule {
   initializeChoicesJS(container) {
     // Initialize Choices.js for multi-select dropdowns in filter form
     const selectElements = container.querySelectorAll('select[multiple]');
-    
+
     selectElements.forEach(select => {
       new Choices(select, {
         removeItemButton: true,

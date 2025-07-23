@@ -57,7 +57,7 @@ class CalendarAdminExtension extends Extension
             'dateFormat' => 'Y-m-d',
             'timeFormat' => 'H:i:s'
         ];
-        
+
         // Pass config via data attribute instead of inline script
         $this->getOwner()->CalendarAdminConfig = json_encode($adminConfig);
     }

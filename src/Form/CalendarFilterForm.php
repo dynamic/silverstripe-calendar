@@ -72,66 +72,6 @@ class CalendarFilterForm extends Form
         Requirements::javascript('dynamic/silverstripe-calendar:client/dist/js/calendar.bundle.js');
         Requirements::css('dynamic/silverstripe-calendar:client/dist/css/calendar.bundle.css');
 
-        // Add CSS for horizontal layout and Clear Filters functionality
-        $fields->push(LiteralField::create('horizontalCSS', '
-            <style>
-            .horizontal-form fieldset { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; }
-            .horizontal-form .field { flex: 1; min-width: 200px; margin-bottom: 0 !important; }
-            .horizontal-form .field.col-md-4 { flex: 2; }
-            .horizontal-form .field.col-md-3 { flex: 1.5; }
-            .horizontal-form .field.col-md-2 { flex: 1; }
-            .horizontal-form .form-actions { margin-top: 1rem; }
-            .horizontal-form .btn-toolbar { display: flex; gap: 0.5rem; align-items: center; }
-            @media (max-width: 768px) {
-                .horizontal-form fieldset { flex-direction: column; }
-                .horizontal-form .field { width: 100%; }
-            }
-            </style>
-            <script>
-            document.addEventListener("DOMContentLoaded", function() {
-                // Add Clear Filters button if URL has search parameters (indicating active filters)
-                const urlParams = new URLSearchParams(window.location.search);
-                const hasFilters = urlParams.has("search") || urlParams.has("categories") ||
-                                 urlParams.has("from") || urlParams.has("to") ||
-                                 urlParams.has("eventType") || urlParams.has("allDay");
-
-                if (hasFilters) {
-                    const actionsDiv = document.querySelector(".btn-toolbar.form-actions");
-                    if (actionsDiv) {
-                        const clearLink = document.createElement("a");
-                        clearLink.href = window.location.pathname;
-                        clearLink.className = "btn btn-outline-secondary";
-                        clearLink.title = "Remove all filters and show all events";
-                        clearLink.textContent = "Clear All";
-                        actionsDiv.appendChild(clearLink);
-                    }
-                }
-
-                // Initialize Choices.js on multi-select dropdowns
-                if (typeof Choices !== "undefined") {
-                    const multiSelectElements = document.querySelectorAll(".js-choice");
-                    multiSelectElements.forEach(function(element) {
-                        // Only initialize on select elements, not wrapper divs
-                        if (element.tagName === "SELECT") {
-                            new Choices(element, {
-                                removeItemButton: true,
-                                searchEnabled: true,
-                                searchChoices: true,
-                                placeholderValue: "Choose categories",
-                                noChoicesText: "No categories available",
-                                itemSelectText: "Press to select",
-                                shouldSort: false,
-                                searchPlaceholderValue: "Search categories..."
-                            });
-                        }
-                    });
-                } else {
-                    console.log("Choices.js library not loaded, falling back to native multi-select");
-                }
-            });
-            </script>
-        '));
-
         // Row 1: Horizontal layout with main filters
         // Search field - takes up more space
         $fields->push(TextField::create('search', 'Search Events')

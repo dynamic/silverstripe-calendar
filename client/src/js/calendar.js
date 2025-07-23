@@ -13,7 +13,28 @@ import './components/KeyboardNavigation';
 
 class CalendarModule {
   constructor() {
+    this.config = this.loadConfig();
     this.init();
+  }
+
+  loadConfig() {
+    // Load calendar configuration from data attribute (CSP compliant)
+    const configElement = document.querySelector('[data-calendar-config]');
+    if (configElement) {
+      try {
+        return JSON.parse(configElement.dataset.calendarConfig);
+      } catch (e) {
+        console.warn('Failed to parse calendar config:', e);
+      }
+    }
+    
+    // Fallback configuration
+    return {
+      apiEndpoint: '/calendar/events',
+      dateFormat: 'Y-m-d',
+      timeFormat: 'H:i:s',
+      locale: 'en'
+    };
   }
 
   init() {
@@ -45,6 +66,7 @@ class CalendarModule {
     if (filterForm) {
       this.smartFiltering = new SmartFiltering(filterForm);
       this.initializeChoicesJS(filterForm);
+      this.initializeClearFilters(filterForm);
     }
 
     // Initialize accessibility features
@@ -157,6 +179,26 @@ class CalendarModule {
         }
       });
     });
+  }
+
+  initializeClearFilters(container) {
+    // Add Clear Filters button if URL has search parameters (indicating active filters)
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasFilters = urlParams.has('search') || urlParams.has('categories') ||
+                     urlParams.has('from') || urlParams.has('to') ||
+                     urlParams.has('eventType') || urlParams.has('allDay');
+
+    if (hasFilters) {
+      const actionsDiv = container.querySelector('.btn-toolbar.form-actions');
+      if (actionsDiv) {
+        const clearLink = document.createElement('a');
+        clearLink.href = window.location.pathname;
+        clearLink.className = 'btn btn-outline-secondary';
+        clearLink.title = 'Remove all filters and show all events';
+        clearLink.textContent = 'Clear All';
+        actionsDiv.appendChild(clearLink);
+      }
+    }
   }
 
   updateListContent(html) {

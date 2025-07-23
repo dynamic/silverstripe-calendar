@@ -73,12 +73,9 @@ class CalendarFrontendExtension extends Extension
         Requirements::javascript($resourceDir . 'js/vendors.bundle.js');
         Requirements::javascript($resourceDir . 'js/calendar.bundle.js');
 
-        // Add calendar configuration
+        // Add calendar configuration as data attribute to avoid inline scripts (CSP compliance)
         $config = $this->getCalendarConfig();
-        Requirements::customScript(
-            "window.CalendarConfig = " . json_encode($config) . ";",
-            'calendar-config'
-        );
+        $this->getOwner()->CalendarConfig = json_encode($config);
     }
 
     /**

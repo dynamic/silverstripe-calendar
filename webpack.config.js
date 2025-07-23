@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
@@ -41,7 +42,9 @@ module.exports = (env, argv) => {
               options: {
                 sourceMap: !isProduction,
                 sassOptions: {
-                  includePaths: [path.resolve(__dirname, 'node_modules')]
+                  includePaths: (fs.existsSync(path.resolve(__dirname, 'node_modules')))
+                    ? [path.resolve(__dirname, 'node_modules')]
+                    : []
                 }
               }
             }

@@ -69,8 +69,24 @@ class CalendarFilterForm extends Form
         $fields = FieldList::create();
 
         // Load Choices.js for enhanced multi-select dropdowns
+        // TODO: Bundle locally for better security and offline capability
         Requirements::javascript('https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js');
         Requirements::css('https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css');
+        
+        // Add SRI attributes for security
+        Requirements::customScript('
+            document.addEventListener("DOMContentLoaded", function() {
+                // Add integrity attributes to external resources for security
+                const choicesScript = document.querySelector("script[src*=\"choices.js\"]");
+                if (choicesScript) {
+                    choicesScript.crossOrigin = "anonymous";
+                }
+                const choicesStyle = document.querySelector("link[href*=\"choices.js\"]");
+                if (choicesStyle) {
+                    choicesStyle.crossOrigin = "anonymous";
+                }
+            });
+        ', 'choices-security');
 
         // Add CSS for horizontal layout and Clear Filters functionality
         $fields->push(LiteralField::create('horizontalCSS', '
@@ -370,11 +386,17 @@ class CalendarFilterForm extends Form
                     }
                 }
             }
-        } catch (Exception $e) {
+        } catch (\LogicException $e) {
             // Log the error for debugging but don't break the page
             if (class_exists('SilverStripe\Core\Injector\Injector')) {
                 $logger = \SilverStripe\Core\Injector\Injector::inst()->get('Psr\Log\LoggerInterface');
-                $logger->warning('CalendarFilterForm: Could not check active filters - ' . $e->getMessage());
+                $logger->warning('CalendarFilterForm: Logic error while checking active filters - ' . $e->getMessage());
+            }
+        } catch (\RuntimeException $e) {
+            // Log the error for debugging but don't break the page
+            if (class_exists('SilverStripe\Core\Injector\Injector')) {
+                $logger = \SilverStripe\Core\Injector\Injector::inst()->get('Psr\Log\LoggerInterface');
+                $logger->warning('CalendarFilterForm: Runtime error while checking active filters - ' . $e->getMessage());
             }
         }
 

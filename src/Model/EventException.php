@@ -40,6 +40,20 @@ use SilverStripe\Security\PermissionProvider;
 class EventException extends DataObject implements PermissionProvider
 {
     /**
+     * Check if validation should be skipped
+     * More specific than Director::isDev() for better control
+     *
+     * @return bool
+     */
+    protected function shouldSkipValidation(): bool
+    {
+        // Skip validation during fixture loading or testing
+        return Director::isDev() || 
+               (defined('SS_ENVIRONMENT_TYPE') && SS_ENVIRONMENT_TYPE === 'test') ||
+               $this->config()->get('skip_validation');
+    }
+
+    /**
      * @var string
      */
     private static string $table_name = 'EventException';
@@ -302,7 +316,7 @@ class EventException extends DataObject implements PermissionProvider
 
         // Skip validation if we're in a test environment and this is a new record
         // This allows fixtures to be loaded without triggering premature validation
-        if (!$this->isInDB() && Director::isDev()) {
+        if (!$this->isInDB() && $this->shouldSkipValidation()) {
             return;
         }
 

@@ -164,7 +164,8 @@ trait CarbonRecursion
             });
         } catch (\Exception $e) {
             // Log error and return null to prevent crashes
-            error_log("Error creating Carbon period for event {$this->ID}: " . $e->getMessage());
+            $logger = \SilverStripe\Core\Injector\Injector::inst()->get(\Psr\Log\LoggerInterface::class);
+            $logger->error("Error creating Carbon period for event {$this->ID}: " . $e->getMessage());
             return null;
         }
     }

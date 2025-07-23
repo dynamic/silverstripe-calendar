@@ -48,19 +48,17 @@ class CalendarAdminExtension extends Extension
      */
     protected function includeAdminAssets(): void
     {
-        $resourceDir = 'vendor/dynamic/silverstripe-calendar/client/dist/';
+        // Include admin JavaScript using proper SilverStripe module syntax
+        Requirements::javascript('dynamic/silverstripe-calendar:client/dist/js/admin.bundle.js');
 
-        // Include admin JavaScript
-        Requirements::javascript($resourceDir . 'js/admin.bundle.js');
-
-        // Add admin configuration
-        Requirements::customScript(
-            "window.CalendarAdminConfig = " . json_encode([
-                'timezone' => date_default_timezone_get(),
-                'dateFormat' => 'Y-m-d',
-                'timeFormat' => 'H:i:s'
-            ]) . ";",
-            'calendar-admin-config'
-        );
+        // Add admin configuration as data attribute for CSP compliance
+        $adminConfig = [
+            'timezone' => date_default_timezone_get(),
+            'dateFormat' => 'Y-m-d',
+            'timeFormat' => 'H:i:s'
+        ];
+        
+        // Pass config via data attribute instead of inline script
+        $this->getOwner()->CalendarAdminConfig = json_encode($adminConfig);
     }
 }

@@ -64,14 +64,12 @@ class CalendarFrontendExtension extends Extension
      */
     protected function includeCalendarAssets(): void
     {
-        $resourceDir = 'vendor/dynamic/silverstripe-calendar/client/dist/';
+        // Include CSS using proper SilverStripe module syntax
+        Requirements::css('dynamic/silverstripe-calendar:client/dist/css/calendar.bundle.css');
 
-        // Include CSS
-        Requirements::css($resourceDir . 'css/calendar.bundle.css');
-
-        // Include JavaScript (vendors first, then calendar)
-        Requirements::javascript($resourceDir . 'js/vendors.bundle.js');
-        Requirements::javascript($resourceDir . 'js/calendar.bundle.js');
+        // Include JavaScript using proper SilverStripe module syntax (vendors first, then calendar)
+        Requirements::javascript('dynamic/silverstripe-calendar:client/dist/js/vendors.bundle.js');
+        Requirements::javascript('dynamic/silverstripe-calendar:client/dist/js/calendar.bundle.js');
 
         // Add calendar configuration as data attribute to avoid inline scripts (CSP compliance)
         $config = $this->getCalendarConfig();

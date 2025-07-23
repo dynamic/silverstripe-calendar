@@ -68,25 +68,9 @@ class CalendarFilterForm extends Form
     {
         $fields = FieldList::create();
 
-        // Load Choices.js for enhanced multi-select dropdowns
-        // TODO: Bundle locally for better security and offline capability
-        Requirements::javascript('https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js');
-        Requirements::css('https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css');
-
-        // Add SRI attributes for security
-        Requirements::customScript('
-            document.addEventListener("DOMContentLoaded", function() {
-                // Add integrity attributes to external resources for security
-                const choicesScript = document.querySelector("script[src*=\"choices.js\"]");
-                if (choicesScript) {
-                    choicesScript.crossOrigin = "anonymous";
-                }
-                const choicesStyle = document.querySelector("link[href*=\"choices.js\"]");
-                if (choicesStyle) {
-                    choicesStyle.crossOrigin = "anonymous";
-                }
-            });
-        ', 'choices-security');
+        // Load the bundled calendar assets (includes Choices.js)
+        Requirements::javascript('dynamic/silverstripe-calendar:client/dist/js/calendar.bundle.js');
+        Requirements::css('dynamic/silverstripe-calendar:client/dist/css/calendar.bundle.css');
 
         // Add CSS for horizontal layout and Clear Filters functionality
         $fields->push(LiteralField::create('horizontalCSS', '

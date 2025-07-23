@@ -2,6 +2,8 @@
 // Bootstrap 5.3 + FullCalendar integration for Dynamic SilverStripe Calendar
 
 import '../scss/calendar.scss';
+import Choices from 'choices.js';
+
 // Import components
 import './components/CalendarView';
 import './components/FullCalendarView';
@@ -42,6 +44,7 @@ class CalendarModule {
     const filterForm = document.querySelector('.calendar-filter-form');
     if (filterForm) {
       this.smartFiltering = new SmartFiltering(filterForm);
+      this.initializeChoicesJS(filterForm);
     }
 
     // Initialize accessibility features
@@ -112,6 +115,48 @@ class CalendarModule {
       // Fallback to normal navigation
       window.location.href = url;
     }
+  }
+
+  initializeChoicesJS(container) {
+    // Initialize Choices.js for multi-select dropdowns in filter form
+    const selectElements = container.querySelectorAll('select[multiple]');
+    
+    selectElements.forEach(select => {
+      new Choices(select, {
+        removeItemButton: true,
+        placeholder: true,
+        placeholderValue: 'Select options...',
+        searchEnabled: true,
+        searchPlaceholderValue: 'Search...',
+        shouldSort: false,
+        classNames: {
+          containerOuter: 'choices',
+          containerInner: 'choices__inner',
+          input: 'choices__input',
+          inputCloned: 'choices__input--cloned',
+          list: 'choices__list',
+          listItems: 'choices__list--multiple',
+          listSingle: 'choices__list--single',
+          listDropdown: 'choices__list--dropdown',
+          item: 'choices__item',
+          itemSelectable: 'choices__item--selectable',
+          itemDisabled: 'choices__item--disabled',
+          itemChoice: 'choices__item--choice',
+          placeholder: 'choices__placeholder',
+          group: 'choices__group',
+          groupHeading: 'choices__heading',
+          button: 'choices__button',
+          activeState: 'is-active',
+          focusState: 'is-focused',
+          openState: 'is-open',
+          disabledState: 'is-disabled',
+          highlightedState: 'is-highlighted',
+          selectedState: 'is-selected',
+          flippedState: 'is-flipped',
+          loadingState: 'is-loading'
+        }
+      });
+    });
   }
 
   updateListContent(html) {

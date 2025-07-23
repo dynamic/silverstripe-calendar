@@ -701,7 +701,7 @@ class EventPage extends \Page
         parent::onAfterWrite();
 
         // Clear caches if recursion-related fields changed
-        if ($this->isChanged($this->config()->get('recursion_changed'))) {
+        if ($this->recursionChanged()) {
             \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
         }
     }

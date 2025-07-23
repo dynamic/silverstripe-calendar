@@ -1,3 +1,6 @@
+<%-- Bootstrap-styled calendar event filter form template.
+     Requires Bootstrap 5+ for styling classes (row, col-*, g-3, bg-light, p-4, etc.).
+     Falls back gracefully without Bootstrap but styling will be minimal. --%>
 <div class="calendar-filter-form bg-light p-4 rounded shadow-sm mb-4">
     <h5 id="filter-events-heading">Filter Events</h5>
     <form $AttributesHTML aria-labelledby="filter-events-heading">
@@ -29,7 +32,7 @@
         </div>
 
         <% if $Fields.find('Name', 'eventType') || $Fields.find('Name', 'allDay') %>
-        <div class="row g-3 mt-2">
+        <div class="row g-3 mt-3">
             <% if $Fields.find('Name', 'eventType') %>
             <div class="col-md-6">
                 $Fields.find('Name', 'eventType')
@@ -49,7 +52,7 @@
                 <% loop $Actions %>
                     $Field
                 <% end_loop %>
-                <% if $HasActiveFilters %>
+                <% if $HasActiveFilters && $ClearFiltersLink %>
                     <a href="$ClearFiltersLink.ATT" class="btn btn-outline-secondary" role="button" aria-label="Remove all filters and show all events">Clear All</a>
                 <% end_if %>
             </div>

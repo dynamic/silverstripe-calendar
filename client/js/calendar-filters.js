@@ -1,27 +1,31 @@
 /**
  * Calendar Event Filtering JavaScript
- * 
+ *
  * Consolidated filtering functionality for the Dynamic Calendar module.
  * Provides enhanced form interactions, validation, auto-submit, and mobile-friendly features.
  */
 
-(function($) {
+(function ($) {
     'use strict';
 
     /**
      * Main Calendar Filter Manager
      */
     class CalendarFilterManager {
-        constructor() {
+        constructor()
+        {
             this.$form = $('.calendar-filters, .calendar-filter-form');
             this.$container = $('.calendar-events-container');
             this.isLoading = false;
-            
+
             this.init();
         }
 
-        init() {
-            if (this.$form.length === 0) return;
+        init()
+        {
+            if (this.$form.length === 0) {
+                return;
+            }
 
             this.bindEvents();
             this.initDatePickers();
@@ -30,7 +34,8 @@
             this.initMobileEnhancements();
         }
 
-        bindEvents() {
+        bindEvents()
+        {
             // Form submission
             this.$form.on('submit', (e) => this.handleFormSubmit(e));
 
@@ -66,7 +71,8 @@
             });
         }
 
-        initDatePickers() {
+        initDatePickers()
+        {
             const $fromDate = this.$form.find('input[name="from"]');
             const $toDate = this.$form.find('input[name="to"]');
 
@@ -92,7 +98,8 @@
             });
         }
 
-        initFormValidation() {
+        initFormValidation()
+        {
             this.$form.find('input[type="date"]').on('blur', (e) => {
                 this.validateDateInput($(e.target));
             });
@@ -101,11 +108,11 @@
             this.$form.on('submit', (e) => {
                 const $fromDate = this.$form.find('input[name="from"]');
                 const $toDate = this.$form.find('input[name="to"]');
-                
+
                 if ($fromDate.val() && $toDate.val()) {
                     const from = new Date($fromDate.val());
                     const to = new Date($toDate.val());
-                    
+
                     if (from > to) {
                         e.preventDefault();
                         alert('Start date cannot be after end date.');
@@ -116,29 +123,36 @@
             });
         }
 
-        initAutoSubmit() {
+        initAutoSubmit()
+        {
             this.autoSubmit = this.$form.data('auto-submit') !== false;
         }
 
-        initMobileEnhancements() {
+        initMobileEnhancements()
+        {
             // Category filter collapse/expand for mobile
             if (window.innerWidth < 768) {
                 this.setupMobileCategoryFilter();
             }
         }
 
-        setupMobileCategoryFilter() {
+        setupMobileCategoryFilter()
+        {
             const $categoryFilter = this.$form.find('.category-filter');
-            if ($categoryFilter.length === 0) return;
+            if ($categoryFilter.length === 0) {
+                return;
+            }
 
             const $categoryLabel = this.$form.find('label:contains("Categories")').first();
-            if ($categoryLabel.length === 0) return;
+            if ($categoryLabel.length === 0) {
+                return;
+            }
 
             $categoryLabel.css('cursor', 'pointer');
             $categoryLabel.on('click', () => {
                 const isVisible = $categoryFilter.is(':visible');
                 $categoryFilter.slideToggle();
-                
+
                 // Update indicator
                 let $indicator = $categoryLabel.find('.collapse-indicator');
                 if ($indicator.length === 0) {
@@ -147,18 +161,19 @@
                 }
                 $indicator.html(isVisible ? ' ▼' : ' ▲');
             });
-            
+
             // Start collapsed on mobile
             $categoryFilter.hide();
             $categoryLabel.append('<span class="collapse-indicator"> ▼</span>');
         }
 
-        validateDateInput($input) {
+        validateDateInput($input)
+        {
             const value = $input.val();
             const isValid = value === '' || this.isValidDate(value);
 
             $input.toggleClass('is-invalid', !isValid);
-            
+
             if (!isValid) {
                 this.showValidationMessage($input, 'Please enter a valid date');
             } else {
@@ -168,12 +183,14 @@
             return isValid;
         }
 
-        isValidDate(dateString) {
+        isValidDate(dateString)
+        {
             const date = new Date(dateString);
             return date instanceof Date && !isNaN(date);
         }
 
-        showValidationMessage($input, message) {
+        showValidationMessage($input, message)
+        {
             let $feedback = $input.siblings('.invalid-feedback');
             if ($feedback.length === 0) {
                 $feedback = $('<div class="invalid-feedback"></div>');
@@ -182,47 +199,54 @@
             $feedback.text(message);
         }
 
-        hideValidationMessage($input) {
+        hideValidationMessage($input)
+        {
             $input.siblings('.invalid-feedback').remove();
         }
 
-        shouldAutoSubmit() {
+        shouldAutoSubmit()
+        {
             return this.autoSubmit && window.location.search.indexOf('auto_submit=0') === -1;
         }
 
-        handleFormSubmit(e) {
+        handleFormSubmit(e)
+        {
             if (this.isLoading) {
                 e.preventDefault();
                 return false;
             }
-            
+
             // Let the form submit normally but show loading state
             this.showLoading();
         }
 
-        handleClearFilters(e) {
+        handleClearFilters(e)
+        {
             e.preventDefault();
-            
+
             // Clear all form fields
             this.$form.find('input[type="text"], input[type="date"], input[type="search"]').val('');
             this.$form.find('input[type="checkbox"], input[type="radio"]').prop('checked', false);
-            
+
             // Check "all" radio buttons if they exist
             this.$form.find('input[type="radio"][value=""]').prop('checked', true);
-            
+
             // Submit cleared form
             this.submitForm();
         }
 
-        submitForm() {
-            if (this.isLoading) return;
+        submitForm()
+        {
+            if (this.isLoading) {
+                return;
+            }
 
             this.showLoading();
-            
+
             // Build query string from form data
             const formData = new FormData(this.$form[0]);
             const searchParams = new URLSearchParams();
-            
+
             for (let [key, value] of formData.entries()) {
                 if (value !== '' && value !== null) {
                     searchParams.append(key, value);
@@ -234,17 +258,18 @@
             window.location.href = newUrl;
         }
 
-        showLoading() {
+        showLoading()
+        {
             this.isLoading = true;
             this.$form.addClass('calendar-loading');
-            
+
             // Update submit button
             const $submitBtn = this.$form.find('button[type="submit"]');
             if ($submitBtn.length) {
                 $submitBtn.prop('disabled', true);
                 this.originalButtonText = $submitBtn.html();
                 $submitBtn.html('<i class="bi bi-hourglass-split"></i> Loading...');
-                
+
                 // Fallback to re-enable
                 setTimeout(() => {
                     $submitBtn.prop('disabled', false);
@@ -258,26 +283,31 @@
      * Category Filter Enhancements
      */
     class CategoryFilterEnhancer {
-        constructor() {
+        constructor()
+        {
             this.$categoryFilter = $('.category-filter');
             this.init();
         }
 
-        init() {
-            if (this.$categoryFilter.length === 0) return;
+        init()
+        {
+            if (this.$categoryFilter.length === 0) {
+                return;
+            }
 
             this.addSelectAllOption();
             this.addSearchFilter();
         }
 
-        addSelectAllOption() {
+        addSelectAllOption()
+        {
             const $selectAll = $(`
-                <div class="form-check border-bottom pb-2 mb-2">
-                    <input class="form-check-input" type="checkbox" id="selectAllCategories">
-                    <label class="form-check-label fw-bold" for="selectAllCategories">
+                < div class = "form-check border-bottom pb-2 mb-2" >
+                    < input class = "form-check-input" type = "checkbox" id = "selectAllCategories" >
+                    < label class = "form-check-label fw-bold" for = "selectAllCategories" >
                         Select All
-                    </label>
-                </div>
+                    <  / label >
+                <  / div >
             `);
 
             this.$categoryFilter.prepend($selectAll);
@@ -296,12 +326,13 @@
             this.updateSelectAllState();
         }
 
-        addSearchFilter() {
+        addSearchFilter()
+        {
             const $searchFilter = $(`
-                <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" 
-                           placeholder="Search categories..." id="categorySearch">
-                </div>
+                < div class = "mb-2" >
+                    < input type = "text" class = "form-control form-control-sm"
+                           placeholder = "Search categories..." id = "categorySearch" >
+                <  / div >
             `);
 
             this.$categoryFilter.prepend($searchFilter);
@@ -312,7 +343,8 @@
             });
         }
 
-        updateSelectAllState() {
+        updateSelectAllState()
+        {
             const $selectAll = this.$categoryFilter.find('#selectAllCategories');
             const $categories = this.$categoryFilter.find('input[name*="categories"]');
             const $checkedCategories = $categories.filter(':checked');
@@ -326,13 +358,16 @@
             }
         }
 
-        filterCategories(searchTerm) {
+        filterCategories(searchTerm)
+        {
             this.$categoryFilter.find('.form-check').each((i, el) => {
                 const $el = $(el);
                 const label = $el.find('label').text().toLowerCase();
-                
-                if ($el.find('#selectAllCategories, #categorySearch').length > 0) return;
-                
+
+                if ($el.find('#selectAllCategories, #categorySearch').length > 0) {
+                    return;
+                }
+
                 $el.toggle(label.includes(searchTerm));
             });
         }
@@ -341,12 +376,14 @@
     /**
      * Utility functions
      */
-    function getURLParameter(name) {
+    function getURLParameter(name)
+    {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.get(name);
     }
 
-    function updateURL(params) {
+    function updateURL(params)
+    {
         const url = new URL(window.location);
         Object.keys(params).forEach(key => {
             if (params[key]) {

@@ -32,8 +32,10 @@ class CalendarFrontendExtension extends Extension
         $controller = $this->getOwner();
 
         // Include on EventPage and Calendar pages
-        if ($controller instanceof \Dynamic\Calendar\Controller\EventPageController ||
-            $controller instanceof \Dynamic\Calendar\Controller\CalendarController) {
+        if (
+            $controller instanceof \Dynamic\Calendar\Controller\EventPageController ||
+            $controller instanceof \Dynamic\Calendar\Controller\CalendarController
+        ) {
             return true;
         }
 
@@ -42,7 +44,10 @@ class CalendarFrontendExtension extends Extension
             $page = $controller->getPage();
             if ($page && method_exists($page, 'ElementalArea')) {
                 $elementalArea = $page->ElementalArea();
-                if ($elementalArea && $elementalArea->Elements()->filter('ClassName', 'Dynamic\Calendar\Element\CalendarElement')->exists()) {
+                if (
+                    $elementalArea && 
+                    $elementalArea->Elements()->filter('ClassName', 'Dynamic\Calendar\Element\CalendarElement')->exists()
+                ) {
                     return true;
                 }
             }

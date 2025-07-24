@@ -47,6 +47,32 @@
     }
   }
 
+  // Mobile-optimized FullCalendar header
+  .fc-toolbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+
+    .fc-toolbar-chunk {
+      // Make view buttons touch-friendly
+      .fc-button-group {
+        .fc-button {
+          padding: 0.5rem 0.75rem;
+          font-size: 0.875rem;
+          min-width: 44px; // Touch target minimum
+          min-height: 44px;
+        }
+      }
+    }
+
+    // Ensure header doesn't overflow on small screens
+    .fc-toolbar-title {
+      font-size: 1.25rem;
+      flex: 1;
+      text-align: center;
+      min-width: 0; // Allow title to shrink
+    }
+  }
+
   // Stacked event grid on mobile
   .event-grid {
     .event-grid-item {

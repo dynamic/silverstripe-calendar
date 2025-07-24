@@ -3,15 +3,15 @@
 
 export class SmartFiltering {
   constructor() {
+    this.filterHistory = this.loadFilterHistory();
     this.initPredictiveFilters();
     this.initSavedFilters();
     this.initAutoComplete();
-    this.filterHistory = this.loadFilterHistory();
   }
 
   initPredictiveFilters() {
     // Suggest popular filter combinations based on history
-    if (this.filterHistory.length > 0) {
+    if (this.filterHistory && this.filterHistory.length > 0) {
       this.showFilterSuggestions(this.filterHistory);
     }
   }

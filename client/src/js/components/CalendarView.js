@@ -9,30 +9,38 @@ import interactionPlugin from '@fullcalendar/interaction';
 export class CalendarView {
   constructor(element, options = {}) {
     this.element = element;
+
+    // Store custom configuration from options and data attributes
+    this.config = {
+      ...this.getConfigFromElement(),
+      ...options
+    };
+
     this.options = {
       plugins: [dayGridPlugin, timeGridPlugin, listPlugin, bootstrap5Plugin, interactionPlugin],
       themeSystem: 'bootstrap5',
-      headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: 'dayGridMonth,timeGridWeek,listWeek'
-      },
+      headerToolbar: this.getResponsiveHeaderToolbar(),
+
+      // Responsive initial view - list on mobile, month on desktop
+      initialView: this.config.defaultView || (window.innerWidth < 768 ? 'listWeek' : 'dayGridMonth'),
+
       height: 'auto',
-      responsive: true,
-      ...options
+      aspectRatio: 1.8,
+      eventDisplay: 'block',
+      dayMaxEvents: true,
+      moreLinkClick: 'popover',
+
+      // Window resize handling for responsive behavior
+      windowResizeDelay: 150
     };
 
     this.init();
   }
 
   init() {
-    // Get calendar configuration from data attributes
-    const config = this.getConfigFromElement();
-
-    // Merge with options
+    // Merge FullCalendar options only (exclude custom config)
     const finalOptions = {
       ...this.options,
-      ...config,
       events: (info, successCallback, failureCallback) => {
         this.fetchEvents(info, successCallback, failureCallback);
       },
@@ -45,13 +53,13 @@ export class CalendarView {
     this.calendar = new Calendar(this.element, finalOptions);
     this.calendar.render();
 
-    // Add view toggle buttons
-    this.addViewToggle();
+    // Store reference globally for debugging in development mode
+    if (process.env.NODE_ENV === 'development') {
+      window.fullCalendarInstance = this.calendar;
+    }
 
     // Initialize mobile optimizations
     this.initializeMobileOptimizations();
-
-    console.log('FullCalendar initialized');
   }
 
   getConfigFromElement() {
@@ -74,19 +82,26 @@ export class CalendarView {
   }
 
   async fetchEvents(info, successCallback, failureCallback) {
-    const calendarId = this.options.calendarId || this.element.dataset.calendarId;
-    const eventsUrl = this.options.eventsUrl || this.element.dataset.eventsUrl || '/calendar/events';
+    const eventsUrl = this.config.eventsUrl;
+
+    if (!eventsUrl) {
+      console.error('Events URL not configured');
+      failureCallback(new Error('Events URL not configured'));
+      return;
+    }
 
     const params = new URLSearchParams({
       start: info.startStr,
       end: info.endStr,
-      calendar: calendarId || ''
+      format: 'json'
     });
 
     // Add any active filters
     const activeFilters = this.getActiveFilters();
     Object.entries(activeFilters).forEach(([key, value]) => {
-      if (value) params.append(key, value);
+      if (value && key !== 'action_doFilter') {
+        params.append(key, value);
+      }
     });
 
     try {
@@ -102,7 +117,15 @@ export class CalendarView {
       }
 
       const events = await response.json();
-      successCallback(this.transformEvents(events));
+      console.log('Fetched events:', events);
+
+      // Events should be an array directly from the server
+      if (Array.isArray(events)) {
+        successCallback(events);
+      } else {
+        console.error('Expected array of events, got:', events);
+        failureCallback(new Error('Invalid events format'));
+      }
     } catch (error) {
       console.error('Error fetching events:', error);
       failureCallback(error);
@@ -148,7 +171,7 @@ export class CalendarView {
     const filters = {};
 
     // Get filters from form elements
-    const filterForm = document.querySelector('.calendar-filter-form');
+    const filterForm = document.querySelector('#CalendarFilterForm_FilterForm');
     if (filterForm) {
       const formData = new FormData(filterForm);
       for (let [key, value] of formData.entries()) {
@@ -166,8 +189,8 @@ export class CalendarView {
     const event = info.event;
 
     if (event.url) {
-      // Open event detail page
-      window.open(event.url, '_blank');
+      // Open event detail page in same window
+      window.location.href = event.url;
     } else {
       // Show event popup/modal
       this.showEventPopup(event);
@@ -198,60 +221,47 @@ export class CalendarView {
     }
   }
 
-  addViewToggle() {
-    const toolbar = this.element.querySelector('.fc-toolbar');
-    if (!toolbar) return;
+  getResponsiveHeaderToolbar() {
+    // Check screen size for responsive header layout
+    const isSmallScreen = window.innerWidth < 768;
+    const isTablet = window.innerWidth >= 768 && window.innerWidth < 1200;
 
-    const viewToggle = document.createElement('div');
-    viewToggle.className = 'btn-group calendar-view-toggle ms-3';
-    viewToggle.innerHTML = `
-      <button type="button" class="btn btn-outline-primary btn-sm" data-view="dayGridMonth">
-        <i class="bi bi-calendar-month"></i> Month
-      </button>
-      <button type="button" class="btn btn-outline-primary btn-sm" data-view="timeGridWeek">
-        <i class="bi bi-calendar-week"></i> Week
-      </button>
-      <button type="button" class="btn btn-outline-primary btn-sm" data-view="listWeek">
-        <i class="bi bi-list-ul"></i> List
-      </button>
-    `;
-
-    // Insert after the right toolbar
-    const rightToolbar = toolbar.querySelector('.fc-toolbar-chunk:last-child');
-    if (rightToolbar) {
-      rightToolbar.appendChild(viewToggle);
+    if (isSmallScreen) {
+      // Mobile: All three views available, but start with list-friendly default
+      return {
+        left: 'prev,next',
+        center: 'title',
+        right: 'dayGridMonth,timeGridWeek,listWeek'
+      };
+    } else if (isTablet) {
+      // Tablet: All views with today button
+      return {
+        left: 'prev,next today',
+        center: 'title',
+        right: 'dayGridMonth,timeGridWeek,listWeek'
+      };
+    } else {
+      // Desktop: Full single-row layout
+      return {
+        left: 'prev,next today',
+        center: 'title',
+        right: 'dayGridMonth,timeGridWeek,listWeek'
+      };
     }
-
-    // Add click handlers
-    viewToggle.addEventListener('click', (e) => {
-      if (e.target.closest('[data-view]')) {
-        const view = e.target.closest('[data-view]').dataset.view;
-        this.calendar.changeView(view);
-
-        // Update active button
-        viewToggle.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
-        e.target.closest('[data-view]').classList.add('active');
-      }
-    });
   }
 
   initializeMobileOptimizations() {
-    // Mobile-specific optimizations
-    if (window.innerWidth < 768) {
-      this.calendar.setOption('height', 'auto');
-      this.calendar.setOption('initialView', 'listWeek');
-
-      // Simplify header for mobile
-      this.calendar.setOption('headerToolbar', {
-        left: 'prev,next',
-        center: 'title',
-        right: 'today'
-      });
-    }
-
-    // Handle resize
+    // Simple resize handler - FullCalendar handles most responsive behavior automatically
+    let resizeTimeout;
     window.addEventListener('resize', () => {
-      this.calendar.updateSize();
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        // Just update the size and let FullCalendar handle the rest
+        this.calendar.updateSize();
+
+        // Update header toolbar for optimal layout
+        this.calendar.setOption('headerToolbar', this.getResponsiveHeaderToolbar());
+      }, 150);
     });
   }
 

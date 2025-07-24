@@ -1,51 +1,46 @@
-<div id="Content" class="searchResults">
-  <h1>$Title</h1>
-
-  <% if $Events %>
-    <ul id="SearchResults">
-      <% loop $Events %>
-        <li>
-          <h4>
-            <a href="$Link">
-              <% if $MenuTitle %>
-                $MenuTitle
-              <% else %>
-                $Title
-              <% end_if %>
-            </a>
-          </h4>
-          <h5>$StartDate</h5>
-          <% if $Content %>
-            <p>$Content.LimitWordCountXML</p>
-          <% end_if %>
-          <a class="readMoreLink" href="$Link" title="Read more about &quot;{$Title}&quot;">Read more about&quot;{$Title}&quot;...</a>
-        </li>
-      <% end_loop %>
-    </ul>
-  <% else %>
-    <p>Sorry, no events at this time.</p>
-  <% end_if %>
-
-  <% if $Events.MoreThanOnePage %>
-    <div id="PageNumbers">
-      <div class="pagination">
-        <% if $Events.NotFirstPage %>
-          <a class="prev" href="$Events.PrevLink" title="View the previous page">&larr;</a>
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <!-- Page Header -->
+      <header class="page-header mb-4">
+        <h1 class="display-4">$Title</h1>
+        <% if $Content %>
+          <div class="lead">$Content</div>
         <% end_if %>
-        <span>
-          <% loop $Events.Pages %>
-            <% if $CurrentBool %>
-              $PageNum
-            <% else %>
-              <a href="$Link" title="View page number $PageNum" class="go-to-page">$PageNum</a>
-            <% end_if %>
-          <% end_loop %>
-        </span>
-        <% if $Events.NotLastPage %>
-          <a class="next" href="$Events.NextLink" title="View the next page">&rarr;</a>
-        <% end_if %>
+      </header>
+
+      <!-- Calendar Controls & Filters -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <!-- Filter Form -->
+              $FilterForm
+            </div>
+          </div>
+        </div>
       </div>
-      <p>Page $Events.CurrentPage of $Events.TotalPages</p>
+
+      <!-- FullCalendar View -->
+      <div id="fullcalendar-view" class="calendar-view-section"
+           data-calendar-id="$ID"
+           data-events-url="$Link/events"
+           data-default-view="dayGridMonth">
+        <div class="card">
+          <div class="card-body">
+            <div id="fullcalendar" style="min-height: 600px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Elemental Area -->
+      <% if $ElementalArea %>
+        <div class="row mt-4">
+          <div class="col-12">
+            $ElementalArea
+          </div>
+        </div>
+      <% end_if %>
     </div>
-  <% end_if %>
+  </div>
 </div>

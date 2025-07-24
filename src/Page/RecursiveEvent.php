@@ -85,7 +85,8 @@ class RecursiveEvent extends EventPage
         }
 
         $this->writeToStage(Versioned::DRAFT);
-        if ($this->Parent()->isPublished()) {
+        $parent = $this->Parent();
+        if ($parent && $parent->exists() && $parent->isPublished()) {
             $this->publishRecursive();
         }
     }

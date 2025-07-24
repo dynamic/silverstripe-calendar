@@ -1,0 +1,29 @@
+---
+Name: calendar-frontend-assets
+After:
+  - '#calendar-config'
+---
+
+# Frontend asset management extension
+SilverStripe\Control\Controller:
+  extensions:
+    - Dynamic\Calendar\Extension\CalendarFrontendExtension
+
+# Admin asset management extension
+SilverStripe\Admin\LeftAndMain:
+  extensions:
+    - Dynamic\Calendar\Extension\CalendarAdminExtension
+
+# Specifically apply to page controllers
+SilverStripe\CMS\Controllers\ContentController:
+  extensions:
+    - Dynamic\Calendar\Extension\CalendarFrontendExtension
+
+# Apply to calendar-specific controllers
+Dynamic\Calendar\Controller\CalendarController:
+  extensions:
+    - Dynamic\Calendar\Extension\CalendarFrontendExtension
+
+Dynamic\Calendar\Controller\EventPageController:
+  extensions:
+    - Dynamic\Calendar\Extension\CalendarFrontendExtension

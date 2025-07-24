@@ -1,33 +1,14 @@
 {
     "name": "dynamic/silverstripe-calendar",
     "description": "A calendar module for the SilverStripe CMS.",
+    "license": "BSD-3-Clause",
+    "type": "silverstripe-vendormodule",
     "keywords": [
         "silverstripe",
         "module",
         "calendar",
         "events"
     ],
-    "license": "BSD-3-Clause",
-    "type": "silverstripe-vendormodule",
-    "require": {
-        "nesbot/carbon": "^3.0",
-        "rlanvin/php-rrule": "^2.2",
-        "silverstripe/cms": "^5.0",
-        "silverstripe/lumberjack": "^3.0",
-        "symbiote/silverstripe-gridfieldextensions": "^4.0",
-        "symbiote/silverstripe-queuedjobs": "^5.0",
-        "unclecheese/display-logic": "^3.0"
-    },
-    "require-dev": {
-        "silverstripe/recipe-testing": "^3",
-        "squizlabs/php_codesniffer": "^3.7"
-    },
-    "autoload": {
-        "psr-4": {
-            "Dynamic\\Calendar\\": "src/",
-            "Dynamic\\Calendar\\Tests\\": "tests/"
-        }
-    },
     "authors": [
         {
             "name": "Dynamic Inc",
@@ -35,10 +16,33 @@
             "homepage": "http://www.dynamicagency.com"
         }
     ],
-    "scripts": {
-        "lint": "vendor/bin/phpcs src/ tests/",
-        "lint-clean": "vendor/bin/phpcbf src/ tests/"
+    "require": {
+        "nesbot/carbon": "^3.0",
+        "rlanvin/php-rrule": "^2.2",
+        "silverstripe/cms": "^5.0",
+        "silverstripe/lumberjack": "^3.0",
+        "symbiote/silverstripe-gridfieldextensions": "^4.0",
+        "symbiote/silverstripe-queuedjobs": "^5.0",
+        "unclecheese/display-logic": "^3.0",
+        "dft/silverstripe-frontend-multiselectfield": "^1.0"
+    },
+    "require-dev": {
+        "cambis/silverstan":"^2.1",
+        "phpstan/extension-installer": "^1.3",
+        "silverstripe/recipe-testing": "^3",
+        "squizlabs/php_codesniffer": "^3.7"
     },
     "minimum-stability": "dev",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "Dynamic\\Calendar\\": "src/",
+            "Dynamic\\Calendar\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "expose": [
+            "client/dist"
+        ]
+    }
 }

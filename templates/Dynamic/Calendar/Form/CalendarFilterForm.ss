@@ -24,65 +24,57 @@
         <div class="p-4">
             <form $AttributesHTML aria-labelledby="filter-events-heading">
                 <div class="row g-3">
-                    <% with $Fields.find('Name', 'search') as $SearchField %>
-                    <% if $SearchField %>
+                    <!-- SIMPLIFIED TEST: Direct field rendering -->
+                    <% with $Fields.find('Name', 'search') %>
                     <div class="col-md-4">
-                        <label for="{$SearchField.ID}" class="form-label">{$SearchField.Title}</label>
-                        {$SearchField}
+                        <label for="{$ID}" class="form-label">{$Title}</label>
+                        {$Field}
                     </div>
-                    <% end_if %>
                     <% end_with %>
 
-                    <% with $Fields.find('Name', 'categories') as $CategoriesField %>
-                    <% if $CategoriesField %>
+                    <% with $Fields.find('Name', 'categories') %>
                     <div class="col-md-3">
-                        <label for="{$CategoriesField.ID}" class="form-label">{$CategoriesField.Title}</label>
-                        {$CategoriesField}
+                        <label for="{$ID}" class="form-label">{$Title}</label>
+                        {$Field}
                     </div>
-                    <% end_if %>
                     <% end_with %>
 
-                    <% with $Fields.find('Name', 'from') as $FromField %>
-                    <% if $FromField %>
+                    <% with $Fields.find('Name', 'from') %>
                     <div class="col-md-2">
-                        <label for="{$FromField.ID}" class="form-label">{$FromField.Title}</label>
-                        {$FromField}
+                        <label for="{$ID}" class="form-label">{$Title}</label>
+                        {$Field}
                     </div>
-                    <% end_if %>
                     <% end_with %>
 
-                    <% with $Fields.find('Name', 'to') as $ToField %>
-                    <% if $ToField %>
+                    <% with $Fields.find('Name', 'to') %>
                     <div class="col-md-2">
-                        <label for="{$ToField.ID}" class="form-label">{$ToField.Title}</label>
-                        {$ToField}
+                        <label for="{$ID}" class="form-label">{$Title}</label>
+                        {$Field}
                     </div>
-                    <% end_if %>
                     <% end_with %>
-
                 </div>
 
-                <% with $Fields.find('Name', 'eventType') as $EventTypeField %>
-                <% with $Fields.find('Name', 'allDay') as $AllDayField %>
-                <% if $EventTypeField || $AllDayField %>
+                <% if $Fields.find('Name', 'eventType') || $Fields.find('Name', 'allDay') %>
                 <div class="row g-3 mt-3">
-                    <% if $EventTypeField %>
+                    <% with $Fields.find('Name', 'eventType') %>
+                    <% if $Up %>
                     <div class="col-md-6">
-                        <label for="{$EventTypeField.ID}" class="form-label">{$EventTypeField.Title}</label>
-                        {$EventTypeField}
+                        <label for="{$ID}" class="form-label">{$Title}</label>
+                        {$Field}
                     </div>
                     <% end_if %>
+                    <% end_with %>
 
-                    <% if $AllDayField %>
+                    <% with $Fields.find('Name', 'allDay') %>
+                    <% if $Up %>
                     <div class="col-md-6">
-                        <label for="{$AllDayField.ID}" class="form-label">{$AllDayField.Title}</label>
-                        {$AllDayField}
+                        <label for="{$ID}" class="form-label">{$Title}</label>
+                        {$Field}
                     </div>
                     <% end_if %>
+                    <% end_with %>
                 </div>
                 <% end_if %>
-                <% end_with %>
-                <% end_with %>
 
                 <div class="row mt-3">
                     <div class="col-12">

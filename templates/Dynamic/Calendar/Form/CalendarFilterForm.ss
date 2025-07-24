@@ -24,53 +24,65 @@
         <div class="p-4">
             <form $AttributesHTML aria-labelledby="filter-events-heading">
                 <div class="row g-3">
-                    <% if $Fields.find('Name', 'search') %>
+                    <% with $Fields.find('Name', 'search') as $SearchField %>
+                    <% if $SearchField %>
                     <div class="col-md-4">
-                        <label for="{$Fields.find('Name', 'search').ID}" class="form-label">$Fields.find('Name', 'search').Title</label>
-                        $Fields.find('Name', 'search')
+                        <label for="{$SearchField.ID}" class="form-label">{$SearchField.Title}</label>
+                        {$SearchField}
                     </div>
                     <% end_if %>
+                    <% end_with %>
 
-                    <% if $Fields.find('Name', 'categories') %>
+                    <% with $Fields.find('Name', 'categories') as $CategoriesField %>
+                    <% if $CategoriesField %>
                     <div class="col-md-3">
-                        <label for="{$Fields.find('Name', 'categories').ID}" class="form-label">$Fields.find('Name', 'categories').Title</label>
-                        $Fields.find('Name', 'categories')
+                        <label for="{$CategoriesField.ID}" class="form-label">{$CategoriesField.Title}</label>
+                        {$CategoriesField}
                     </div>
                     <% end_if %>
+                    <% end_with %>
 
-                    <% if $Fields.find('Name', 'from') %>
+                    <% with $Fields.find('Name', 'from') as $FromField %>
+                    <% if $FromField %>
                     <div class="col-md-2">
-                        <label for="{$Fields.find('Name', 'from').ID}" class="form-label">$Fields.find('Name', 'from').Title</label>
-                        $Fields.find('Name', 'from')
+                        <label for="{$FromField.ID}" class="form-label">{$FromField.Title}</label>
+                        {$FromField}
                     </div>
                     <% end_if %>
+                    <% end_with %>
 
-                    <% if $Fields.find('Name', 'to') %>
+                    <% with $Fields.find('Name', 'to') as $ToField %>
+                    <% if $ToField %>
                     <div class="col-md-2">
-                        <label for="{$Fields.find('Name', 'to').ID}" class="form-label">$Fields.find('Name', 'to').Title</label>
-                        $Fields.find('Name', 'to')
+                        <label for="{$ToField.ID}" class="form-label">{$ToField.Title}</label>
+                        {$ToField}
                     </div>
                     <% end_if %>
+                    <% end_with %>
 
                 </div>
 
-                <% if $Fields.find('Name', 'eventType') || $Fields.find('Name', 'allDay') %>
+                <% with $Fields.find('Name', 'eventType') as $EventTypeField %>
+                <% with $Fields.find('Name', 'allDay') as $AllDayField %>
+                <% if $EventTypeField || $AllDayField %>
                 <div class="row g-3 mt-3">
-                    <% if $Fields.find('Name', 'eventType') %>
+                    <% if $EventTypeField %>
                     <div class="col-md-6">
-                        <label for="{$Fields.find('Name', 'eventType').ID}" class="form-label">$Fields.find('Name', 'eventType').Title</label>
-                        $Fields.find('Name', 'eventType')
+                        <label for="{$EventTypeField.ID}" class="form-label">{$EventTypeField.Title}</label>
+                        {$EventTypeField}
                     </div>
                     <% end_if %>
 
-                    <% if $Fields.find('Name', 'allDay') %>
+                    <% if $AllDayField %>
                     <div class="col-md-6">
-                        <label for="{$Fields.find('Name', 'allDay').ID}" class="form-label">$Fields.find('Name', 'allDay').Title</label>
-                        $Fields.find('Name', 'allDay')
+                        <label for="{$AllDayField.ID}" class="form-label">{$AllDayField.Title}</label>
+                        {$AllDayField}
                     </div>
                     <% end_if %>
                 </div>
                 <% end_if %>
+                <% end_with %>
+                <% end_with %>
 
                 <div class="row mt-3">
                     <div class="col-12">

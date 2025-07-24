@@ -82,6 +82,19 @@ class CalendarController extends \PageController
     }
 
     /**
+     * Check if the request is an AJAX request
+     *
+     * @param HTTPRequest $request
+     * @return bool
+     */
+    private function isAjaxRequest(HTTPRequest $request): bool
+    {
+        return $request->isAjax() 
+            || $request->getHeader('Accept') === 'application/json'
+            || $request->getHeader('X-Requested-With') === 'XMLHttpRequest';
+    }
+
+    /**
      * Events action for AJAX requests
      *
      * @param HTTPRequest $request
@@ -106,8 +119,7 @@ class CalendarController extends \PageController
         $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
 
         // Check if this is an AJAX request for JSON data
-        if ($request->isAjax() || $request->getHeader('Accept') === 'application/json' ||
-            $request->getHeader('X-Requested-With') === 'XMLHttpRequest') {
+        if ($this->isAjaxRequest($request)) {
 
             // Transform events for FullCalendar format
             $eventsData = [];

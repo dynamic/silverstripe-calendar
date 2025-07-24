@@ -12,8 +12,11 @@ import { TouchInteractions } from './components/TouchInteractions';
 import { KeyboardNavigation } from './components/KeyboardNavigation';
 import { FilterEnhancements } from './components/FilterEnhancements';
 
-// Global function for Choices.js initialization (called by CalendarFilterForm)
-window.initializeChoicesJS = function() {
+// Namespace for calendar utilities
+const CalendarUtils = {};
+
+// Function for Choices.js initialization (called by CalendarFilterForm)
+CalendarUtils.initializeChoicesJS = function() {
   const multiSelectElements = document.querySelectorAll('.js-choice');
   const config = window.CalendarChoicesConfig || {};
 
@@ -24,6 +27,11 @@ window.initializeChoicesJS = function() {
     }
   });
 };
+
+// Expose CalendarUtils globally for backwards compatibility
+window.CalendarUtils = CalendarUtils;
+// Legacy support
+window.initializeChoicesJS = CalendarUtils.initializeChoicesJS;
 
 class CalendarModule {
   constructor() {

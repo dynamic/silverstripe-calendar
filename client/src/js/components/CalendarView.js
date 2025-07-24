@@ -53,13 +53,13 @@ export class CalendarView {
     this.calendar = new Calendar(this.element, finalOptions);
     this.calendar.render();
 
-    // Store reference globally for debugging
-    window.fullCalendarInstance = this.calendar;
+    // Store reference globally for debugging in development mode
+    if (process.env.NODE_ENV === 'development') {
+      window.fullCalendarInstance = this.calendar;
+    }
 
     // Initialize mobile optimizations
     this.initializeMobileOptimizations();
-
-    console.log('FullCalendar initialized');
   }
 
   getConfigFromElement() {
@@ -103,8 +103,6 @@ export class CalendarView {
         params.append(key, value);
       }
     });
-
-    console.log('Fetching events from:', `${eventsUrl}?${params.toString()}`);
 
     try {
       const response = await fetch(`${eventsUrl}?${params.toString()}`, {

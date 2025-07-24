@@ -40,24 +40,42 @@ export class FilterEnhancements {
     const form = document.querySelector('.calendar-filter-form form');
     if (!form) return;
 
-    // Track active filters and update badge
-    const updateActiveFiltersBadge = () => {
-      const formData = new FormData(form);
-      let activeCount = 0;
+    let activeCount = 0;
+    const formData = new FormData(form);
 
-      for (let [key, value] of formData.entries()) {
-        if (key === 'SecurityID' || key === 'action_doFilter') continue;
-        if (value && value.trim() !== '') {
-          activeCount++;
-        }
+    // Initialize active count
+    for (let [key, value] of formData.entries()) {
+      if (key === 'SecurityID' || key === 'action_doFilter') continue;
+      if (value && value.trim() !== '') {
+        activeCount++;
+      }
+    }
+
+    const updateActiveFiltersBadge = (fieldName, fieldValue) => {
+      if (fieldName === 'SecurityID' || fieldName === 'action_doFilter') return;
+
+      const isActive = fieldValue && fieldValue.trim() !== '';
+      const fieldPreviouslyActive = formData.get(fieldName)?.trim() !== '';
+
+      if (isActive && !fieldPreviouslyActive) {
+        activeCount++;
+      } else if (!isActive && fieldPreviouslyActive) {
+        activeCount--;
       }
 
+      formData.set(fieldName, fieldValue);
       this.updateFilterBadge(activeCount);
     };
 
     // Listen for form changes
-    form.addEventListener('change', updateActiveFiltersBadge);
-    form.addEventListener('input', this.debounce(updateActiveFiltersBadge, 300));
+    form.addEventListener('change', (event) => {
+      const { name, value } = event.target;
+      updateActiveFiltersBadge(name, value);
+    });
+    form.addEventListener('input', this.debounce((event) => {
+      const { name, value } = event.target;
+      updateActiveFiltersBadge(name, value);
+    }, 300));
   }
 
   updateFilterBadge(count) {

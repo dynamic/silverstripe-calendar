@@ -359,6 +359,6 @@ class EventInstance extends ViewableData
             ])->first();
         }
 
-        return new static($originalEvent, $instanceDate, $exception);
+        return new self($originalEvent, $instanceDate, $exception);
     }
 }

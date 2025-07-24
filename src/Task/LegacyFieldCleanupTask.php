@@ -30,7 +30,8 @@ class LegacyFieldCleanupTask extends BuildTask
     /**
      * @var string
      */
-    protected $description = 'Migrates data from deprecated StartDatetime/EndDatetime fields to StartDate/StartTime/EndDate/EndTime fields';
+    protected $description = 'Migrates data from deprecated StartDatetime/EndDatetime fields to ' .
+                           'StartDate/StartTime/EndDate/EndTime fields';
 
     /**
      * @var bool
@@ -152,7 +153,6 @@ class LegacyFieldCleanupTask extends BuildTask
                     $migrated++;
                     $this->message("Migrated event: {$event->Title} (ID: {$event->ID})");
                 }
-
             } catch (\Exception $e) {
                 $errors++;
                 $this->message("Error migrating event {$event->ID}: " . $e->getMessage(), 'error');

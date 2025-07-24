@@ -48,7 +48,7 @@ class EventException extends DataObject implements PermissionProvider
     protected function shouldSkipValidation(): bool
     {
         // Skip validation during fixture loading or testing
-        return Director::isDev() || 
+        return Director::isDev() ||
                (defined('SS_ENVIRONMENT_TYPE') && SS_ENVIRONMENT_TYPE === 'test') ||
                $this->config()->get('skip_validation');
     }

@@ -120,7 +120,6 @@ class CalendarController extends \PageController
 
         // Check if this is an AJAX request for JSON data
         if ($this->isAjaxRequest($request)) {
-
             // Transform events for FullCalendar format
             $eventsData = [];
             foreach ($events as $event) {

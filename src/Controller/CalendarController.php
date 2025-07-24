@@ -89,7 +89,7 @@ class CalendarController extends \PageController
      */
     private function isAjaxRequest(HTTPRequest $request): bool
     {
-        return $request->isAjax() 
+        return $request->isAjax()
             || $request->getHeader('Accept') === 'application/json'
             || $request->getHeader('X-Requested-With') === 'XMLHttpRequest';
     }

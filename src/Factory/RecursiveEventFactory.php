@@ -34,7 +34,7 @@ class RecursiveEventFactory
      * RecursiveEventFactory constructor.
      * @param EventPage|null $event
      */
-    public function __construct(?EventPage $event = null)
+    public function __construct(EventPage $event = null)
     {
         if ($event instanceof EventPage) {
             $this->setEvent($event);

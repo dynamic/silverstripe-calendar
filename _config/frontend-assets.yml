@@ -9,7 +9,7 @@ SilverStripe\Control\Controller:
   extensions:
     - Dynamic\Calendar\Extension\CalendarFrontendExtension
 
-# Admin asset management extension  
+# Admin asset management extension
 SilverStripe\Admin\LeftAndMain:
   extensions:
     - Dynamic\Calendar\Extension\CalendarAdminExtension

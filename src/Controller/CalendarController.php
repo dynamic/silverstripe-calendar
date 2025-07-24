@@ -85,15 +85,77 @@ class CalendarController extends \PageController
      * Events action for AJAX requests
      *
      * @param HTTPRequest $request
-     * @return array
+     * @return HTTPResponse|array
      */
-    public function events(HTTPRequest $request): array
+    public function events(HTTPRequest $request)
     {
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
-        $events = $this->calendar->getEventsFeed(null, null, $fromDate, $toDate);
+        // Get category filter
+        $categoryIDs = $request->getVar('categories');
+        $categories = null;
 
+        if ($categoryIDs) {
+            if (!is_array($categoryIDs)) {
+                $categoryIDs = [$categoryIDs];
+            }
+            $categories = Category::get()->byIDs($categoryIDs);
+        }
+
+        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+
+        // Check if this is an AJAX request for JSON data
+        if ($request->isAjax() || $request->getHeader('Accept') === 'application/json' ||
+            $request->getHeader('X-Requested-With') === 'XMLHttpRequest') {
+
+            // Transform events for FullCalendar format
+            $eventsData = [];
+            foreach ($events as $event) {
+                $eventData = [
+                    'id' => $event->ID,
+                    'title' => $event->Title,
+                    'start' => $event->StartDate,
+                    'allDay' => true, // Default to all day
+                    'url' => $event->Link(),
+                    'extendedProps' => [
+                        'summary' => $event->Summary ? $event->dbObject('Summary')->Summary(100) : '',
+                        'categories' => [],
+                        'isRecurring' => $event->Recursion !== 'NONE'
+                    ]
+                ];
+
+                // Add time information if available
+                if ($event->StartTime) {
+                    $eventData['start'] = $event->StartDate . 'T' . $event->StartTime;
+                    $eventData['allDay'] = false;
+                }
+
+                if ($event->EndDate && $event->EndTime) {
+                    $eventData['end'] = $event->EndDate . 'T' . $event->EndTime;
+                } elseif ($event->EndDate) {
+                    $eventData['end'] = $event->EndDate;
+                }
+
+                // Add category information
+                if ($event->Categories()->exists()) {
+                    foreach ($event->Categories() as $category) {
+                        $eventData['extendedProps']['categories'][] = [
+                            'ID' => $category->ID,
+                            'Title' => $category->Title
+                        ];
+                    }
+                }
+
+                $eventsData[] = $eventData;
+            }
+
+            $response = $this->getResponse();
+            $response->addHeader('Content-Type', 'application/json');
+            return $response->setBody(json_encode($eventsData));
+        }
+
+        // For non-AJAX requests, return template data
         return [
             'Events' => $events,
             'TotalEvents' => $events->count(),

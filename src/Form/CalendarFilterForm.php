@@ -88,17 +88,10 @@ class CalendarFilterForm extends Form
             document.addEventListener("DOMContentLoaded", function() {
                 // Initialize Choices.js with bundled library (no CDN required)
                 window.CalendarChoicesConfig = ' . json_encode($choicesConfig) . ';
-                
+
                 // The actual initialization is handled by calendar.bundle.js
                 if (typeof window.initializeChoicesJS === "function") {
                     window.initializeChoicesJS();
-                }
-                if (choicesScript) {
-                    choicesScript.crossOrigin = "anonymous";
-                }
-                const choicesStyle = document.querySelector("link[href*=\"choices.js\"]");
-                if (choicesStyle) {
-                    choicesStyle.crossOrigin = "anonymous";
                 }
             });
         ', 'choices-security');
@@ -165,7 +158,7 @@ class CalendarFilterForm extends Form
 
         // Row 1: Horizontal layout with main filters
         // Search field - takes up more space
-        $fields->push(TextField::create('search', 'Search Events')
+        $fields->push(TextField::create('search', 'Search')
             ->setValue($request->getVar('search'))
             ->setAttribute('placeholder', 'Search event titles and descriptions...')
             ->setAttribute('class', 'form-control')
@@ -175,7 +168,7 @@ class CalendarFilterForm extends Form
         if ($this->calendar->ShowCategoryFilter) {
             $availableCategories = $this->getAvailableCategories();
             if ($availableCategories->count()) {
-                $fields->push(DropdownField::create('categories', 'Filter by Category')
+                $fields->push(DropdownField::create('categories', 'Categories')
                     ->setSource($availableCategories->map('ID', 'Title')->toArray())
                     ->setValue($request->getVar('categories'))
                     ->setAttribute('multiple', 'multiple')
@@ -183,15 +176,19 @@ class CalendarFilterForm extends Form
             }
         }
 
-        // Date range - compact side by side
+        // Date range - compact side by side with better labels
         $fields->push(DateField::create('from', 'From Date')
             ->setValue($request->getVar('from'))
             ->setAttribute('class', 'form-control')
+            ->setAttribute('placeholder', 'Select start date')
+            ->setDescription('Show events from this date')
             ->addExtraClass('col-md-2 mb-3'));
 
         $fields->push(DateField::create('to', 'To Date')
             ->setValue($request->getVar('to'))
             ->setAttribute('class', 'form-control')
+            ->setAttribute('placeholder', 'Select end date')
+            ->setDescription('Show events until this date')
             ->addExtraClass('col-md-2 mb-3'));
 
         // Advanced filters - with simple toggle
@@ -207,7 +204,7 @@ class CalendarFilterForm extends Form
             if ($showAdvanced) {
                 // Event type filter
                 if ($this->calendar->ShowEventTypeFilter) {
-                    $fields->push(DropdownField::create('eventType', 'Event Type')
+                    $fields->push(DropdownField::create('eventType', 'Type')
                         ->setSource([
                             '' => 'All Events',
                             'one-time' => 'One-Time Events',

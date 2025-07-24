@@ -5,17 +5,18 @@ import '../scss/calendar.scss';
 import Choices from 'choices.js';
 
 // Import components
-import './components/CalendarView';
-import './components/FullCalendarView';
-import './components/SmartFiltering';
-import './components/TouchInteractions';
-import './components/KeyboardNavigation';
+import { CalendarView } from './components/CalendarView';
+import { FullCalendarView } from './components/FullCalendarView';
+import { SmartFiltering } from './components/SmartFiltering';
+import { TouchInteractions } from './components/TouchInteractions';
+import { KeyboardNavigation } from './components/KeyboardNavigation';
+import { FilterEnhancements } from './components/FilterEnhancements';
 
 // Global function for Choices.js initialization (called by CalendarFilterForm)
 window.initializeChoicesJS = function() {
   const multiSelectElements = document.querySelectorAll('.js-choice');
   const config = window.CalendarChoicesConfig || {};
-  
+
   multiSelectElements.forEach(function(element) {
     if (element.tagName === 'SELECT' && !element.hasAttribute('data-choices-initialized')) {
       new Choices(element, config);
@@ -41,17 +42,8 @@ class CalendarModule {
   initializeComponents() {
     console.log('Initializing Dynamic Calendar Module...');
 
-    // Initialize FullCalendar view if container exists
-    const calendarContainer = document.querySelector('#dynamic-calendar-container');
-    if (calendarContainer) {
-      this.calendarView = new CalendarView(calendarContainer);
-    }
-
-    // Initialize list view enhancements
-    const listView = document.querySelector('.calendar-list-view');
-    if (listView) {
-      this.initializeListView(listView);
-    }
+    // Initialize FullCalendar directly
+    this.initializeFullCalendar();
 
     // Initialize filtering system
     const filterForm = document.querySelector('.calendar-filter-form');
@@ -70,75 +62,74 @@ class CalendarModule {
     console.log('Calendar module initialized successfully');
   }
 
-  initializeListView(container) {
-    // Enhance existing list view with modern interactions
-    container.classList.add('enhanced-list-view');
+  initializeFullCalendar() {
+    const calendarElement = document.querySelector('#fullcalendar');
+    const fullCalendarSection = document.querySelector('#fullcalendar-view');
 
-    // Add lazy loading for images
-    const images = container.querySelectorAll('img[data-src]');
-    if (images.length > 0) {
-      this.initializeLazyLoading(images);
+    if (!calendarElement || !fullCalendarSection) {
+      console.warn('FullCalendar element not found');
+      return;
     }
 
-    // Add smooth scrolling for pagination
-    const paginationLinks = container.querySelectorAll('.pagination a');
-    paginationLinks.forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.handlePaginationClick(link);
-      });
-    });
-  }
+    // Get configuration from the parent container
+    const eventsUrl = fullCalendarSection.dataset.eventsUrl;
+    const calendarId = fullCalendarSection.dataset.calendarId;
 
-  initializeLazyLoading(images) {
-    const imageObserver = new IntersectionObserver((entries, observer) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const img = entry.target;
-          img.src = img.dataset.src;
-          img.classList.remove('lazy');
-          imageObserver.unobserve(img);
-        }
-      });
-    });
-
-    images.forEach(img => imageObserver.observe(img));
-  }
-
-  async handlePaginationClick(link) {
-    const url = link.href;
+    console.log('Initializing FullCalendar with events URL:', eventsUrl);
 
     try {
-      const response = await fetch(url, {
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest'
-        }
+      this.calendarView = new CalendarView(calendarElement, {
+        eventsUrl: eventsUrl,
+        calendarId: calendarId
       });
-
-      if (response.ok) {
-        const html = await response.text();
-        // Update content dynamically
-        this.updateListContent(html);
-        // Update URL without page reload
-        history.pushState(null, '', url);
-      }
+      console.log('FullCalendar initialized successfully');
     } catch (error) {
-      console.error('Error loading page:', error);
-      // Fallback to normal navigation
-      window.location.href = url;
+      console.error('Failed to initialize FullCalendar:', error);
     }
   }
 
-  updateListContent(html) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const newContent = doc.querySelector('.calendar-list-view');
-    const currentContent = document.querySelector('.calendar-list-view');
+  fetchCalendarEvents(start, end, successCallback, failureCallback) {
+    // Get current filter values
+    const filterForm = document.querySelector('form[name="CalendarFilterForm"]');
+    const params = new URLSearchParams();
 
-    if (newContent && currentContent) {
-      currentContent.innerHTML = newContent.innerHTML;
-      this.initializeListView(currentContent);
+    params.append('start', start.toISOString().split('T')[0]);
+    params.append('end', end.toISOString().split('T')[0]);
+    params.append('format', 'json');
+
+    if (filterForm) {
+      const formData = new FormData(filterForm);
+      for (const [key, value] of formData.entries()) {
+        if (value && key !== 'action_doFilter') {
+          params.append(key, value);
+        }
+      }
     }
+
+    // Fetch events from current page with AJAX
+    const currentUrl = new URL(window.location);
+    const eventsUrl = `${currentUrl.pathname}?${params.toString()}`;
+
+    fetch(eventsUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(events => {
+      console.log('Fetched calendar events:', events.length);
+      successCallback(events);
+    })
+    .catch(error => {
+      console.error('Failed to fetch calendar events:', error);
+      failureCallback(error);
+    });
   }
 
   isTouchDevice() {

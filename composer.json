@@ -39,5 +39,10 @@
             "Dynamic\\Calendar\\": "src/",
             "Dynamic\\Calendar\\Tests\\": "tests/"
         }
+    },
+    "extra": {
+        "expose": [
+            "client/dist"
+        ]
     }
 }

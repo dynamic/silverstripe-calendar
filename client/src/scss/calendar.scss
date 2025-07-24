@@ -1,6 +1,148 @@
 // Dynamic SilverStripe Calendar - Modern Frontend Styles
 // Drop-in module for silverstripe-essentials-theme (Bootstrap 5.3)
 
+// Import Choices.js CSS for enhanced dropdowns
+@import "~choices.js/public/assets/styles/choices.min.css";
+
+// FullCalendar Responsive Enhancements
+// Complement FullCalendar's built-in responsive design
+
+.fc {
+  // Desktop/Tablet: Ensure single-row header layout
+  @media (min-width: 768px) {
+    .fc-header-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 1rem;
+
+      .fc-toolbar-chunk {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      // Ensure title doesn't break layout
+      .fc-toolbar-title {
+        font-size: 1.5rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        flex: 1;
+        text-align: center;
+
+        @media (min-width: 992px) {
+          font-size: 1.75rem;
+        }
+      }
+    }
+  }
+
+  // Mobile optimizations
+  @media (max-width: 767.98px) {
+    .fc-header-toolbar {
+      .fc-toolbar-title {
+        font-size: 1.25rem;
+        margin: 0.5rem 0;
+      }
+
+      .fc-button-group {
+        .fc-button {
+          font-size: 0.875rem;
+          padding: 0.25rem 0.5rem;
+        }
+      }
+    }
+
+    // Mobile event display optimizations
+    .fc-daygrid-event {
+      font-size: 0.75rem;
+      padding: 1px 2px;
+    }
+
+    .fc-list-event {
+      .fc-list-event-title {
+        font-size: 0.875rem;
+      }
+    }
+
+    // Touch-friendly interactions
+    .fc-button {
+      min-height: 44px; // Apple's minimum touch target
+      min-width: 44px;
+    }
+
+    .fc-daygrid-day {
+      min-height: 44px;
+    }
+  }
+
+  // Extra small screens (portrait phones)
+  @media (max-width: 575.98px) {
+    .fc-header-toolbar {
+      .fc-toolbar-title {
+        font-size: 1.125rem;
+      }
+    }
+
+    .fc-button-group {
+      .fc-button {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.4rem;
+      }
+    }
+  }
+}
+
+// Choices.js Bootstrap 5 Integration Fixes
+.choices {
+  margin-bottom: 0; // Remove default margin to match Bootstrap forms
+
+  .choices__inner {
+    background-color: var(--bs-body-bg);
+    border: var(--bs-border-width) solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    color: var(--bs-body-color);
+    font-size: var(--bs-body-font-size);
+    min-height: calc(1.5em + 0.75rem + 2px); // Match Bootstrap input height
+    padding: 0.375rem 0.75rem; // Match Bootstrap input padding
+
+    &:focus-within {
+      border-color: var(--bs-primary);
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+  }
+
+  .choices__list--dropdown {
+    background-color: var(--bs-body-bg);
+    border: var(--bs-border-width) solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    box-shadow: var(--bs-box-shadow);
+    z-index: 1050; // Ensure it appears above other elements
+
+    .choices__item {
+      color: var(--bs-body-color);
+
+      &:hover,
+      &.is-highlighted {
+        background-color: var(--bs-primary);
+        color: var(--bs-white);
+      }
+    }
+  }
+
+  &.is-open .choices__inner {
+    border-radius: var(--bs-border-radius) var(--bs-border-radius) 0 0;
+  }
+
+  .choices__item--choice.is-selected {
+    background-color: var(--bs-primary);
+    color: var(--bs-white);
+  }
+}
+
 // Custom calendar variables that leverage existing Bootstrap CSS custom properties
 $calendar-primary-color: var(--bs-primary, #0d6efd) !default;
 $calendar-border-radius: var(--bs-border-radius, 0.375rem) !default;

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const webpack = require('webpack');
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production';
@@ -69,6 +70,10 @@ module.exports = (env, argv) => {
     plugins: [
       new MiniCssExtractPlugin({
         filename: 'css/[name].bundle.css'
+      }),
+      new webpack.DefinePlugin({
+        'process.env.NODE_ENV': JSON.stringify(isProduction ? 'production' : 'development'),
+        __DEV__: JSON.stringify(!isProduction)
       })
     ],
     devtool: isProduction ? false : 'source-map',

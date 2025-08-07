@@ -12,6 +12,7 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
+use Heyday\ColorPalette\Fields\ColorPaletteField;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
 use SilverStripe\ORM\ValidationResult;
@@ -43,6 +44,7 @@ class Category extends DataObject implements PermissionProvider
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
+        'Color' => 'Varchar(7)', // Hex color code (e.g., #334597)
     ];
 
     /**
@@ -80,6 +82,7 @@ class Category extends DataObject implements PermissionProvider
     private static array $summary_fields = [
         'Title' => 'Name',
         'Description' => 'Description',
+        'ColorPreview' => 'Color',
         'Parent.Title' => 'Parent',
     ];
 
@@ -88,6 +91,7 @@ class Category extends DataObject implements PermissionProvider
      */
     private static array $casting = [
         'IsSubcategory' => 'Boolean',
+        'ColorPreview' => 'HTMLText',
     ];
 
     /**
@@ -119,6 +123,30 @@ class Category extends DataObject implements PermissionProvider
                     ->setTitle('Parent Category')
                     ->setSource($allowedParentCategories)
                     ->setEmptyString('-- select --')
+            );
+
+            // Add color palette field for brand-consistent color selection
+            $fields->addFieldToTab(
+                'Root.Main',
+                ColorPaletteField::create(
+                    'Color',
+                    'Category Color',
+                    [
+                        'Navy Blue' => '#010E3B',        // Bethlehem primary navy
+                        'Blue' => '#334597',             // Bethlehem secondary blue
+                        'Gold' => '#E1AD3C',             // Bethlehem gold accent
+                        'Light Blue' => '#E6E8F2',       // Light blue background
+                        'Brown' => '#71624E',            // Brown accent
+                        'White' => '#FFFFFF',            // White
+                        'Red' => '#DC3545',              // Bootstrap danger red
+                        'Green' => '#198754',            // Bootstrap success green
+                        'Orange' => '#FD7E14',           // Bootstrap warning orange
+                        'Purple' => '#6F42C1',           // Bootstrap purple
+                        'Pink' => '#E91E63',             // Pink accent
+                        'Teal' => '#20C997',             // Teal accent
+                    ]
+                )->setDescription('Choose a color to represent this category in the calendar. Events in this category will display with this color.'),
+                'Description'
             );
 
             $fields->removeByName($remove);

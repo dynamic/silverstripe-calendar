@@ -176,6 +176,34 @@ class Category extends DataObject implements PermissionProvider
     }
 
     /**
+     * Get the legacy color mapping for backward compatibility
+     * Maps color names from ColorPaletteField to consistent hex values
+     *
+     * @return array
+     */
+    private static function getLegacyColorMap(): array
+    {
+        return [
+            'Navy Blue' => '#010E3B',        // Bethlehem primary navy
+            'Blue' => '#334597',             // Bethlehem secondary blue
+            'Gold' => '#E1AD3C',             // Bethlehem gold accent
+            'Light Blue' => '#6FA8DC',       // Light blue accent (standardized)
+            'Dark Blue' => '#1C4587',        // Dark blue accent
+            'Brown' => '#71624E',            // Brown accent
+            'Gray' => '#666666',             // Neutral gray
+            'Black' => '#000000',            // Black
+            'White' => '#FFFFFF',            // White
+            'Red' => '#DC3545',              // Bootstrap danger red
+            'Green' => '#198754',            // Bootstrap success green
+            'Orange' => '#FD7E14',           // Bootstrap warning orange
+            'Purple' => '#6F42C1',           // Bootstrap purple
+            'Pink' => '#E91E63',             // Pink accent
+            'Teal' => '#20C997',             // Teal accent
+            'Magenta' => '#E91E63',          // Legacy magenta mapping
+        ];
+    }
+
+    /**
      * Get the category color for frontend use
      * Returns the hex color value or a default if none set
      *
@@ -193,21 +221,7 @@ class Category extends DataObject implements PermissionProvider
         }
 
         // Otherwise, it's a legacy color name from ColorPaletteField - map to hex values
-        $colorMap = [
-            'Navy Blue' => '#010E3B',        // Bethlehem primary navy
-            'Blue' => '#334597',             // Bethlehem secondary blue
-            'Gold' => '#E1AD3C',             // Bethlehem gold accent
-            'Light Blue' => '#E6E8F2',       // Light blue background
-            'Brown' => '#71624E',            // Brown accent
-            'White' => '#FFFFFF',            // White
-            'Red' => '#DC3545',              // Bootstrap danger red
-            'Green' => '#198754',            // Bootstrap success green
-            'Orange' => '#FD7E14',           // Bootstrap warning orange
-            'Purple' => '#6F42C1',           // Bootstrap purple
-            'Pink' => '#E91E63',             // Pink accent
-            'Teal' => '#20C997',             // Teal accent
-        ];
-
+        $colorMap = self::getLegacyColorMap();
         return $colorMap[$this->Color] ?? '#334597'; // Fallback to Bethlehem blue
     }
 
@@ -219,29 +233,14 @@ class Category extends DataObject implements PermissionProvider
      */
     public function getColorHex(): string
     {
-        // Map legacy color names to hex values
-        $colorMap = [
-            'Blue' => '#334597',             // Bethlehem primary blue
-            'Gold' => '#E1AD3C',             // Bethlehem gold
-            'Light Blue' => '#6FA8DC',       // Light blue accent
-            'Dark Blue' => '#1C4587',        // Dark blue accent
-            'Gray' => '#666666',             // Neutral gray
-            'Black' => '#000000',            // Black
-            'White' => '#FFFFFF',            // White
-            'Red' => '#DC3545',              // Bootstrap danger red
-            'Green' => '#198754',            // Bootstrap success green
-            'Orange' => '#FD7E14',           // Bootstrap warning orange
-            'Purple' => '#6F42C1',           // Bootstrap purple
-            'Pink' => '#E91E63',             // Pink accent
-            'Teal' => '#20C997',             // Teal accent
-        ];
+        $colorMap = self::getLegacyColorMap();
 
-        // If it's already a hex color, return as-is
+        // If it's already a hex color, return without # prefix
         if (preg_match('/^#?[a-fA-F0-9]{6}$/', $this->Color)) {
             return ltrim($this->Color, '#');
         }
 
-        // Otherwise map from color name
+        // Otherwise map from color name and remove # prefix
         $hexColor = $colorMap[$this->Color] ?? '#334597';
         return ltrim($hexColor, '#');
     }

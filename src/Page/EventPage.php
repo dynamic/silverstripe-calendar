@@ -4,12 +4,10 @@ namespace Dynamic\Calendar\Page;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Controller\EventPageController;
-use Dynamic\Calendar\Factory\RecursiveEventFactory;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Traits\CarbonRecursion;
-use RRule\RRule;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
@@ -70,7 +68,7 @@ class EventPage extends \Page
     /**
      * @var array
      */
-    private static array $allowed_children = [RecursiveEvent::class];
+    private static array $allowed_children = [];
 
     /**
      * @var bool
@@ -93,13 +91,6 @@ class EventPage extends \Page
      * @var bool
      */
     private static bool $recursion = false;
-
-    /**
-     * Recursion system to use: 'rrule' (legacy) or 'carbon' (new)
-     *
-     * @var string
-     */
-    private static string $recursion_system = 'carbon';
 
     /**
      * @var array
@@ -245,17 +236,15 @@ class EventPage extends \Page
      */
     public function getHasRecurringEvents()
     {
-        $filter = [
-            'ParentID' => $this->ID,
-        ];
+        // With Carbon system, check if this event has recurring patterns
+        $hasRecurrence = $this->eventRecurs();
+        
+        $summary = DBField::create_field(DBBoolean::class, $hasRecurrence)->Nice();
 
-        $instances = RecursiveEvent::get()->filter($filter);
-        $existing = $instances->count() > 0;
-
-        $summary = DBField::create_field(DBBoolean::class, $existing)->Nice();
-
-        if ($existing) {
-            $summary .= " ({$instances->count()})";
+        if ($hasRecurrence) {
+            // Count virtual instances in a reasonable timeframe
+            $count = min($this->getFullRecursionCount(), 100); // Cap display count
+            $summary .= " ({$count})";
         }
 
         return $summary;
@@ -274,10 +263,9 @@ class EventPage extends \Page
      */
     public function getLumberjackPagesForGridfield()
     {
-        return RecursiveEvent::get()->filter([
-            'ParentID' => $this->ID,
-            'StartDate:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
-        ])->sort('StartDate ASC');
+        // With Carbon system, we don't have physical RecursiveEvent records
+        // Return empty DataList since we use virtual instances
+        return EventPage::get()->filter('ID', 0); // Returns empty DataList
     }
 
     /**
@@ -385,15 +373,7 @@ class EventPage extends \Page
     {
         parent::onAfterPublish();
 
-        // Only generate physical recurring events if using the legacy RRule system
-        if ($this->config()->get('recursion_system') === 'rrule') {
-            if ($this->eventRecurs()) {
-                $this->generateAdditionalEvents();
-            }
-
-            $this->cleanRecursions();
-        }
-        // For Carbon system, we use virtual instances - no need to generate physical events
+        // Carbon system uses virtual instances - no need to generate physical events
     }
 
     /**
@@ -411,86 +391,12 @@ class EventPage extends \Page
     {
         return $this->config()->get('recursion')
             && $this->ClassName == EventPage::class
-            && !$this instanceof RecursiveEvent
             && $this->Recursion != 'NONE';
     }
 
-    /**
-     *
-     */
-    protected function generateAdditionalEvents()
-    {
-        $factory = RecursiveEventFactory::create();
-        $factory->setEvent($this);
-        $skip = $this->getSkipList();
-
-        foreach ($this->yieldSingle($this->getValidDates()) as $date) {
-            if ($date != $this->StartDate && !in_array($date, $skip)) {
-                $factory->setDate($date);
-                $factory->createEvent();
-            }
-        }
-    }
-
-    /**
-     * @return array
-     */
-    protected function getSkipList()
-    {
-        $skip = RecursiveEvent::get()->filter([
-            'ParentID' => $this->ID,
-        ]);
-
-        if (count($this->getValidDates())) {
-            $skip = $skip->exclude([
-                'StartDate' => $this->getValidDates(),
-            ]);
-        };
-
-        return $skip->column('StartDate');
-    }
-
-    /**
-     *
-     */
-    protected function cleanRecursions()
-    {
-        $clean = RecursiveEvent::get()
-            ->filter('ParentID', $this->ID);
-
-        if (count($this->getValidDates())) {
-            $clean = $clean->exclude('StartDate', $this->getValidDates());
-        }
 
 
-        /** @var RecursiveEvent $event */
-        foreach ($this->yieldSingle($clean) as $event) {
-            $event->doArchive();
-        }
-    }
 
-    /**
-     * @return RRule|array
-     * @deprecated Use Carbon-based getOccurrences() method instead
-     */
-    protected function getRecursionSet()
-    {
-        if (!$this->eventRecurs()) {
-            return [];
-        }
-
-        // For Carbon system, don't use RRule
-        if ($this->config()->get('recursion_system') === 'carbon') {
-            return [];
-        }
-
-        return new RRule([
-            'FREQ' => $this->Recursion,
-            'INTERVAL' => $this->Interval,
-            'DTSTART' => $this->StartDate,
-            'UNTIL' => $this->RecursionEndDate,
-        ]);
-    }
 
     /**
      * The total count will include the originating date.
@@ -499,42 +405,16 @@ class EventPage extends \Page
      */
     public function getFullRecursionCount()
     {
-        if ($this->config()->get('recursion_system') === 'carbon') {
-            // For Carbon system, count virtual instances in a reasonable range
-            $count = 0;
-            $limit = 1000; // Reasonable limit to prevent infinite loops
-            foreach ($this->getOccurrences(null, null, $limit) as $instance) {
-                $count++;
-            }
-            return $count;
+        // Use Carbon system to count virtual instances in a reasonable range
+        $count = 0;
+        $limit = 1000; // Reasonable limit to prevent infinite loops
+        foreach ($this->getOccurrences(null, null, $limit) as $instance) {
+            $count++;
         }
-
-        // Legacy RRule system
-        return $this->getRecursionSet()->count();
+        return $count;
     }
 
-    /**
-     * @return array
-     * @deprecated Use Carbon-based getOccurrences() method instead
-     */
-    protected function getValidDates()
-    {
-        if ($this->config()->get('recursion_system') === 'carbon') {
-            // For Carbon system, return empty array since we use virtual instances
-            return [];
-        }
 
-        // Legacy RRule system
-        $dates = [];
-
-        foreach ($this->yieldSingle($this->getRecursionSet()) as $date) {
-            if ($date->format('Y-m-d') != $this->StartDate) {
-                $dates[] = $date->format('Y-m-d');
-            }
-        }
-
-        return $dates;
-    }
 
     /**
      * @return bool
@@ -607,7 +487,8 @@ class EventPage extends \Page
      */
     public function isCopy()
     {
-        return $this->ParentID > 0 && $this->ClassName == RecursiveEvent::class;
+        // With Carbon system, we don't have physical RecursiveEvent records
+        return false;
     }
 
     /**
@@ -657,40 +538,34 @@ class EventPage extends \Page
      * Get all child events/instances for this recurring event
      *
      * For the Carbon system, this returns an ArrayList of virtual instances
-     * For the legacy RRule system, this would return actual RecursiveEvent records
      *
-     * @return \SilverStripe\ORM\ArrayList|\SilverStripe\ORM\DataList
+     * @return \SilverStripe\ORM\ArrayList
      */
     public function allChildren()
     {
-        if ($this->config()->get('recursion_system') === 'carbon') {
-            // For Carbon system, use virtual instances
-            if (!$this->eventRecurs()) {
-                return \SilverStripe\ORM\ArrayList::create();
-            }
-
-            // Get occurrences within a reasonable timeframe for testing
-            $endDate = $this->RecursionEndDate ? Carbon::parse($this->RecursionEndDate) :
-                Carbon::parse($this->StartDate)->addMonth();
-            $occurrences = $this->getOccurrences($this->StartDate, $endDate);
-
-            $children = \SilverStripe\ORM\ArrayList::create();
-            $originalStartDate = $this->StartDate;
-
-            foreach ($occurrences as $occurrence) {
-                // Exclude the original event instance (only return the recurring ones)
-                // Convert both to string to ensure proper comparison
-                $occurrenceStartDate = (string) $occurrence->StartDate;
-                if ($occurrenceStartDate !== $originalStartDate) {
-                    $children->push($occurrence);
-                }
-            }
-
-            return $children;
-        } else {
-            // Legacy RRule system - return actual RecursiveEvent records
-            return RecursiveEvent::get()->filter('ParentID', $this->ID);
+        // Use virtual instances with Carbon system
+        if (!$this->eventRecurs()) {
+            return \SilverStripe\ORM\ArrayList::create();
         }
+
+        // Get occurrences within a reasonable timeframe for testing
+        $endDate = $this->RecursionEndDate ? Carbon::parse($this->RecursionEndDate) :
+            Carbon::parse($this->StartDate)->addMonth();
+        $occurrences = $this->getOccurrences($this->StartDate, $endDate);
+
+        $children = \SilverStripe\ORM\ArrayList::create();
+        $originalStartDate = $this->StartDate;
+
+        foreach ($occurrences as $occurrence) {
+            // Exclude the original event instance (only return the recurring ones)
+            // Convert both to string to ensure proper comparison
+            $occurrenceStartDate = (string) $occurrence->StartDate;
+            if ($occurrenceStartDate !== $originalStartDate) {
+                $children->push($occurrence);
+            }
+        }
+
+        return $children;
     }
 
     /**

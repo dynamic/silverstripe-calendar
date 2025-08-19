@@ -418,13 +418,14 @@ trait CarbonRecursion
     }
 
     /**
-     * Check if event uses Carbon-based recursion (vs legacy RRule)
+     * Check if event uses Carbon-based recursion
+     * Always returns true since we've removed the legacy RRule system
      *
      * @return bool
      */
     public function usesCarbonRecursion(): bool
     {
-        return $this->config()->get('recursion_system') === 'carbon';
+        return true;
     }
 
     /**

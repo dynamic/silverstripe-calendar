@@ -334,54 +334,12 @@ trait CarbonCalendarController
     }
 
     /**
-     * Check if Carbon recursion system should be used
-     *
-     * @return bool
-     */
-    protected function shouldUseCarbonRecursion(): bool
-    {
-        return EventPage::config()->get('recursion_system') === 'carbon';
-    }
-
-    /**
-     * Override the main setEvents method to use Carbon system when enabled
+     * Override the main setEvents method to use Carbon system
      *
      * @return $this
      */
     protected function setEvents(): self
     {
-        if ($this->shouldUseCarbonRecursion()) {
-            return $this->setEventsWithCarbon();
-        }
-
-        // Fall back to original implementation for backward compatibility
-        return $this->setEventsLegacy();
-    }
-
-    /**
-     * Legacy setEvents method (original RRule-based implementation)
-     * Kept for backward compatibility
-     *
-     * @return $this
-     */
-    protected function setEventsLegacy(): self
-    {
-        $events = EventPage::get()
-            ->filterAny([
-                'StartDate:GreaterThanOrEqual' => $this->getStartDate(),
-                'EndDate:GreaterThanOrEqual' => date('Y-m-d', strtotime('now')),
-            ]);
-
-        if ($this->getDefaultFilter() != null) {
-            $events = $events->filter($this->getDefaultFilter());
-        }
-
-        $events = $this->filterByRequest($events);
-
-        $this->extend('updateEvents', $events);
-
-        $this->events = $events;
-
-        return $this;
+        return $this->setEventsWithCarbon();
     }
 }

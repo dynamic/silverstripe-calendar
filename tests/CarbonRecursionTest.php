@@ -330,4 +330,53 @@ class CarbonRecursionTest extends SapphireTest
         $occurrences = iterator_to_array($event->getOccurrences('2025-06-21', '2025-06-25'));
         $this->assertCount(0, $occurrences);
     }
+
+    /**
+     * Test Lumberjack pages for GridField functionality
+     */
+    public function testLumberjackPagesForGridfield()
+    {
+        // Test non-recurring event
+        $nonRecurringEvent = EventPage::create([
+            'Title' => 'One-time Event',
+            'StartDate' => '2025-06-20',
+            'Recursion' => 'NONE',
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $nonRecurringEvent->write();
+
+        $pages = $nonRecurringEvent->getLumberjackPagesForGridfield();
+        $this->assertInstanceOf(\SilverStripe\ORM\ArrayList::class, $pages);
+        $this->assertEquals(0, $pages->count(), 'Non-recurring event should return empty list');
+
+        // Test recurring event with Carbon system
+        $recurringEvent = EventPage::create([
+            'Title' => 'Weekly Meeting',
+            'StartDate' => '2025-06-16',
+            'StartTime' => '09:00:00',
+            'EndTime' => '10:00:00',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-08-01',
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $recurringEvent->write();
+
+        $pages = $recurringEvent->getLumberjackPagesForGridfield();
+        $this->assertInstanceOf(\SilverStripe\ORM\ArrayList::class, $pages);
+        $this->assertGreaterThan(0, $pages->count(), 'Recurring event should return virtual instances');
+
+        // Verify instances are sorted by StartDate
+        $previousDate = null;
+        foreach ($pages as $instance) {
+            $this->assertInstanceOf(\Dynamic\Calendar\Model\EventInstance::class, $instance);
+            if ($previousDate !== null) {
+                $this->assertGreaterThanOrEqual($previousDate, $instance->StartDate, 'Instances should be sorted by StartDate ASC');
+            }
+            $previousDate = $instance->StartDate;
+            
+            // Verify original event is not included
+            $this->assertNotEquals($recurringEvent->StartDate, $instance->StartDate, 'Original event should be excluded from recurring list');
+        }
+    }
 }

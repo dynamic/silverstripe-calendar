@@ -71,29 +71,78 @@ class CalendarModule {
   }
 
   initializeFullCalendar() {
+    // Initialize main calendar page
     const calendarElement = document.querySelector('#fullcalendar');
     const fullCalendarSection = document.querySelector('#fullcalendar-view');
 
-    if (!calendarElement || !fullCalendarSection) {
-      console.warn('FullCalendar element not found');
+    if (calendarElement && fullCalendarSection) {
+      // Get configuration from the parent container
+      const eventsUrl = fullCalendarSection.dataset.eventsUrl;
+      const calendarId = fullCalendarSection.dataset.calendarId;
+
+      console.log('Initializing FullCalendar with events URL:', eventsUrl);
+
+      try {
+        this.calendarView = new CalendarView(calendarElement, {
+          eventsUrl: eventsUrl,
+          calendarId: calendarId
+        });
+        console.log('FullCalendar initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize FullCalendar:', error);
+      }
+    }
+
+    // Initialize element calendars
+    this.initializeElementCalendars();
+  }
+
+  initializeElementCalendars() {
+    const elementCalendars = document.querySelectorAll('.calendar-element-view');
+
+    if (elementCalendars.length === 0) {
+      console.warn('No calendar elements found');
       return;
     }
 
-    // Get configuration from the parent container
-    const eventsUrl = fullCalendarSection.dataset.eventsUrl;
-    const calendarId = fullCalendarSection.dataset.calendarId;
+    elementCalendars.forEach((elementContainer, index) => {
+      const calendarId = elementContainer.dataset.calendarId;
+      const eventsUrl = elementContainer.dataset.eventsUrl;
+      const eventLimit = parseInt(elementContainer.dataset.eventLimit) || 3;
+      const defaultView = elementContainer.dataset.defaultView || 'dayGridMonth';
 
-    console.log('Initializing FullCalendar with events URL:', eventsUrl);
+      // Find the target calendar div within this container
+      const targetCalendar = elementContainer.querySelector('[id^="fullcalendar-"]');
 
-    try {
-      this.calendarView = new CalendarView(calendarElement, {
-        eventsUrl: eventsUrl,
-        calendarId: calendarId
-      });
-      console.log('FullCalendar initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize FullCalendar:', error);
-    }
+      if (!targetCalendar) {
+        console.warn('Calendar target div not found in element', elementContainer);
+        return;
+      }
+
+      console.log(`Initializing Element Calendar ${index + 1} with events URL:`, eventsUrl);
+
+      try {
+        // Initialize with FullCalendarView component with all view options
+        new FullCalendarView(targetCalendar, {
+          initialView: defaultView,
+          headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,dayGridYear,timeGridWeek,timeGridDay,listMonth'
+          },
+          dayMaxEvents: eventLimit,
+          height: 'auto',
+          aspectRatio: 1.35,
+          events: (info, successCallback, failureCallback) => {
+            this.fetchElementCalendarEvents(eventsUrl, info, successCallback, failureCallback);
+          }
+        });
+
+        console.log(`Element Calendar ${index + 1} initialized successfully`);
+      } catch (error) {
+        console.error(`Failed to initialize Element Calendar ${index + 1}:`, error);
+      }
+    });
   }
 
   fetchCalendarEvents(start, end, successCallback, failureCallback) {
@@ -136,6 +185,38 @@ class CalendarModule {
     })
     .catch(error => {
       console.error('Failed to fetch calendar events:', error);
+      failureCallback(error);
+    });
+  }
+
+  fetchElementCalendarEvents(eventsUrl, info, successCallback, failureCallback) {
+    const params = new URLSearchParams();
+    params.append('start', info.start.toISOString().split('T')[0]);
+    params.append('end', info.end.toISOString().split('T')[0]);
+    params.append('format', 'json');
+
+    const fullEventsUrl = `${eventsUrl}?${params.toString()}`;
+
+    fetch(fullEventsUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(events => {
+      console.log('Fetched element calendar events:', events.length);
+
+      // Events are already in FullCalendar format from the Calendar module
+      successCallback(events);
+    })
+    .catch(error => {
+      console.error('Failed to fetch element calendar events:', error);
       failureCallback(error);
     });
   }

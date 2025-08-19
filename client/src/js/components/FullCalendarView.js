@@ -43,7 +43,8 @@ export class FullCalendarView {
           listPlugin.default,
           interactionPlugin.default
         ],
-        events: this.loadEvents.bind(this)
+        // Use provided events function if available, otherwise use loadEvents
+        events: this.options.events || this.loadEvents.bind(this)
       });
 
       this.calendar.render();

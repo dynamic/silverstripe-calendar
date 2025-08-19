@@ -148,14 +148,27 @@ class CalendarController extends \PageController
                     $eventData['end'] = $event->EndDate;
                 }
 
-                // Add category information
+                // Add category information with colors
+                $categoryColors = [];
                 if ($event->Categories()->exists()) {
                     foreach ($event->Categories() as $category) {
                         $eventData['extendedProps']['categories'][] = [
                             'ID' => $category->ID,
-                            'Title' => $category->Title
+                            'Title' => $category->Title,
+                            'Color' => $category->ColorPreview
                         ];
+                        // Collect colors for event styling (use first category's color)
+                        if (empty($categoryColors)) {
+                            $categoryColors[] = '#' . $category->getColorHex();
+                        }
                     }
+                }
+
+                // Apply the first category's color to the event
+                if (!empty($categoryColors)) {
+                    $eventData['backgroundColor'] = $categoryColors[0];
+                    $eventData['borderColor'] = $categoryColors[0];
+                    $eventData['textColor'] = $this->getContrastColor($categoryColors[0]);
                 }
 
                 $eventsData[] = $eventData;
@@ -371,5 +384,28 @@ class CalendarController extends \PageController
             }
         }
         return $cleanVars;
+    }
+
+    /**
+     * Get appropriate text color (white/black) based on background color for accessibility
+     *
+     * @param string $backgroundColor Hex color code
+     * @return string
+     */
+    private function getContrastColor(string $backgroundColor): string
+    {
+        // Remove # if present
+        $color = ltrim($backgroundColor, '#');
+
+        // Convert to RGB
+        $r = hexdec(substr($color, 0, 2));
+        $g = hexdec(substr($color, 2, 2));
+        $b = hexdec(substr($color, 4, 2));
+
+        // Calculate luminance using relative luminance formula
+        $luminance = (0.299 * $r + 0.587 * $g + 0.114 * $b) / 255;
+
+        // Return white for dark colors, black for light colors
+        return $luminance > 0.5 ? '#000000' : '#FFFFFF';
     }
 }

@@ -12,6 +12,7 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
+use RyanPotter\SilverStripeColorField\Forms\ColorField;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
 use SilverStripe\ORM\ValidationResult;
@@ -43,6 +44,7 @@ class Category extends DataObject implements PermissionProvider
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
+        'Color' => 'Varchar(7)', // Hex color code (e.g., #334597)
     ];
 
     /**
@@ -80,6 +82,7 @@ class Category extends DataObject implements PermissionProvider
     private static array $summary_fields = [
         'Title' => 'Name',
         'Description' => 'Description',
+        'ColorPreview' => 'Color',
         'Parent.Title' => 'Parent',
     ];
 
@@ -88,6 +91,7 @@ class Category extends DataObject implements PermissionProvider
      */
     private static array $casting = [
         'IsSubcategory' => 'Boolean',
+        'ColorPreview' => 'HTMLText',
     ];
 
     /**
@@ -119,6 +123,17 @@ class Category extends DataObject implements PermissionProvider
                     ->setTitle('Parent Category')
                     ->setSource($allowedParentCategories)
                     ->setEmptyString('-- select --')
+            );
+
+            // Add color field for brand-consistent color selection with custom color picker
+            $fields->addFieldToTab(
+                'Root.Main',
+                ColorField::create('Color', 'Category Color')
+                    ->setDescription(
+                        'Choose a color to represent this category in the calendar. Events in this category '
+                        . 'will display with this color. You can pick from the palette or choose any custom color.'
+                    ),
+                'Description'
             );
 
             $fields->removeByName($remove);
@@ -158,6 +173,76 @@ class Category extends DataObject implements PermissionProvider
         }
 
         return $result;
+    }
+
+    /**
+     * Get the legacy color mapping for backward compatibility
+     * Maps color names from ColorPaletteField to consistent hex values
+     *
+     * @return array
+     */
+    private static function getLegacyColorMap(): array
+    {
+        return [
+            'Navy Blue' => '#010E3B',        // Bethlehem primary navy
+            'Blue' => '#334597',             // Bethlehem secondary blue
+            'Gold' => '#E1AD3C',             // Bethlehem gold accent
+            'Light Blue' => '#6FA8DC',       // Light blue accent (standardized)
+            'Dark Blue' => '#1C4587',        // Dark blue accent
+            'Brown' => '#71624E',            // Brown accent
+            'Gray' => '#666666',             // Neutral gray
+            'Black' => '#000000',            // Black
+            'White' => '#FFFFFF',            // White
+            'Red' => '#DC3545',              // Bootstrap danger red
+            'Green' => '#198754',            // Bootstrap success green
+            'Orange' => '#FD7E14',           // Bootstrap warning orange
+            'Purple' => '#6F42C1',           // Bootstrap purple
+            'Pink' => '#E91E63',             // Pink accent
+            'Teal' => '#20C997',             // Teal accent
+            'Magenta' => '#E91E63',          // Legacy magenta mapping
+        ];
+    }
+
+    /**
+     * Get the category color for frontend use
+     * Returns the hex color value or a default if none set
+     *
+     * @return string
+     */
+    public function getColorPreview(): string
+    {
+        if (!$this->Color) {
+            return '#334597'; // Default to Bethlehem blue if no color set
+        }
+
+        // If the color starts with #, it's already a hex value (from ColorField)
+        if (strpos($this->Color, '#') === 0) {
+            return $this->Color;
+        }
+
+        // Otherwise, it's a legacy color name from ColorPaletteField - map to hex values
+        $colorMap = self::getLegacyColorMap();
+        return $colorMap[$this->Color] ?? '#334597'; // Fallback to Bethlehem blue
+    }
+
+    /**
+     * Get the color as a hex value (without HTML formatting)
+     * Used by CalendarController for color calculations
+     *
+     * @return string
+     */
+    public function getColorHex(): string
+    {
+        $colorMap = self::getLegacyColorMap();
+
+        // If it's already a hex color, return without # prefix
+        if (preg_match('/^#?[a-fA-F0-9]{6}$/', $this->Color)) {
+            return ltrim($this->Color, '#');
+        }
+
+        // Otherwise map from color name and remove # prefix
+        $hexColor = $colorMap[$this->Color] ?? '#334597';
+        return ltrim($hexColor, '#');
     }
 
     /**

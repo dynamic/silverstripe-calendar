@@ -42,6 +42,9 @@ assets/
 _resources/
 *.log
 
+# Composer
+composer.lock
+
 # Temporary files
 *.tmp
 *.temp

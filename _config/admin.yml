@@ -1,0 +1,5 @@
+---
+Name: calendar-admin-config
+---
+Dynamic\Calendar\Admin\CalendarAdmin:
+  events_per_page: 50  # Default pagination for EventPage admin listing

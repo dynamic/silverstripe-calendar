@@ -7,6 +7,7 @@ use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\EventPage;
+use Dynamic\Calendar\Traits\EventPageOptimizations;
 use SilverStripe\Forms\CheckboxField;
 use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\FieldList;
@@ -22,6 +23,7 @@ use SilverStripe\ORM\DataList;
  */
 class Calendar extends \Page
 {
+    use EventPageOptimizations;
     /**
      * @var string
      */
@@ -108,13 +110,6 @@ class Calendar extends \Page
     ];
 
     /**
-     * @var int
-     *
-     * @todo move to CMS
-     */
-    private static int $events_per_page = 12;
-
-    /**
      * @var bool
      */
     private static bool $include_child_categories = false;
@@ -179,17 +174,21 @@ class Calendar extends \Page
     /**
      * Optimized method for getting EventPages for Lumberjack GridField
      * Includes eager loading and pagination for better performance
-     * 
+     *
      * @return DataList
      */
     public function getLumberjackPagesForGridfield(): DataList
     {
-        return EventPage::get()
+        $list = EventPage::get()
             ->filter(['ParentID' => $this->ID])
-            ->leftJoin('Dynamic_Calendar_Category_EventPages', 'Dynamic_Calendar_Category_EventPages.EventPageID = "EventPage"."ID"')
-            ->leftJoin('Dynamic_Calendar_Category', 'Dynamic_Calendar_Category.ID = Dynamic_Calendar_Category_EventPages.CategoryID')
-            ->sort(['StartDate' => 'ASC', 'StartTime' => 'ASC'])
-            ->limit(50); // Implement pagination for large datasets
+            ->sort(['StartDate' => 'ASC', 'StartTime' => 'ASC']);
+
+        $list = $this->addEventPageOptimizations($list);
+
+        // Use EventsPerPage from database field, with sensible fallback
+        $eventsPerPage = $this->EventsPerPage ?: $this->config()->get('defaults')['EventsPerPage'] ?: 50;
+        
+        return $list->limit($eventsPerPage);
     }
 
     /**

@@ -228,8 +228,8 @@ class CalendarTest extends SapphireTest
         $sql = $eventPages->sql();
         
         // Check that Category joins are included for optimization
-        $this->assertStringContainsString('Dynamic_Calendar_Category_EventPages', $sql);
-        $this->assertStringContainsString('Dynamic_Calendar_Category', $sql);
+        $this->assertStringContainsString('EventPage_Categories', $sql);
+        $this->assertStringContainsString('Category', $sql);
         
         // Check that proper sorting is applied
         $this->assertStringContainsString('ORDER BY', $sql);

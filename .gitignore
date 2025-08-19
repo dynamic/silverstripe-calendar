@@ -3,6 +3,10 @@
 .AppleDouble
 .LSOverride
 
+# Composer
+vendor/
+composer.lock
+
 # Node.js and npm
 node_modules/
 npm-debug.log*

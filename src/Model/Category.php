@@ -12,7 +12,7 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
-use Heyday\ColorPalette\Fields\ColorPaletteField;
+use RyanPotter\SilverStripeColorField\Forms\ColorField;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
 use SilverStripe\ORM\ValidationResult;
@@ -125,27 +125,14 @@ class Category extends DataObject implements PermissionProvider
                     ->setEmptyString('-- select --')
             );
 
-            // Add color palette field for brand-consistent color selection
+            // Add color field for brand-consistent color selection with custom color picker
             $fields->addFieldToTab(
                 'Root.Main',
-                ColorPaletteField::create(
-                    'Color',
-                    'Category Color',
-                    [
-                        'Navy Blue' => '#010E3B',        // Bethlehem primary navy
-                        'Blue' => '#334597',             // Bethlehem secondary blue
-                        'Gold' => '#E1AD3C',             // Bethlehem gold accent
-                        'Light Blue' => '#E6E8F2',       // Light blue background
-                        'Brown' => '#71624E',            // Brown accent
-                        'White' => '#FFFFFF',            // White
-                        'Red' => '#DC3545',              // Bootstrap danger red
-                        'Green' => '#198754',            // Bootstrap success green
-                        'Orange' => '#FD7E14',           // Bootstrap warning orange
-                        'Purple' => '#6F42C1',           // Bootstrap purple
-                        'Pink' => '#E91E63',             // Pink accent
-                        'Teal' => '#20C997',             // Teal accent
-                    ]
-                )->setDescription('Choose a color to represent this category in the calendar. Events in this category will display with this color.'),
+                ColorField::create('Color', 'Category Color')
+                    ->setDescription(
+                        'Choose a color to represent this category in the calendar. Events in this category '
+                        . 'will display with this color. You can pick from the palette or choose any custom color.'
+                    ),
                 'Description'
             );
 
@@ -186,6 +173,77 @@ class Category extends DataObject implements PermissionProvider
         }
 
         return $result;
+    }
+
+    /**
+     * Get the category color for frontend use
+     * Returns the hex color value or a default if none set
+     *
+     * @return string
+     */
+    public function getColorPreview(): string
+    {
+        if (!$this->Color) {
+            return '#334597'; // Default to Bethlehem blue if no color set
+        }
+
+        // If the color starts with #, it's already a hex value (from ColorField)
+        if (strpos($this->Color, '#') === 0) {
+            return $this->Color;
+        }
+
+        // Otherwise, it's a legacy color name from ColorPaletteField - map to hex values
+        $colorMap = [
+            'Navy Blue' => '#010E3B',        // Bethlehem primary navy
+            'Blue' => '#334597',             // Bethlehem secondary blue
+            'Gold' => '#E1AD3C',             // Bethlehem gold accent
+            'Light Blue' => '#E6E8F2',       // Light blue background
+            'Brown' => '#71624E',            // Brown accent
+            'White' => '#FFFFFF',            // White
+            'Red' => '#DC3545',              // Bootstrap danger red
+            'Green' => '#198754',            // Bootstrap success green
+            'Orange' => '#FD7E14',           // Bootstrap warning orange
+            'Purple' => '#6F42C1',           // Bootstrap purple
+            'Pink' => '#E91E63',             // Pink accent
+            'Teal' => '#20C997',             // Teal accent
+        ];
+
+        return $colorMap[$this->Color] ?? '#334597'; // Fallback to Bethlehem blue
+    }
+
+    /**
+     * Get the color as a hex value (without HTML formatting)
+     * Used by CalendarController for color calculations
+     *
+     * @return string
+     */
+    public function getColorHex(): string
+    {
+        // Map legacy color names to hex values
+        $colorMap = [
+            'Blue' => '#334597',             // Bethlehem primary blue
+            'Gold' => '#E1AD3C',             // Bethlehem gold
+            'Light Blue' => '#6FA8DC',       // Light blue accent
+            'Dark Blue' => '#1C4587',        // Dark blue accent
+            'Gray' => '#666666',             // Neutral gray
+            'Black' => '#000000',            // Black
+            'White' => '#FFFFFF',            // White
+            'Red' => '#DC3545',              // Bootstrap danger red
+            'Green' => '#198754',            // Bootstrap success green
+            'Orange' => '#FD7E14',           // Bootstrap warning orange
+            'Purple' => '#6F42C1',           // Bootstrap purple
+            'Pink' => '#E91E63',             // Pink accent
+            'Teal' => '#20C997',             // Teal accent
+        ];
+
+        // If it's already a hex color, return as-is
+        if (preg_match('/^#?[a-fA-F0-9]{6}$/', $this->Color)) {
+            return ltrim($this->Color, '#');
+        }
+
+        // Otherwise map from color name
+        $hexColor = $colorMap[$this->Color] ?? '#334597';
+        return ltrim($hexColor, '#');
     }
 
     /**

@@ -29,6 +29,10 @@ dist/
 .env.test.local
 .env.production.local
 
+# Composer
+composer.lock
+vendor/
+
 # IDE and Editor files
 .vscode/
 .idea/

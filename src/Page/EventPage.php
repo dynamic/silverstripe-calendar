@@ -270,14 +270,42 @@ class EventPage extends \Page
     }
 
     /**
-     * @return \SilverStripe\ORM\DataList
+     * @return \SilverStripe\ORM\ArrayList|\SilverStripe\ORM\DataList
      */
     public function getLumberjackPagesForGridfield()
     {
-        return RecursiveEvent::get()->filter([
-            'ParentID' => $this->ID,
-            'StartDate:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
-        ])->sort('StartDate ASC');
+        if ($this->config()->get('recursion_system') === 'carbon') {
+            // For Carbon system, return virtual instances as ArrayList
+            if (!$this->eventRecurs()) {
+                return \SilverStripe\ORM\ArrayList::create();
+            }
+            
+            // Get reasonable timeframe for CMS display
+            $startDate = Carbon::now()->subDay();
+            $endDate = $this->RecursionEndDate ? 
+                Carbon::parse($this->RecursionEndDate) : 
+                Carbon::parse($this->StartDate)->addMonths(12); // Show up to 1 year ahead
+            
+            $occurrences = $this->getOccurrences($startDate->format('Y-m-d'), $endDate->format('Y-m-d'));
+            
+            $children = \SilverStripe\ORM\ArrayList::create();
+            $originalStartDate = $this->StartDate;
+            
+            foreach ($occurrences as $occurrence) {
+                // Exclude the original event instance
+                if ((string) $occurrence->StartDate !== $originalStartDate) {
+                    $children->push($occurrence);
+                }
+            }
+            
+            return $children;
+        } else {
+            // Legacy RRule system - keep existing logic
+            return RecursiveEvent::get()->filter([
+                'ParentID' => $this->ID,
+                'StartDate:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
+            ])->sort('StartDate ASC');
+        }
     }
 
     /**
@@ -347,7 +375,7 @@ class EventPage extends \Page
             $fields = $fields->makeReadonly();
         }
 
-        if (!$this->config()->get('recursion')) {
+        if (!$this->eventRecurs()) {
             $fields->removeByName('ChildPages');
         }
 

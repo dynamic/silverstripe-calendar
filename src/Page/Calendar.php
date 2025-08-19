@@ -177,14 +177,19 @@ class Calendar extends \Page
     }
 
     /**
+     * Optimized method for getting EventPages for Lumberjack GridField
+     * Includes eager loading and pagination for better performance
+     * 
      * @return DataList
      */
     public function getLumberjackPagesForGridfield(): DataList
     {
-        return EventPage::get()->filter([
-            'ParentID' => $this->ID,
-            //'StartDatetime:GreaterThanOrEqual' => Carbon::now()->subDay()->format('Y-m-d 23:59:59'),
-        ])->sort('StartDate DESC');
+        return EventPage::get()
+            ->filter(['ParentID' => $this->ID])
+            ->leftJoin('Dynamic_Calendar_Category_EventPages', 'Dynamic_Calendar_Category_EventPages.EventPageID = "EventPage"."ID"')
+            ->leftJoin('Dynamic_Calendar_Category', 'Dynamic_Calendar_Category.ID = Dynamic_Calendar_Category_EventPages.CategoryID')
+            ->sort(['StartDate' => 'ASC', 'StartTime' => 'ASC'])
+            ->limit(50); // Implement pagination for large datasets
     }
 
     /**

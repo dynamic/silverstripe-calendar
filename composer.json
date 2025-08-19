@@ -24,7 +24,8 @@
         "symbiote/silverstripe-gridfieldextensions": "^4.0",
         "symbiote/silverstripe-queuedjobs": "^5.0",
         "unclecheese/display-logic": "^3.0",
-        "dft/silverstripe-frontend-multiselectfield": "^1.0"
+        "dft/silverstripe-frontend-multiselectfield": "^1.0",
+        "ryanpotter/silverstripe-color-field": "^4.0"
     },
     "require-dev": {
         "cambis/silverstan":"^2.1",

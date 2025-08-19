@@ -300,12 +300,13 @@ trait EnhancedCalendarMethods
 
     /**
      * Check if Carbon recursion is enabled
+     * Always returns true since we've removed the legacy RRule system
      *
      * @return bool
      */
     public function usesCarbonRecursion(): bool
     {
-        return EventPage::config()->get('recursion_system') === 'carbon';
+        return true;
     }
 
     /**

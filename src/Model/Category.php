@@ -44,7 +44,7 @@ class Category extends DataObject implements PermissionProvider
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
-        'Color' => 'Varchar(7)', // Hex color code (e.g., #334597)
+        'Color' => 'Varchar(9)', // Hex color code (e.g., #334597 or #FF334597 for alpha)
     ];
 
     /**
@@ -217,6 +217,11 @@ class Category extends DataObject implements PermissionProvider
 
         // If the color starts with #, it's already a hex value (from ColorField)
         if (strpos($this->Color, '#') === 0) {
+            // Expand 3-character hex codes to 6 characters for consistency
+            if (preg_match('/^#([a-fA-F0-9]{3})$/', $this->Color, $matches)) {
+                $hex = $matches[1];
+                return '#' . $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+            }
             return $this->Color;
         }
 
@@ -235,9 +240,14 @@ class Category extends DataObject implements PermissionProvider
     {
         $colorMap = self::getLegacyColorMap();
 
-        // If it's already a hex color, return without # prefix
-        if (preg_match('/^#?[a-fA-F0-9]{6}$/', $this->Color)) {
-            return ltrim($this->Color, '#');
+        // If it's already a hex color (3, 6, or 8 character), return without # prefix
+        if (preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/', $this->Color, $matches)) {
+            $hex = $matches[1];
+            // Expand 3-character hex codes to 6 characters (e.g., "fff" -> "ffffff")
+            if (strlen($hex) === 3) {
+                $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+            }
+            return $hex;
         }
 
         // Otherwise map from color name and remove # prefix

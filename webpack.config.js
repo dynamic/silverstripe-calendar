@@ -8,8 +8,7 @@ module.exports = (env, argv) => {
 
   return {
     entry: {
-      calendar: './client/src/js/calendar.js',
-      //admin: './client/src/js/admin.js'
+      calendar: './client/src/js/calendar.js'
     },
     output: {
       path: path.resolve(__dirname, 'client/dist'),

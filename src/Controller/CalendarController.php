@@ -149,7 +149,7 @@ class CalendarController extends \PageController
                 }
 
                 // Add category information with colors
-                $categoryColors = [];
+                $categoryColor = null;
                 if ($event->Categories()->exists()) {
                     foreach ($event->Categories() as $category) {
                         $eventData['extendedProps']['categories'][] = [
@@ -157,18 +157,18 @@ class CalendarController extends \PageController
                             'Title' => $category->Title,
                             'Color' => $category->ColorPreview
                         ];
-                        // Collect colors for event styling (use first category's color)
-                        if (empty($categoryColors)) {
-                            $categoryColors[] = '#' . $category->getColorHex();
+                        // Use first category's color for event styling
+                        if ($categoryColor === null) {
+                            $categoryColor = '#' . $category->getColorHex();
                         }
                     }
                 }
 
                 // Apply the first category's color to the event
-                if (!empty($categoryColors)) {
-                    $eventData['backgroundColor'] = $categoryColors[0];
-                    $eventData['borderColor'] = $categoryColors[0];
-                    $eventData['textColor'] = $this->getContrastColor($categoryColors[0]);
+                if ($categoryColor !== null) {
+                    $eventData['backgroundColor'] = $categoryColor;
+                    $eventData['borderColor'] = $categoryColor;
+                    $eventData['textColor'] = $this->getContrastColor($categoryColor);
                 }
 
                 $eventsData[] = $eventData;

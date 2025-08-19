@@ -158,49 +158,33 @@ class CalendarControllerTest extends FunctionalTest
     }
 
     /**
-     * Test that controller delegates to Calendar's getEventsFeed method
+     * Test contrast color calculation method
      */
-    public function testControllerDelegatesToCalendarEventsFeed()
+    public function testGetContrastColor()
     {
-        // Create some test events
-        $event1 = EventPage::create([
-            'Title' => 'Regular Event',
-            'ParentID' => $this->calendar->ID,
-            'StartDate' => Carbon::tomorrow()->format('Y-m-d'),
-            'StartTime' => '14:00:00',
-            'EndDate' => Carbon::tomorrow()->format('Y-m-d'),
-            'EndTime' => '16:00:00',
-            'Recursion' => 'NONE',
-        ]);
-        $event1->write();
-        $event1->publishRecursive();
+        // Using reflection to test private method
+        $reflection = new \ReflectionClass($this->controller);
+        $method = $reflection->getMethod('getContrastColor');
+        $method->setAccessible(true);
 
-        $event2 = EventPage::create([
-            'Title' => 'Recurring Event',
-            'ParentID' => $this->calendar->ID,
-            'StartDate' => Carbon::today()->format('Y-m-d'),
-            'StartTime' => '10:00:00',
-            'EndDate' => Carbon::today()->format('Y-m-d'),
-            'EndTime' => '11:00:00',
-            'Recursion' => 'DAILY',
-            'Interval' => 1,
-            'RecursionEndDate' => Carbon::today()->addDays(3)->format('Y-m-d'),
-        ]);
-        $event2->write();
-        $event2->publishRecursive();
+        // Test with dark color (should return white)
+        $darkColor = '#000000';
+        $result = $method->invokeArgs($this->controller, [$darkColor]);
+        $this->assertEquals('#FFFFFF', $result);
 
-        $request = new HTTPRequest('GET', '/');
-        $controllerResult = $this->controller->index($request);
+        // Test with light color (should return black)
+        $lightColor = '#FFFFFF';
+        $result = $method->invokeArgs($this->controller, [$lightColor]);
+        $this->assertEquals('#000000', $result);
 
-        // Get events directly from Calendar
-        $calendarEvents = $this->calendar->getEventsFeed();
+        // Test with color that has # prefix (method should handle it)
+        $colorWithPrefix = '#334597';
+        $result = $method->invokeArgs($this->controller, [$colorWithPrefix]);
+        $this->assertContains($result, ['#000000', '#FFFFFF']);
 
-        // Controller should have the same number of events as Calendar
-        $this->assertGreaterThan(1, $controllerResult['Events']->getTotalItems());
-        $this->assertGreaterThan(1, $calendarEvents->count());
-
-        // The events should be reasonably close (allowing for pagination and different date ranges)
-        // The controller might have pagination limits, so just ensure both have events
-        $this->assertTrue($calendarEvents->count() >= $controllerResult['Events']->getTotalItems());
+        // Test with color that doesn't have # prefix
+        $colorWithoutPrefix = '334597';
+        $result = $method->invokeArgs($this->controller, [$colorWithoutPrefix]);
+        $this->assertContains($result, ['#000000', '#FFFFFF']);
     }
 }

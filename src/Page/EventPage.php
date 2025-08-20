@@ -238,7 +238,7 @@ class EventPage extends \Page
     {
         // With Carbon system, check if this event has recurring patterns
         $hasRecurrence = $this->eventRecurs();
-        
+
         $summary = DBField::create_field(DBBoolean::class, $hasRecurrence)->Nice();
 
         if ($hasRecurrence) {

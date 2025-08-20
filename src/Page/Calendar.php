@@ -25,6 +25,7 @@ use SilverStripe\ORM\DataList;
 class Calendar extends \Page
 {
     use EventPageOptimizations;
+
     /**
      * @var string
      */
@@ -126,14 +127,14 @@ class Calendar extends \Page
     /**
      * Configure the Lumberjack GridField Config
      * This method is called by the Lumberjack extension to get the GridField configuration
-     * 
+     *
      * @return GridFieldConfig_Lumberjack
      */
     public function getLumberjackGridFieldConfig()
     {
         // Use EventsPerPage from database field, with sensible fallback
         $eventsPerPage = $this->EventsPerPage ?: $this->config()->get('defaults')['EventsPerPage'] ?: 50;
-        
+
         return GridFieldConfig_Lumberjack::create($eventsPerPage);
     }
 
@@ -187,7 +188,7 @@ class Calendar extends \Page
     /**
      * Optimized method for getting EventPages for Lumberjack GridField
      * This method is called by the Lumberjack extension with excluded classes
-     * 
+     *
      * @param array $excluded List of class names excluded from the SiteTree
      * @return DataList
      */

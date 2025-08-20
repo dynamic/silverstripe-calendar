@@ -15,6 +15,7 @@ use SilverStripe\ORM\DataList;
 class CalendarAdmin extends ModelAdmin
 {
     use EventPageOptimizations;
+
     /**
      * @var string
      */

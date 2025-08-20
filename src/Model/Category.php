@@ -216,12 +216,11 @@ class Category extends DataObject implements PermissionProvider
         }
 
         // If the color starts with #, it's already a hex value (from ColorField)
-        if (strpos($this->Color, '#') === 0) {
+        if ($this->Color && strpos($this->Color, '#') === 0) {
             // Expand 3-character hex codes to 6 characters for consistency
             if (preg_match('/^#([a-fA-F0-9]{3})$/', $this->Color, $matches)) {
                 $hex = $matches[1];
-                $expanded = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-                return '#' . strtolower($expanded);
+                return '#' . $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
             }
             return $this->Color;
         }
@@ -242,24 +241,18 @@ class Category extends DataObject implements PermissionProvider
         $colorMap = self::getLegacyColorMap();
 
         // If it's already a hex color (3, 6, or 8 character), return without # prefix
-        if (preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/', $this->Color, $matches)) {
+        if ($this->Color && preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/', $this->Color, $matches)) {
             $hex = $matches[1];
             // Expand 3-character hex codes to 6 characters (e.g., "fff" -> "ffffff")
             if (strlen($hex) === 3) {
                 $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-                return strtolower($hex);
             }
-            // For 8-character colors (with alpha), keep uppercase per test expectations
-            if (strlen($hex) === 8) {
-                return strtoupper($hex);
-            }
-            // For 6-character colors, return lowercase
-            return strtolower($hex);
+            return $hex;
         }
 
         // Otherwise map from color name and remove # prefix
         $hexColor = $colorMap[$this->Color] ?? '#334597';
-        return strtolower(ltrim($hexColor, '#'));
+        return ltrim($hexColor, '#');
     }
 
     /**

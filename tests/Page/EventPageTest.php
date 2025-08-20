@@ -30,15 +30,15 @@ class EventPageTest extends SapphireTest
 
         /** @var EventPage $event */
         $event = $this->objFromFixture(EventPage::class, 'one');
-        
+
         // Ensure event has proper Calendar parent for validation
         $calendar = $this->objFromFixture(Calendar::class, 'one');
         $calendar->write();
         $calendar->publishRecursive();
-        
+
         $event->ParentID = $calendar->ID;
         $event->write();
-        
+
         $tomorrow = strtotime('tomorrow');
 
         $event->StartDate = date('Y-m-d', $tomorrow);
@@ -86,17 +86,21 @@ class EventPageTest extends SapphireTest
     {
         /** @var EventPage $event */
         $event = $this->objFromFixture(EventPage::class, 'one');
-        
+
         $fields = $event->getCMSFields();
-        
+
         // Check that ParentID field exists
         $parentField = $fields->dataFieldByName('ParentID');
         $this->assertNotNull($parentField, 'ParentID field should exist in CMS fields');
         $this->assertInstanceOf(DropdownField::class, $parentField, 'ParentID should be a DropdownField');
-        
+
         // Check field configuration
         $this->assertEquals('Calendar', $parentField->Title(), 'ParentID field should be titled "Calendar"');
-        $this->assertEquals('Select a Calendar...', $parentField->getEmptyString(), 'ParentID field should have helpful empty string');
+        $this->assertEquals(
+            'Select a Calendar...',
+            $parentField->getEmptyString(),
+            'ParentID field should have helpful empty string'
+        );
     }
 
     /**

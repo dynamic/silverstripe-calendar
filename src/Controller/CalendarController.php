@@ -444,7 +444,7 @@ class CalendarController extends \PageController
         $response->addHeader('Content-Type', 'text/calendar; charset=utf-8');
         $response->addHeader('Content-Disposition', 'attachment; filename="calendar.ics"');
         $response->addHeader('Cache-Control', 'no-cache, must-revalidate');
-        
+
         return $response->setBody($icsContent);
     }
 
@@ -457,14 +457,14 @@ class CalendarController extends \PageController
     private function generateICSContent(ArrayList $events): string
     {
         $ics = [];
-        
+
         // ICS Header
         $ics[] = 'BEGIN:VCALENDAR';
         $ics[] = 'VERSION:2.0';
         $ics[] = 'PRODID:-//Dynamic SilverStripe Calendar//EN';
         $ics[] = 'CALSCALE:GREGORIAN';
         $ics[] = 'METHOD:PUBLISH';
-        
+
         // Add events
         foreach ($events as $event) {
             $eventICS = $this->transformEventToICS($event);
@@ -472,10 +472,10 @@ class CalendarController extends \PageController
                 $ics = array_merge($ics, $eventICS);
             }
         }
-        
+
         // ICS Footer
         $ics[] = 'END:VCALENDAR';
-        
+
         return implode("\r\n", $ics);
     }
 
@@ -489,9 +489,9 @@ class CalendarController extends \PageController
     {
         try {
             $ics = [];
-            
+
             $ics[] = 'BEGIN:VEVENT';
-            
+
             // Set unique ID
             $uniqueId = $event->ID;
             if ($event->hasMethod('getInstanceDate')) {
@@ -499,18 +499,18 @@ class CalendarController extends \PageController
                 $uniqueId .= '-' . $event->getInstanceDate()->format('Ymd');
             }
             $ics[] = 'UID:' . $uniqueId . '@' . $_SERVER['HTTP_HOST'] ?? 'calendar.local';
-            
+
             // Add timestamp
             $ics[] = 'DTSTAMP:' . gmdate('Ymd\THis\Z');
-            
+
             // Set basic event properties
             $ics[] = 'SUMMARY:' . $this->escapeICSValue($event->Title);
-            
+
             // Add description if available
             if ($event->Content) {
                 $ics[] = 'DESCRIPTION:' . $this->escapeICSValue(strip_tags($event->Content));
             }
-            
+
             // Add location if available
             if ($event->Location) {
                 $ics[] = 'LOCATION:' . $this->escapeICSValue($event->Location);
@@ -529,7 +529,7 @@ class CalendarController extends \PageController
                 // Timed event
                 $startDateTime = Carbon::parse($event->StartDate . ' ' . $event->StartTime);
                 $ics[] = 'DTSTART:' . $startDateTime->utc()->format('Ymd\THis\Z');
-                
+
                 if ($event->EndDate && $event->EndTime) {
                     $endDateTime = Carbon::parse($event->EndDate . ' ' . $event->EndTime);
                     $ics[] = 'DTEND:' . $endDateTime->utc()->format('Ymd\THis\Z');
@@ -541,10 +541,10 @@ class CalendarController extends \PageController
             }
 
             // Add categories
-            $eventCategories = $event->hasMethod('getOriginalEvent') 
-                ? $event->getOriginalEvent()->Categories() 
+            $eventCategories = $event->hasMethod('getOriginalEvent')
+                ? $event->getOriginalEvent()->Categories()
                 : $event->Categories();
-                
+
             if ($eventCategories && $eventCategories->exists()) {
                 $categoryNames = $eventCategories->map('Title')->toArray();
                 $ics[] = 'CATEGORIES:' . implode(',', array_map([$this, 'escapeICSValue'], $categoryNames));
@@ -554,11 +554,10 @@ class CalendarController extends \PageController
             if ($event->Link()) {
                 $ics[] = 'URL:' . $event->Link();
             }
-            
+
             $ics[] = 'END:VEVENT';
 
             return $ics;
-            
         } catch (\Exception $e) {
             // Log error and continue with other events
             error_log("Error transforming event {$event->ID} to ICS: " . $e->getMessage());
@@ -576,7 +575,7 @@ class CalendarController extends \PageController
     {
         // Escape special characters
         $value = str_replace(['\\', ';', ',', "\n", "\r"], ['\\\\', '\\;', '\\,', '\\n', '\\n'], $value);
-        
+
         return $value;
     }
 }

@@ -103,7 +103,7 @@ class CalendarControllerICSTest extends FunctionalTest
             }
         }
         $this->additionalEvents = [];
-        
+
         if ($this->testEvent && $this->testEvent->exists()) {
             $this->testEvent->delete();
         }
@@ -113,7 +113,7 @@ class CalendarControllerICSTest extends FunctionalTest
         if ($this->calendar && $this->calendar->exists()) {
             $this->calendar->delete();
         }
-        
+
         parent::tearDown();
     }
 
@@ -149,16 +149,16 @@ class CalendarControllerICSTest extends FunctionalTest
 
         // Check that event title is included
         $this->assertStringContainsString('SUMMARY:Test ICS Event', $icsContent);
-        
+
         // Check that description is included (without HTML tags)
         $this->assertStringContainsString('DESCRIPTION:This is a test event for ICS generation', $icsContent);
-        
+
         // Check that category is included
         $this->assertStringContainsString('CATEGORIES:' . $this->testCategory->Title, $icsContent);
-        
+
         // Check that it has proper UID
         $this->assertStringContainsString('UID:', $icsContent);
-        
+
         // Check that it has proper timestamps
         $this->assertStringContainsString('DTSTAMP:', $icsContent);
         $this->assertStringContainsString('DTSTART:', $icsContent);
@@ -197,7 +197,7 @@ class CalendarControllerICSTest extends FunctionalTest
 
         // Should include the test event (within range)
         $this->assertStringContainsString('Test ICS Event', $icsContent);
-        
+
         // Should not include the future event (outside range)
         $this->assertStringNotContainsString('Future Event', $icsContent);
     }
@@ -237,7 +237,7 @@ class CalendarControllerICSTest extends FunctionalTest
 
         // Should include the test event (matching category)
         $this->assertStringContainsString('Test ICS Event', $icsContent);
-        
+
         // Should not include the other event (different category)
         $this->assertStringNotContainsString('Other Category Event', $icsContent);
     }
@@ -284,9 +284,9 @@ class CalendarControllerICSTest extends FunctionalTest
         ]);
         $event1->write();
         $event1->publishRecursive();
-        
+
         $event2 = EventPage::create([
-            'Title' => 'Weekly Event Instance 2', 
+            'Title' => 'Weekly Event Instance 2',
             'ParentID' => $this->calendar->ID,
             'StartDate' => Carbon::today()->addWeek()->format('Y-m-d'),
             'StartTime' => '09:00:00',
@@ -296,7 +296,7 @@ class CalendarControllerICSTest extends FunctionalTest
         ]);
         $event2->write();
         $event2->publishRecursive();
-        
+
         // Track for cleanup
         $this->additionalEvents[] = $event1;
         $this->additionalEvents[] = $event2;
@@ -308,7 +308,7 @@ class CalendarControllerICSTest extends FunctionalTest
         // Should include both event instances
         $this->assertStringContainsString('Weekly Event Instance 1', $icsContent);
         $this->assertStringContainsString('Weekly Event Instance 2', $icsContent);
-        
+
         // Should have multiple VEVENT entries for the instances
         $eventCount = substr_count($icsContent, 'BEGIN:VEVENT');
         $this->assertGreaterThan(2, $eventCount, 'Should have multiple event instances including our test events');
@@ -331,7 +331,7 @@ class CalendarControllerICSTest extends FunctionalTest
         // Should still return valid ICS structure
         $this->assertStringContainsString('BEGIN:VCALENDAR', $icsContent);
         $this->assertStringContainsString('END:VCALENDAR', $icsContent);
-        
+
         // Should not contain any events
         $this->assertStringNotContainsString('BEGIN:VEVENT', $icsContent);
     }

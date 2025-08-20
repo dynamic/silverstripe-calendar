@@ -320,10 +320,10 @@ class EventPage extends \Page
                     $calendars->map('ID', 'Title')
                 )->setEmptyString('Select a Calendar...')
                  ->setDescription('Choose which Calendar this event belongs to');
-                 
+
                 // Make the field required
                 $parentField->setAttribute('required', true);
-                
+
                 $fields->addFieldToTab(
                     'Root.Main',
                     $parentField,
@@ -335,7 +335,9 @@ class EventPage extends \Page
                     'Root.Main',
                     LiteralField::create(
                         'NoCalendarWarning',
-                        '<p class="alert alert-warning">No Calendar pages exist. Please create a Calendar page first before adding events.</p>'
+                        '<p class="alert alert-warning">' .
+                        'No Calendar pages exist. Please create a Calendar page first before adding events.' .
+                        '</p>'
                     ),
                     'Content'
                 );

@@ -5,8 +5,8 @@ namespace Dynamic\Calendar\Tests;
 use Carbon\Carbon;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Model\EventInstance;
+use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
-use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Versioned\Versioned;
 
@@ -25,7 +25,7 @@ class CarbonRecursionTest extends SapphireTest
     protected static $fixture_file = 'CarbonRecursionTest.yml';
 
     /**
-     * @var SiteTree
+     * @var Calendar
      */
     protected $parentPage;
 
@@ -33,10 +33,10 @@ class CarbonRecursionTest extends SapphireTest
     {
         parent::setUp();
 
-        // Create a parent page for EventPages
-        $this->parentPage = SiteTree::create([
-            'Title' => 'Events',
-            'URLSegment' => 'events',
+        // Create a Calendar parent page for EventPages
+        $this->parentPage = Calendar::create([
+            'Title' => 'Test Calendar',
+            'URLSegment' => 'test-calendar',
         ]);
         $this->parentPage->write();
         $this->parentPage->publishRecursive();

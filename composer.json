@@ -44,5 +44,12 @@
         "expose": [
             "client/dist"
         ]
+    },
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true,
+            "silverstripe/vendor-plugin": true,
+            "silverstripe/recipe-plugin": true
+        }
     }
 }

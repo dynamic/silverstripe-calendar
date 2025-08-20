@@ -203,17 +203,19 @@ class CalendarTest extends SapphireTest
     {
         $calendar = $this->objFromFixture(Calendar::class, 'one');
         $eventPages = $calendar->getLumberjackPagesForGridfield();
-        
+
         // Test that method returns DataList
         $this->assertInstanceOf('SilverStripe\\ORM\\DataList', $eventPages);
-        
-        // Test that pagination limit is applied (should be max 50)
-        $this->assertLessThanOrEqual(50, $eventPages->count());
-        
+
         // Test proper filtering by ParentID
         foreach ($eventPages as $eventPage) {
             $this->assertEquals($calendar->ID, $eventPage->ParentID);
         }
+
+        // Test that the DataList includes optimization joins
+        $sql = $eventPages->sql();
+        $this->assertStringContainsString('EventPage_Categories', $sql);
+        $this->assertStringContainsString('Category', $sql);
     }
 
     /**
@@ -223,14 +225,14 @@ class CalendarTest extends SapphireTest
     {
         $calendar = $this->objFromFixture(Calendar::class, 'one');
         $eventPages = $calendar->getLumberjackPagesForGridfield();
-        
+
         // Get the SQL query to verify joins are included
         $sql = $eventPages->sql();
-        
+
         // Check that Category joins are included for optimization
         $this->assertStringContainsString('EventPage_Categories', $sql);
         $this->assertStringContainsString('Category', $sql);
-        
+
         // Check that proper sorting is applied
         $this->assertStringContainsString('ORDER BY', $sql);
         $this->assertStringContainsString('StartDate', $sql);

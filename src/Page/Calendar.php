@@ -123,6 +123,30 @@ class Calendar extends \Page
     }
 
     /**
+     * Configure the Lumberjack GridField
+     * 
+     * @param FieldList $fields
+     */
+    public function updateCMSFields(FieldList $fields): void
+    {
+        parent::updateCMSFields($fields);
+        
+        // Configure Lumberjack GridField pagination
+        $childPages = $fields->dataFieldByName('ChildPages');
+        if ($childPages && $childPages instanceof \SilverStripe\Forms\GridField\GridField) {
+            $config = $childPages->getConfig();
+            
+            // Configure pagination
+            $paginator = $config->getComponentByType(\SilverStripe\Forms\GridField\GridFieldPaginator::class);
+            if ($paginator) {
+                // Use EventsPerPage from database field, with sensible fallback
+                $eventsPerPage = $this->EventsPerPage ?: $this->config()->get('defaults')['EventsPerPage'] ?: 50;
+                $paginator->setItemsPerPage($eventsPerPage);
+            }
+        }
+    }
+
+    /**
      * @return FieldList
      */
     public function getCMSFields(): FieldList
@@ -173,7 +197,7 @@ class Calendar extends \Page
 
     /**
      * Optimized method for getting EventPages for Lumberjack GridField
-     * Includes eager loading and pagination for better performance
+     * Includes eager loading for better performance
      *
      * @return DataList
      */
@@ -185,10 +209,9 @@ class Calendar extends \Page
 
         $list = $this->addEventPageOptimizations($list);
 
-        // Use EventsPerPage from database field, with sensible fallback
-        $eventsPerPage = $this->EventsPerPage ?: $this->config()->get('defaults')['EventsPerPage'] ?: 50;
-        
-        return $list->limit($eventsPerPage);
+        // Let Lumberjack handle pagination through GridField components
+        // Don't apply limit() here as it interferes with Lumberjack's pagination
+        return $list;
     }
 
     /**

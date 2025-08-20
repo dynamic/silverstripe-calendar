@@ -3,10 +3,6 @@
 .AppleDouble
 .LSOverride
 
-# Composer
-vendor/
-composer.lock
-
 # Node.js and npm
 node_modules/
 npm-debug.log*
@@ -20,11 +16,6 @@ pids
 *.pid
 *.seed
 *.pid.lock
-
-# Build outputs
-client/dist/
-build/
-dist/
 
 # Environment variables
 .env
@@ -45,9 +36,6 @@ silverstripe-cache/
 assets/
 _resources/
 *.log
-
-# Composer
-composer.lock
 
 # Temporary files
 *.tmp
@@ -98,7 +86,3 @@ public/build/
 # Temporary folders
 tmp/
 temp/
-# Force CI rebuild
-
-# Test files
-/tmp/test_*.html

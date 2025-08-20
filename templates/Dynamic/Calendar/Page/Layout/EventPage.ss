@@ -12,9 +12,10 @@
         <div class="row g-4">
             <div class="col-lg-8">
                 <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body p-4">                        <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
                             <div class="flex-grow-1">
-                                <h1 class="display-6 mb-2 fw-bold text-primary">$Title</h1>
+                                <h1 class="h1 mb-2 fw-bold">$Title</h1>
                                 <% if $MenuTitle && $MenuTitle != $Title %>
                                     <p class="lead text-muted mb-0">$MenuTitle</p>
                                 <% end_if %>
@@ -26,21 +27,20 @@
                             <!-- Date & Time -->
                             <div class="col-md-6">
                                 <div class="d-flex align-items-start">
-                                    <div class="bg-primary text-white rounded-circle p-2 me-3">
-                                        <i class="bi bi-calendar-event"></i>
+                                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                        📅
                                     </div>
                                     <div>
-                                        <h6 class="mb-1 text-primary">Date & Time</h6>
+                                        <h6 class="mb-1">Date & Time</h6>
                                         <p class="mb-1 fw-bold">$StartDate.Nice</p>
                                         <% if $StartTime %>
                                             <p class="mb-0 text-muted">
-                                                <i class="bi bi-clock me-1"></i>
-                                                $StartTime.Nice<% if $EndTime %> - $EndTime.Nice<% end_if %>
+                                                🕐 $StartTime.Nice<% if $EndTime %> - $EndTime.Nice<% end_if %>
                                             </p>
                                         <% end_if %>
                                         <% if $AllDay %>
                                             <span class="badge bg-warning text-dark mt-1">
-                                                <i class="bi bi-sun me-1"></i>All Day
+                                                ☀️ All Day
                                             </span>
                                         <% end_if %>
                                     </div>
@@ -51,14 +51,14 @@
                             <% if $Categories %>
                                 <div class="col-md-6">
                                     <div class="d-flex align-items-start">
-                                        <div class="bg-success text-white rounded-circle p-2 me-3">
-                                            <i class="bi bi-tags"></i>
+                                        <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                            🏷️
                                         </div>
                                         <div>
-                                            <h6 class="mb-1 text-success">Details</h6>
+                                            <h6 class="mb-1">Categories</h6>
                                             <div class="mb-2">
                                                 <% loop $Categories %>
-                                                    <span class="badge bg-secondary me-1 mb-1">$Title</span>
+                                                    <span class="badge bg-secondary me-1 mb-1" <% if $Color %>style="background-color: $Color !important;"<% end_if %>>$Title</span>
                                                 <% end_loop %>
                                             </div>
                                         </div>
@@ -76,16 +76,17 @@
                     <div class="card-body p-4">
                         <div class="d-grid gap-2">
                             <a href="$Parent.Link" class="btn btn-outline-primary">
-                                <i class="bi bi-arrow-left me-2"></i>Back to Calendar
+                                ← Back to Calendar
                             </a>
                             <button class="btn btn-success" onclick="addToCalendar()">
-                                <i class="bi bi-calendar-plus me-2"></i>Add to Calendar
+                                📅 Add to Calendar
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>    </header>
+        </div>
+    </header>
 
     <!-- Event Description -->
     <% if $Content %>
@@ -93,7 +94,7 @@
             <div class="card">
                 <div class="card-header">
                     <h3 class="h5 mb-0">
-                        <i class="bi bi-file-text me-2"></i>Event Description
+                        📄 Event Description
                     </h3>
                 </div>
                 <div class="card-body">
@@ -109,7 +110,7 @@
             <div class="card">
                 <div class="card-header">
                     <h3 class="h5 mb-0">
-                        <i class="bi bi-calendar-week me-2"></i>More Events
+                        📅 More Events
                     </h3>
                 </div>
                 <div class="card-body">
@@ -123,12 +124,12 @@
                                         </h6>
                                         <p class="card-text mb-2">
                                             <small class="text-muted">
-                                                <i class="bi bi-calendar-date me-1"></i>$StartDate.Nice
+                                                📅 $StartDate.Nice
                                             </small>
                                         </p>
                                         <% if $eventRecurs %>
                                             <span class="badge bg-info small">
-                                                <i class="bi bi-arrow-repeat"></i> Recurring
+                                                🔄 Recurring
                                             </span>
                                         <% end_if %>
                                     </div>

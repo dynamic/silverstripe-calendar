@@ -14,6 +14,7 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\HeaderField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Lumberjack\Model\Lumberjack;
+use SilverStripe\Lumberjack\Forms\GridFieldConfig_Lumberjack;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;
 
@@ -123,27 +124,17 @@ class Calendar extends \Page
     }
 
     /**
-     * Configure the Lumberjack GridField
+     * Configure the Lumberjack GridField Config
+     * This method is called by the Lumberjack extension to get the GridField configuration
      * 
-     * @param FieldList $fields
+     * @return GridFieldConfig_Lumberjack
      */
-    public function updateCMSFields(FieldList $fields): void
+    public function getLumberjackGridFieldConfig()
     {
-        parent::updateCMSFields($fields);
+        // Use EventsPerPage from database field, with sensible fallback
+        $eventsPerPage = $this->EventsPerPage ?: $this->config()->get('defaults')['EventsPerPage'] ?: 50;
         
-        // Configure Lumberjack GridField pagination
-        $childPages = $fields->dataFieldByName('ChildPages');
-        if ($childPages && $childPages instanceof \SilverStripe\Forms\GridField\GridField) {
-            $config = $childPages->getConfig();
-            
-            // Configure pagination
-            $paginator = $config->getComponentByType(\SilverStripe\Forms\GridField\GridFieldPaginator::class);
-            if ($paginator) {
-                // Use EventsPerPage from database field, with sensible fallback
-                $eventsPerPage = $this->EventsPerPage ?: $this->config()->get('defaults')['EventsPerPage'] ?: 50;
-                $paginator->setItemsPerPage($eventsPerPage);
-            }
-        }
+        return GridFieldConfig_Lumberjack::create($eventsPerPage);
     }
 
     /**
@@ -151,9 +142,7 @@ class Calendar extends \Page
      */
     public function getCMSFields(): FieldList
     {
-        $fields = parent::getCMSFields();
-
-        // Add filtering configuration fields
+        $fields = parent::getCMSFields();        // Add filtering configuration fields
         $fields->addFieldsToTab('Root.FilterSettings', [
             HeaderField::create('FilterOptionsHeader', 'Event Filtering Options'),
 
@@ -197,11 +186,12 @@ class Calendar extends \Page
 
     /**
      * Optimized method for getting EventPages for Lumberjack GridField
-     * Includes eager loading for better performance
-     *
+     * This method is called by the Lumberjack extension with excluded classes
+     * 
+     * @param array $excluded List of class names excluded from the SiteTree
      * @return DataList
      */
-    public function getLumberjackPagesForGridfield(): DataList
+    public function getLumberjackPagesForGridfield($excluded = []): DataList
     {
         $list = EventPage::get()
             ->filter(['ParentID' => $this->ID])

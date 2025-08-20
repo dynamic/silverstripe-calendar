@@ -1,3 +1,9 @@
+Dynamic\Calendar\Page\Calendar:
+  test_calendar:
+    Title: "Test Calendar"
+    URLSegment: "test-calendar"
+    Content: "Test calendar for recursion tests"
+
 SilverStripe\CMS\Model\SiteTree:
   events_parent:
     Title: "Events"
@@ -12,7 +18,7 @@ Dynamic\Calendar\Page\EventPage:
     EndTime: "10:00:00"
     Content: "A basic event for testing"
     Recursion: "NONE"
-    Parent: =>SilverStripe\CMS\Model\SiteTree.events_parent
+    Parent: =>Dynamic\Calendar\Page\Calendar.test_calendar
 
   weekly_meeting:
     Title: "Weekly Team Meeting"
@@ -23,7 +29,7 @@ Dynamic\Calendar\Page\EventPage:
     Recursion: "WEEKLY"
     Interval: 1
     RecursionEndDate: "2025-12-31"
-    Parent: =>SilverStripe\CMS\Model\SiteTree.events_parent
+    Parent: =>Dynamic\Calendar\Page\Calendar.test_calendar
 
   monthly_report:
     Title: "Monthly Status Report"
@@ -34,7 +40,7 @@ Dynamic\Calendar\Page\EventPage:
     Recursion: "MONTHLY"
     Interval: 1
     RecursionEndDate: "2025-12-31"
-    Parent: =>SilverStripe\CMS\Model\SiteTree.events_parent
+    Parent: =>Dynamic\Calendar\Page\Calendar.test_calendar
 
   daily_standup:
     Title: "Daily Standup"
@@ -45,7 +51,7 @@ Dynamic\Calendar\Page\EventPage:
     Recursion: "DAILY"
     Interval: 1
     RecursionEndDate: "2025-06-30"
-    Parent: =>SilverStripe\CMS\Model\SiteTree.events_parent
+    Parent: =>Dynamic\Calendar\Page\Calendar.test_calendar
 
 SilverStripe\Security\Member:
   admin:

@@ -16,10 +16,7 @@ use SilverStripe\Dev\FunctionalTest;
  */
 class CalendarControllerICSTest extends FunctionalTest
 {
-    /**
-     * @var string
-     */
-    protected static $fixture_file = '../Calendar.yml';
+    // This test creates its own fixtures in setUp()
 
     /**
      * @var Calendar

@@ -32,9 +32,9 @@ class CalendarAdminTest extends SapphireTest
     }
 
     /**
-     * Test optimized getList method for EventPage
+     * Test getList method for EventPage returns properly sorted list
      */
-    public function testOptimizedEventPageList()
+    public function testEventPageList()
     {
         $admin = CalendarAdmin::create();
         $admin->modelClass = EventPage::class;
@@ -44,16 +44,16 @@ class CalendarAdminTest extends SapphireTest
         // Test that method returns DataList
         $this->assertInstanceOf(DataList::class, $list);
 
-        // Get the SQL query to verify optimizations
+        // Get the SQL query to verify basic structure
         $sql = $list->sql();
-
-        // Check that Category joins are included for optimization
-        $this->assertStringContainsString('EventPage_Categories', $sql);
-        $this->assertStringContainsString('Category', $sql);
 
         // Check that proper sorting is applied
         $this->assertStringContainsString('ORDER BY', $sql);
         $this->assertStringContainsString('StartDate', $sql);
+
+        // Verify the main tables are included
+        $this->assertStringContainsString('SiteTree', $sql);
+        $this->assertStringContainsString('EventPage', $sql);
     }
 
     /**

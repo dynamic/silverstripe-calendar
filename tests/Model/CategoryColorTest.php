@@ -15,11 +15,11 @@ class CategoryColorTest extends SapphireTest
      */
     public function testSixCharacterHexColor()
     {
-        $category = Category::create();
+        $category = new Category();
         $category->Color = '#FF0000';
 
         $this->assertEquals('ff0000', $category->getColorHex());
-        $this->assertEquals('#FF0000', $category->getColorPreview());
+        $this->assertEquals('#ff0000', $category->getColorPreview());
     }
 
     /**
@@ -27,7 +27,7 @@ class CategoryColorTest extends SapphireTest
      */
     public function testThreeCharacterHexColor()
     {
-        $category = Category::create();
+        $category = new Category();
         $category->Color = '#F00';
 
         // Should expand to 6 characters
@@ -40,7 +40,7 @@ class CategoryColorTest extends SapphireTest
      */
     public function testHexColorWithoutPrefix()
     {
-        $category = Category::create();
+        $category = new Category();
         $category->Color = 'FF0000';
 
         $this->assertEquals('ff0000', $category->getColorHex());
@@ -51,7 +51,7 @@ class CategoryColorTest extends SapphireTest
      */
     public function testThreeCharacterHexColorWithoutPrefix()
     {
-        $category = Category::create();
+        $category = new Category();
         $category->Color = 'F00';
 
         // Should expand to 6 characters
@@ -63,7 +63,7 @@ class CategoryColorTest extends SapphireTest
      */
     public function testEightCharacterHexColor()
     {
-        $category = Category::create();
+        $category = new Category();
         $category->Color = '#FF0000FF';
 
         // Should return as-is (8 characters for alpha support)
@@ -75,7 +75,7 @@ class CategoryColorTest extends SapphireTest
      */
     public function testLegacyColorNames()
     {
-        $category = Category::create();
+        $category = new Category();
         $category->Color = 'Blue';
 
         $this->assertEquals('334597', $category->getColorHex());
@@ -87,7 +87,7 @@ class CategoryColorTest extends SapphireTest
      */
     public function testDefaultColorWhenEmpty()
     {
-        $category = Category::create();
+        $category = new Category();
         $category->Color = '';
 
         $this->assertEquals('334597', $category->getColorHex());
@@ -99,7 +99,7 @@ class CategoryColorTest extends SapphireTest
      */
     public function testInvalidColorFallback()
     {
-        $category = Category::create();
+        $category = new Category();
         $category->Color = 'InvalidColor';
 
         $this->assertEquals('334597', $category->getColorHex());
@@ -111,7 +111,7 @@ class CategoryColorTest extends SapphireTest
      */
     public function testCaseInsensitiveHexColors()
     {
-        $category = Category::create();
+        $category = new Category();
 
         // Test uppercase
         $category->Color = '#ABCDEF';

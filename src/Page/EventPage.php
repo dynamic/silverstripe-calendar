@@ -46,9 +46,10 @@ class EventPage extends \Page
     use CarbonRecursion;
 
     /**
-     * array
+     * Recurring pattern options for event frequency
+     * @var array
      */
-    private const RRULE = [
+    private const CARBON_PATTERNS = [
         'DAILY' => 'Day(s)',
         'WEEKLY' => 'Week(s)',
         'MONTHLY' => 'Month(s)',
@@ -525,11 +526,12 @@ class EventPage extends \Page
     }
 
     /**
-     * @return mixed
+     * Get the pattern source for recurring events dropdown
+     * @return array
      */
     public function getPatternSource()
     {
-        return array_merge(['NONE' => 'Does not repeat'], self::RRULE);
+        return array_merge(['NONE' => 'Does not repeat'], self::CARBON_PATTERNS);
     }
 
     /**

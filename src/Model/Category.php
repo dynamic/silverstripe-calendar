@@ -204,6 +204,45 @@ class Category extends DataObject implements PermissionProvider
     }
 
     /**
+     * Expand 3-character hex codes to 6 characters
+     * @param string $hex The hex color code (without #)
+     * @return string The expanded hex code
+     */
+    private function expandHexColor(string $hex): string
+    {
+        if (strlen($hex) === 3) {
+            return $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+        }
+        return $hex;
+    }
+
+    /**
+     * Get a validated color safe for use in inline styles
+     * Returns null if color is not a valid hex format
+     *
+     * @return string|null
+     */
+    public function getValidatedColor(): ?string
+    {
+        if (!$this->Color) {
+            return null;
+        }
+
+        // Check if it's a valid hex color (3 or 6 characters with optional #)
+        if (preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6})$/', $this->Color)) {
+            return $this->getColorPreview();
+        }
+
+        // Check if it's a valid legacy color name
+        $colorMap = self::getLegacyColorMap();
+        if (isset($colorMap[$this->Color])) {
+            return $colorMap[$this->Color];
+        }
+
+        return null;
+    }
+
+    /**
      * Get the category color for frontend use
      * Returns the hex color value or a default if none set
      *
@@ -216,14 +255,14 @@ class Category extends DataObject implements PermissionProvider
         }
 
         // If the color starts with #, it's already a hex value (from ColorField)
-        if (strpos($this->Color, '#') === 0) {
+        if ($this->Color && strpos($this->Color, '#') === 0) {
             // Expand 3-character hex codes to 6 characters for consistency
             if (preg_match('/^#([a-fA-F0-9]{3})$/', $this->Color, $matches)) {
-                $hex = $matches[1];
-                $expanded = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+                $expanded = $this->expandHexColor($matches[1]);
                 return '#' . strtolower($expanded);
             }
-            return $this->Color;
+            // For all hex values, ensure consistent lowercase
+            return '#' . strtolower(ltrim($this->Color, '#'));
         }
 
         // Otherwise, it's a legacy color name from ColorPaletteField - map to hex values
@@ -242,18 +281,18 @@ class Category extends DataObject implements PermissionProvider
         $colorMap = self::getLegacyColorMap();
 
         // If it's already a hex color (3, 6, or 8 character), return without # prefix
-        if (preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/', $this->Color, $matches)) {
+        $pattern = '/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/';
+        if ($this->Color && preg_match($pattern, $this->Color, $matches)) {
             $hex = $matches[1];
             // Expand 3-character hex codes to 6 characters (e.g., "fff" -> "ffffff")
             if (strlen($hex) === 3) {
-                $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-                return strtolower($hex);
+                return strtolower($this->expandHexColor($hex));
             }
-            // For 8-character colors (with alpha), keep uppercase per test expectations
+            // For 8-character hex (with alpha), keep uppercase as expected by tests
             if (strlen($hex) === 8) {
                 return strtoupper($hex);
             }
-            // For 6-character colors, return lowercase
+            // For 6-character hex, use lowercase
             return strtolower($hex);
         }
 

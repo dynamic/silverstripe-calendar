@@ -253,18 +253,30 @@ class EventPage extends \Page
 
     /**
      * Get comma-separated list of category names for summary fields
+     * Uses memoization to prevent repeated database queries
      *
      * @return string
      */
     public function getCategoriesList(): string
     {
+        // Use a simple memoization approach to cache the result per object
+        static $cache = [];
+        $cacheKey = $this->ID . '_categories';
+        
+        if (isset($cache[$cacheKey])) {
+            return $cache[$cacheKey];
+        }
+
         $categories = $this->Categories();
 
         if (!$categories || $categories->count() === 0) {
-            return '';
+            return $cache[$cacheKey] = '';
         }
 
-        return implode(', ', $categories->column('Title'));
+        // Get titles efficiently 
+        $titles = $categories->column('Title');
+        
+        return $cache[$cacheKey] = implode(', ', $titles);
     }
 
     /**

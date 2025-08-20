@@ -26,7 +26,7 @@ class CalendarAdminTest extends SapphireTest
     {
         $admin = CalendarAdmin::create();
         $managedModels = $admin->config()->get('managed_models');
-        
+
         $this->assertContains(Category::class, $managedModels);
         $this->assertContains(EventPage::class, $managedModels);
     }
@@ -38,24 +38,24 @@ class CalendarAdminTest extends SapphireTest
     {
         $admin = CalendarAdmin::create();
         $admin->modelClass = EventPage::class;
-        
+
         $list = $admin->getList();
-        
+
         // Test that method returns DataList
         $this->assertInstanceOf(DataList::class, $list);
-        
+
         // Get the SQL query to verify sorting and structure
         $sql = $list->sql();
-        
+
         // Check that proper sorting is applied
         $this->assertStringContainsString('ORDER BY', $sql);
         $this->assertStringContainsString('StartDate', $sql);
         $this->assertStringContainsString('DESC', $sql);
-        
+
         // Verify the main tables are included
         $this->assertStringContainsString('SiteTree', $sql);
         $this->assertStringContainsString('EventPage', $sql);
-        
+
         // Verify that the list contains EventPage records
         $this->assertEquals(EventPage::class, $list->dataClass());
     }
@@ -67,9 +67,9 @@ class CalendarAdminTest extends SapphireTest
     {
         $admin = CalendarAdmin::create();
         $admin->modelClass = Category::class;
-        
+
         $list = $admin->getList();
-        
+
         // Should not include event-specific optimizations for Category
         $sql = $list->sql();
         $this->assertStringNotContainsString('Dynamic_Calendar_Category_EventPages', $sql);
@@ -82,12 +82,12 @@ class CalendarAdminTest extends SapphireTest
     {
         $admin = CalendarAdmin::create();
         $admin->modelClass = EventPage::class;
-        
+
         $list = $admin->getList();
-        
+
         // Test that EventPages can be managed through admin
         $this->assertInstanceOf(DataList::class, $list);
-        
+
         // Test that it includes EventPage objects
         foreach ($list->limit(5) as $item) {
             $this->assertInstanceOf(EventPage::class, $item);

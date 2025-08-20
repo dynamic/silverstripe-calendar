@@ -98,3 +98,4 @@ public/build/
 # Temporary folders
 tmp/
 temp/
+# Force CI rebuild

@@ -178,6 +178,7 @@ class EventPage extends \Page
      */
     private static array $summary_fields = [
         'Title' => 'Title',
+        'CategoriesList' => 'Categories',
         'GridFieldDate' => 'Date',
         'GridFieldTime' => 'Time',
         'HasRecurringEvents' => 'Recurring Events',
@@ -208,6 +209,11 @@ class EventPage extends \Page
         'Interval',
         'RecursionEndDate',
     ];
+
+    /**
+     * @var string|null
+     */
+    private $categoriesListCache = null;
 
     /**
      * @return string
@@ -251,6 +257,33 @@ class EventPage extends \Page
     }
 
     /**
+     * Get comma-separated list of category names for summary fields
+     * Uses instance variable caching to prevent repeated database queries
+     *
+     * @return string
+     */
+    public function getCategoriesList(): string
+    {
+        // Use an instance variable to cache the result per object
+        if ($this->categoriesListCache !== null) {
+            return $this->categoriesListCache;
+        }
+
+        $categories = $this->Categories();
+
+        if ($categories->count() === 0) {
+            $this->categoriesListCache = '';
+            return $this->categoriesListCache;
+        }
+
+        // Get titles efficiently
+        $titles = $categories->column('Title');
+
+        $this->categoriesListCache = implode(', ', $titles);
+        return $this->categoriesListCache;
+    }
+
+    /**
      * @return string
      */
     public function getLumberjackTitle()
@@ -284,10 +317,10 @@ class EventPage extends \Page
                             ->setTitle('Start Time')
                     )->setTitle('From'),
                     FieldGroup::create(
-                        $endTime = CalendarTimeField::create('EndTime')
-                            ->setTitle('End Time'),
                         $end = DateField::create('EndDate')
-                            ->setTitle('End Date')
+                            ->setTitle('End Date'),
+                        $endTime = CalendarTimeField::create('EndTime')
+                            ->setTitle('End Time')
                     )->setTitle('To'),
                     $allDay = DropdownField::create('AllDay')
                         ->setTitle('All Day')

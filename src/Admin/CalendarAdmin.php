@@ -4,7 +4,6 @@ namespace Dynamic\Calendar\Admin;
 
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Page\EventPage;
-use Dynamic\Calendar\Traits\EventPageOptimizations;
 use SilverStripe\Admin\ModelAdmin;
 use SilverStripe\ORM\DataList;
 
@@ -14,8 +13,6 @@ use SilverStripe\ORM\DataList;
  */
 class CalendarAdmin extends ModelAdmin
 {
-    use EventPageOptimizations;
-
     /**
      * @var string
      */
@@ -30,12 +27,12 @@ class CalendarAdmin extends ModelAdmin
      * @var array
      */
     private static array $managed_models = [
+        EventPage::class,
         Category::class,
-        EventPage::class,  // NEW: Add EventPage management
     ];
 
     /**
-     * Optimized list method for EventPage with eager loading and proper sorting
+     * Optimized list method for EventPage with proper sorting
      *
      * @return DataList
      */
@@ -44,8 +41,8 @@ class CalendarAdmin extends ModelAdmin
         $list = parent::getList();
 
         if ($this->modelClass === EventPage::class) {
-            $list = $this->addEventPageOptimizations($list)
-                ->sort(['StartDate' => 'DESC', 'Created' => 'DESC']);
+            // Add default sorting for EventPage
+            $list = $list->sort(['StartDate' => 'DESC', 'Created' => 'DESC']);
         }
 
         return $list;

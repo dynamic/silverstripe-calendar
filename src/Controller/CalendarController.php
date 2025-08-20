@@ -34,6 +34,7 @@ class CalendarController extends \PageController
     private static array $allowed_actions = [
         'index',
         'events',
+        'ical',
     ];
 
     /**
@@ -42,6 +43,7 @@ class CalendarController extends \PageController
     private static array $url_handlers = [
         '' => 'index',
         'events' => 'events',
+        'ical' => 'ical',
     ];
 
     /**
@@ -407,5 +409,174 @@ class CalendarController extends \PageController
 
         // Return white for dark colors, black for light colors
         return $luminance > 0.5 ? '#000000' : '#FFFFFF';
+    }
+
+    /**
+     * ICS action for generating iCalendar feeds
+     *
+     * @param HTTPRequest $request
+     * @return HTTPResponse
+     */
+    public function ical(HTTPRequest $request)
+    {
+        $fromDate = $this->getFromDate($request);
+        $toDate = $this->getToDate($request);
+
+        // Get category filter - reuse existing logic
+        $categoryIDs = $request->getVar('categories');
+        $categories = null;
+
+        if ($categoryIDs) {
+            if (!is_array($categoryIDs)) {
+                $categoryIDs = [$categoryIDs];
+            }
+            $categories = Category::get()->byIDs($categoryIDs);
+        }
+
+        // Use the existing Calendar page's getEventsFeed method
+        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+
+        // Generate ICS content manually for now
+        $icsContent = $this->generateICSContent($events);
+
+        // Set appropriate headers for ICS response
+        $response = $this->getResponse();
+        $response->addHeader('Content-Type', 'text/calendar; charset=utf-8');
+        $response->addHeader('Content-Disposition', 'attachment; filename="calendar.ics"');
+        $response->addHeader('Cache-Control', 'no-cache, must-revalidate');
+        
+        return $response->setBody($icsContent);
+    }
+
+    /**
+     * Generate ICS content from events
+     *
+     * @param ArrayList $events
+     * @return string
+     */
+    private function generateICSContent(ArrayList $events): string
+    {
+        $ics = [];
+        
+        // ICS Header
+        $ics[] = 'BEGIN:VCALENDAR';
+        $ics[] = 'VERSION:2.0';
+        $ics[] = 'PRODID:-//Dynamic SilverStripe Calendar//EN';
+        $ics[] = 'CALSCALE:GREGORIAN';
+        $ics[] = 'METHOD:PUBLISH';
+        
+        // Add events
+        foreach ($events as $event) {
+            $eventICS = $this->transformEventToICS($event);
+            if ($eventICS) {
+                $ics = array_merge($ics, $eventICS);
+            }
+        }
+        
+        // ICS Footer
+        $ics[] = 'END:VCALENDAR';
+        
+        return implode("\r\n", $ics);
+    }
+
+    /**
+     * Transform an event to ICS format
+     *
+     * @param EventPage|EventInstance $event
+     * @return array|null
+     */
+    private function transformEventToICS($event): ?array
+    {
+        try {
+            $ics = [];
+            
+            $ics[] = 'BEGIN:VEVENT';
+            
+            // Set unique ID
+            $uniqueId = $event->ID;
+            if ($event->hasMethod('getInstanceDate')) {
+                // For recurring event instances, include the instance date in the ID
+                $uniqueId .= '-' . $event->getInstanceDate()->format('Ymd');
+            }
+            $ics[] = 'UID:' . $uniqueId . '@' . $_SERVER['HTTP_HOST'] ?? 'calendar.local';
+            
+            // Add timestamp
+            $ics[] = 'DTSTAMP:' . gmdate('Ymd\THis\Z');
+            
+            // Set basic event properties
+            $ics[] = 'SUMMARY:' . $this->escapeICSValue($event->Title);
+            
+            // Add description if available
+            if ($event->Content) {
+                $ics[] = 'DESCRIPTION:' . $this->escapeICSValue(strip_tags($event->Content));
+            }
+            
+            // Add location if available
+            if ($event->Location) {
+                $ics[] = 'LOCATION:' . $this->escapeICSValue($event->Location);
+            }
+
+            // Handle dates and times
+            if ($event->AllDay) {
+                // All-day event
+                $ics[] = 'DTSTART;VALUE=DATE:' . str_replace('-', '', $event->StartDate);
+                if ($event->EndDate) {
+                    // For all-day events, end date should be the day after
+                    $endDate = Carbon::parse($event->EndDate)->addDay();
+                    $ics[] = 'DTEND;VALUE=DATE:' . $endDate->format('Ymd');
+                }
+            } else {
+                // Timed event
+                $startDateTime = Carbon::parse($event->StartDate . ' ' . $event->StartTime);
+                $ics[] = 'DTSTART:' . $startDateTime->utc()->format('Ymd\THis\Z');
+                
+                if ($event->EndDate && $event->EndTime) {
+                    $endDateTime = Carbon::parse($event->EndDate . ' ' . $event->EndTime);
+                    $ics[] = 'DTEND:' . $endDateTime->utc()->format('Ymd\THis\Z');
+                } else {
+                    // Default 1 hour duration
+                    $endDateTime = $startDateTime->copy()->addHour();
+                    $ics[] = 'DTEND:' . $endDateTime->utc()->format('Ymd\THis\Z');
+                }
+            }
+
+            // Add categories
+            $eventCategories = $event->hasMethod('getOriginalEvent') 
+                ? $event->getOriginalEvent()->Categories() 
+                : $event->Categories();
+                
+            if ($eventCategories && $eventCategories->exists()) {
+                $categoryNames = $eventCategories->map('Title')->toArray();
+                $ics[] = 'CATEGORIES:' . implode(',', array_map([$this, 'escapeICSValue'], $categoryNames));
+            }
+
+            // Add URL if available
+            if ($event->Link()) {
+                $ics[] = 'URL:' . $event->Link();
+            }
+            
+            $ics[] = 'END:VEVENT';
+
+            return $ics;
+            
+        } catch (\Exception $e) {
+            // Log error and continue with other events
+            error_log("Error transforming event {$event->ID} to ICS: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Escape ICS values according to RFC 5545
+     *
+     * @param string $value
+     * @return string
+     */
+    private function escapeICSValue(string $value): string
+    {
+        // Escape special characters
+        $value = str_replace(['\\', ';', ',', "\n", "\r"], ['\\\\', '\\;', '\\,', '\\n', '\\n'], $value);
+        
+        return $value;
     }
 }

@@ -272,13 +272,15 @@ class EventPage extends \Page
         $categories = $this->Categories();
 
         if ($categories->count() === 0) {
-            return $this->categoriesListCache = '';
+            $this->categoriesListCache = '';
+            return $this->categoriesListCache;
         }
 
         // Get titles efficiently
         $titles = $categories->column('Title');
 
-        return $this->categoriesListCache = implode(', ', $titles);
+        $this->categoriesListCache = implode(', ', $titles);
+        return $this->categoriesListCache;
     }
 
     /**

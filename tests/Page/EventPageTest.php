@@ -5,6 +5,7 @@ namespace Dynamic\Calendar\Tests\Page;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
+use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Versioned\Versioned;
 
@@ -66,6 +67,26 @@ class EventPageTest extends SapphireTest
         $event = $this->objFromFixture(EventPage::class, 'one');
 
         $this->assertFalse($event->getLumberjackPagesForGridfield()->exists());
+    }
+
+    /**
+     * Test that ParentID dropdown field is added to CMS fields
+     */
+    public function testParentIDDropdownExists()
+    {
+        /** @var EventPage $event */
+        $event = $this->objFromFixture(EventPage::class, 'one');
+        
+        $fields = $event->getCMSFields();
+        
+        // Check that ParentID field exists
+        $parentField = $fields->dataFieldByName('ParentID');
+        $this->assertNotNull($parentField, 'ParentID field should exist in CMS fields');
+        $this->assertInstanceOf(DropdownField::class, $parentField, 'ParentID should be a DropdownField');
+        
+        // Check field configuration
+        $this->assertEquals('Calendar', $parentField->Title(), 'ParentID field should be titled "Calendar"');
+        $this->assertEquals('Select a Calendar...', $parentField->getEmptyString(), 'ParentID field should have helpful empty string');
     }
 
     /**

@@ -7,6 +7,7 @@ use Dynamic\Calendar\Controller\EventPageController;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
+use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Traits\CarbonRecursion;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DropdownField;
@@ -15,6 +16,7 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\GridField\GridField;
 use SilverStripe\Forms\GridField\GridFieldConfig_RelationEditor;
 use SilverStripe\Forms\GridField\GridFieldPaginator;
+use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\Lumberjack\Model\Lumberjack;
@@ -24,6 +26,7 @@ use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
+use SilverStripe\ORM\ValidationResult;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -308,6 +311,31 @@ class EventPage extends \Page
     public function getCMSFields()
     {
         $this->beforeUpdateCMSFields(function (FieldList $fields) {
+            // Add ParentID dropdown for Calendar selection
+            $calendars = Calendar::get();
+            if ($calendars->exists()) {
+                $fields->addFieldToTab(
+                    'Root.Main',
+                    DropdownField::create(
+                        'ParentID',
+                        'Calendar',
+                        $calendars->map('ID', 'Title')
+                    )->setEmptyString('Select a Calendar...')
+                     ->setDescription('Choose which Calendar this event belongs to'),
+                    'Content'
+                );
+            } else {
+                // If no calendars exist, show a helpful message
+                $fields->addFieldToTab(
+                    'Root.Main',
+                    LiteralField::create(
+                        'NoCalendarWarning',
+                        '<p class="alert alert-warning">No Calendar pages exist. Please create a Calendar page first before adding events.</p>'
+                    ),
+                    'Content'
+                );
+            }
+
             $fields->addFieldsToTab(
                 'Root.EventSettings',
                 [
@@ -606,6 +634,27 @@ class EventPage extends \Page
     /**
      * Clear caches when event is modified
      */
+    /**
+     * Validate that a parent Calendar is selected
+     */
+    public function validate()
+    {
+        $result = parent::validate();
+
+        // Only validate ParentID if we're not already on a Calendar page in the page tree
+        if (!$this->ParentID || $this->ParentID == 0) {
+            $result->addError('Please select a Calendar for this event.');
+        } else {
+            // Ensure the selected parent is actually a Calendar
+            $parent = Calendar::get()->byID($this->ParentID);
+            if (!$parent) {
+                $result->addError('Selected parent must be a Calendar page.');
+            }
+        }
+
+        return $result;
+    }
+
     public function onAfterWrite(): void
     {
         parent::onAfterWrite();

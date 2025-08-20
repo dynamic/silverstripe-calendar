@@ -178,6 +178,7 @@ class EventPage extends \Page
      */
     private static array $summary_fields = [
         'Title' => 'Title',
+        'CategoriesList' => 'Categories',
         'GridFieldDate' => 'Date',
         'GridFieldTime' => 'Time',
         'HasRecurringEvents' => 'Recurring Events',
@@ -251,6 +252,22 @@ class EventPage extends \Page
     }
 
     /**
+     * Get comma-separated list of category names for summary fields
+     *
+     * @return string
+     */
+    public function getCategoriesList(): string
+    {
+        $categories = $this->Categories();
+
+        if (!$categories || $categories->count() === 0) {
+            return '';
+        }
+
+        return implode(', ', $categories->column('Title'));
+    }
+
+    /**
      * @return string
      */
     public function getLumberjackTitle()
@@ -284,10 +301,10 @@ class EventPage extends \Page
                             ->setTitle('Start Time')
                     )->setTitle('From'),
                     FieldGroup::create(
-                        $endTime = CalendarTimeField::create('EndTime')
-                            ->setTitle('End Time'),
                         $end = DateField::create('EndDate')
-                            ->setTitle('End Date')
+                            ->setTitle('End Date'),
+                        $endTime = CalendarTimeField::create('EndTime')
+                            ->setTitle('End Time')
                     )->setTitle('To'),
                     $allDay = DropdownField::create('AllDay')
                         ->setTitle('All Day')

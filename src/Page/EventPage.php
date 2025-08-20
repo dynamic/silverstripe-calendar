@@ -211,6 +211,11 @@ class EventPage extends \Page
     ];
 
     /**
+     * @var string|null
+     */
+    private $categoriesListCache = null;
+
+    /**
      * @return string
      */
     public function getGridFieldDate(): string
@@ -253,30 +258,27 @@ class EventPage extends \Page
 
     /**
      * Get comma-separated list of category names for summary fields
-     * Uses memoization to prevent repeated database queries
+     * Uses instance variable caching to prevent repeated database queries
      *
      * @return string
      */
     public function getCategoriesList(): string
     {
-        // Use a simple memoization approach to cache the result per object
-        static $cache = [];
-        $cacheKey = $this->ID . '_categories';
-        
-        if (isset($cache[$cacheKey])) {
-            return $cache[$cacheKey];
+        // Use an instance variable to cache the result per object
+        if ($this->categoriesListCache !== null) {
+            return $this->categoriesListCache;
         }
 
         $categories = $this->Categories();
 
-        if (!$categories || $categories->count() === 0) {
-            return $cache[$cacheKey] = '';
+        if ($categories->count() === 0) {
+            return $this->categoriesListCache = '';
         }
 
-        // Get titles efficiently 
+        // Get titles efficiently
         $titles = $categories->column('Title');
-        
-        return $cache[$cacheKey] = implode(', ', $titles);
+
+        return $this->categoriesListCache = implode(', ', $titles);
     }
 
     /**

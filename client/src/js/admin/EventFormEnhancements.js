@@ -3,10 +3,33 @@
 
 export class EventFormEnhancements {
   constructor() {
+    // Only initialize if we're on an EventPage form
+    if (!this.isEventPageForm()) {
+      return;
+    }
+
     this.initConditionalFields();
     this.initRecurrencePreview();
-    this.initQuickFillButtons();
     this.initDateTimeHelpers();
+  }
+
+  isEventPageForm() {
+    // Check if we're editing an EventPage by looking for event-specific fields
+    const eventSpecificFields = [
+      '[name*="AllDay"]',
+      '[name*="Recursion"]', 
+      '[name*="StartDate"]',
+      '[name*="EndDate"]',
+      '[name*="StartTime"]',
+      '[name*="EndTime"]'
+    ];
+
+    // If we have multiple event-specific fields, we're likely on an EventPage
+    const foundFields = eventSpecificFields.filter(selector => 
+      document.querySelector(selector) !== null
+    );
+
+    return foundFields.length >= 3; // Require at least 3 event-specific fields
   }
 
   initConditionalFields() {
@@ -98,75 +121,6 @@ export class EventFormEnhancements {
     if (window.CalendarAdminEnhancements) {
       window.CalendarAdminEnhancements.updateRecurrencePreview();
     }
-  }
-
-  initQuickFillButtons() {
-    // Add quick-fill buttons for common event patterns
-    const titleField = document.querySelector('[name*="Title"]');
-    if (!titleField) return;
-
-    const quickFillContainer = document.createElement('div');
-    quickFillContainer.className = 'quick-fill-buttons mt-2';
-    quickFillContainer.innerHTML = `
-      <small class="text-muted">Quick Fill:</small>
-      <div class="btn-group btn-group-sm ms-2" role="group">
-        <button type="button" class="btn btn-outline-secondary" data-pattern="service">Service</button>
-        <button type="button" class="btn btn-outline-secondary" data-pattern="meeting">Meeting</button>
-        <button type="button" class="btn btn-outline-secondary" data-pattern="study">Bible Study</button>
-        <button type="button" class="btn btn-outline-secondary" data-pattern="event">Special Event</button>
-      </div>
-    `;
-
-    titleField.parentNode.appendChild(quickFillContainer);
-
-    // Handle quick-fill clicks
-    quickFillContainer.addEventListener('click', (e) => {
-      if (e.target.dataset.pattern) {
-        this.applyQuickFill(e.target.dataset.pattern);
-      }
-    });
-  }
-
-  applyQuickFill(pattern) {
-    const patterns = {
-      service: {
-        title: 'Worship Service',
-        startTime: '10:00:00',
-        endTime: '11:00:00'
-      },
-      meeting: {
-        title: 'Meeting',
-        startTime: '19:00:00',
-        endTime: '20:00:00'
-      },
-      study: {
-        title: 'Bible Study',
-        startTime: '19:30:00',
-        endTime: '21:00:00'
-      },
-      event: {
-        title: 'Special Event',
-        allDay: true
-      }
-    };
-
-    const pattern_data = patterns[pattern];
-    if (!pattern_data) return;
-
-    // Apply pattern data
-    Object.keys(pattern_data).forEach(key => {
-      const field = document.querySelector(`[name*="${key}"], [name*="${key.charAt(0).toUpperCase() + key.slice(1)}"]`);
-      if (field) {
-        if (field.type === 'checkbox') {
-          field.checked = pattern_data[key];
-        } else {
-          field.value = pattern_data[key];
-        }
-
-        // Trigger change event
-        field.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
   }
 
   initDateTimeHelpers() {

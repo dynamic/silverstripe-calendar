@@ -526,9 +526,6 @@ class EventPage extends \Page
     }
 
     /**
-     * @return mixed
-     */
-    /**
      * Get the pattern source for recurring events dropdown
      * @return array
      */

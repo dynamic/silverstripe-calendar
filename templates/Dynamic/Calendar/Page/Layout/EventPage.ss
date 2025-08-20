@@ -58,7 +58,11 @@
                                             <h6 class="mb-1">Categories</h6>
                                             <div class="mb-2">
                                                 <% loop $Categories %>
-                                                    <span class="badge bg-secondary me-1 mb-1" <% if $Color %>style="background-color: $Color !important;"<% end_if %>>$Title</span>
+                                                    <span class="badge bg-secondary me-1 mb-1"
+                                                        <% if $ValidatedColor %>
+                                                            style="background-color: $ValidatedColor !important;"
+                                                        <% end_if %>
+                                                    >$Title</span>
                                                 <% end_loop %>
                                             </div>
                                         </div>

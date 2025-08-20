@@ -244,9 +244,9 @@
 }
 </style>
 
-<% require css('dynamic/silverstripe-calendar: client/dist/css/calendar.bundle.css') %>
-<% require javascript('dynamic/silverstripe-calendar: client/dist/js/vendors.bundle.js') %>
-<% require javascript('dynamic/silverstripe-calendar: client/dist/js/calendar.bundle.js') %>
+<% require css('dynamic/silverstripe-calendar:client/dist/css/calendar.bundle.css') %>
+<% require javascript('dynamic/silverstripe-calendar:client/dist/js/vendors.bundle.js') %>
+<% require javascript('dynamic/silverstripe-calendar:client/dist/js/calendar.bundle.js') %>
 
 <script>
 // Simple, clean calendar initialization

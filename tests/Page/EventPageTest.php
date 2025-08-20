@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Tests\Page;
 
+use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
@@ -29,6 +30,15 @@ class EventPageTest extends SapphireTest
 
         /** @var EventPage $event */
         $event = $this->objFromFixture(EventPage::class, 'one');
+        
+        // Ensure event has proper Calendar parent for validation
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+        $calendar->write();
+        $calendar->publishRecursive();
+        
+        $event->ParentID = $calendar->ID;
+        $event->write();
+        
         $tomorrow = strtotime('tomorrow');
 
         $event->StartDate = date('Y-m-d', $tomorrow);

@@ -314,14 +314,19 @@ class EventPage extends \Page
             // Add ParentID dropdown for Calendar selection
             $calendars = Calendar::get();
             if ($calendars->exists()) {
+                $parentField = DropdownField::create(
+                    'ParentID',
+                    'Calendar',
+                    $calendars->map('ID', 'Title')
+                )->setEmptyString('Select a Calendar...')
+                 ->setDescription('Choose which Calendar this event belongs to');
+                 
+                // Make the field required
+                $parentField->setAttribute('required', true);
+                
                 $fields->addFieldToTab(
                     'Root.Main',
-                    DropdownField::create(
-                        'ParentID',
-                        'Calendar',
-                        $calendars->map('ID', 'Title')
-                    )->setEmptyString('Select a Calendar...')
-                     ->setDescription('Choose which Calendar this event belongs to'),
+                    $parentField,
                     'Content'
                 );
             } else {
@@ -641,7 +646,7 @@ class EventPage extends \Page
     {
         $result = parent::validate();
 
-        // Only validate ParentID if we're not already on a Calendar page in the page tree
+        // Only validate ParentID if we don't have a valid parent already
         if (!$this->ParentID || $this->ParentID == 0) {
             $result->addError('Please select a Calendar for this event.');
         } else {

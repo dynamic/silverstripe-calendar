@@ -195,4 +195,46 @@ class CalendarTest extends SapphireTest
         // Should have events with sports category
         $this->assertGreaterThan(0, $events->count());
     }
+
+    /**
+     * Test optimized getLumberjackPagesForGridfield method
+     */
+    public function testOptimizedLumberjackPagesForGridfield()
+    {
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+        $eventPages = $calendar->getLumberjackPagesForGridfield();
+
+        // Test that method returns DataList
+        $this->assertInstanceOf('SilverStripe\\ORM\\DataList', $eventPages);
+
+        // Test proper filtering by ParentID
+        foreach ($eventPages as $eventPage) {
+            $this->assertEquals($calendar->ID, $eventPage->ParentID);
+        }
+
+        // Test that the DataList includes optimization joins
+        $sql = $eventPages->sql();
+        $this->assertStringContainsString('EventPage_Categories', $sql);
+        $this->assertStringContainsString('Category', $sql);
+    }
+
+    /**
+     * Test that Lumberjack query includes proper joins for Categories
+     */
+    public function testLumberjackQueryOptimization()
+    {
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+        $eventPages = $calendar->getLumberjackPagesForGridfield();
+
+        // Get the SQL query to verify joins are included
+        $sql = $eventPages->sql();
+
+        // Check that Category joins are included for optimization
+        $this->assertStringContainsString('EventPage_Categories', $sql);
+        $this->assertStringContainsString('Category', $sql);
+
+        // Check that proper sorting is applied
+        $this->assertStringContainsString('ORDER BY', $sql);
+        $this->assertStringContainsString('StartDate', $sql);
+    }
 }

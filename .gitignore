@@ -3,6 +3,10 @@
 .AppleDouble
 .LSOverride
 
+# Composer
+vendor/
+composer.lock
+
 # Node.js and npm
 node_modules/
 npm-debug.log*
@@ -41,6 +45,9 @@ silverstripe-cache/
 assets/
 _resources/
 *.log
+
+# Composer
+composer.lock
 
 # Temporary files
 *.tmp
@@ -91,3 +98,4 @@ public/build/
 # Temporary folders
 tmp/
 temp/
+# Force CI rebuild

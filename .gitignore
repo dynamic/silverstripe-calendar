@@ -99,3 +99,6 @@ public/build/
 tmp/
 temp/
 # Force CI rebuild
+
+# Test files
+/tmp/test_*.html

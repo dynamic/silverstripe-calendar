@@ -22,9 +22,8 @@ pids
 *.pid.lock
 
 # Build outputs
-client/dist/
 build/
-dist/
+/dist/
 
 # Environment variables
 .env

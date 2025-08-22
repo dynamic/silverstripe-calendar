@@ -47,7 +47,22 @@ class Calendar extends \Page
     private static string $icon_class = 'font-icon-p-event-alt';
 
     /**
-     * Default window in years for recurring events when no date filter is applied
+     * Default window in years for recurring events when no date filter is applied.
+     *
+     * Rationale:
+     * The default value of 2 years was chosen to provide a reasonable balance between
+     * displaying a comprehensive set of upcoming recurring events and maintaining
+     * acceptable performance. Loading all possible recurrences for events with no
+     * date filter can be expensive, especially for events with complex recurrence rules.
+     *
+     * Performance Impact:
+     * Increasing this window will result in more recurring event instances being
+     * generated and loaded, which can significantly impact page load times and
+     * server resource usage. Conversely, reducing the window may cause some future
+     * recurring events to be omitted from the display.
+     *
+     * Adjust this value based on the expected number of recurring events and the
+     * performance characteristics of your hosting environment.
      *
      * @var int
      */
@@ -307,9 +322,9 @@ class Calendar extends \Page
         foreach ($recurringEvents as $event) {
             // For recurring events, we need date ranges for occurrence generation
             // If no dates provided, use configurable default range for recurring events
-            $windowYears = $this->config()->get('default_recurring_window_years') ?: 2;
+            $windowYears = $this->config()->get('default_recurring_window_years') ?: self::$default_recurring_window_years;
             $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
-            $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears - 1)->endOfYear();
+            $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
 
             // Get occurrences within the date range using Carbon recursion
             $occurrences = $event->getOccurrences($occurrenceFromDate, $occurrenceToDate);

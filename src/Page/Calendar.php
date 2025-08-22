@@ -257,22 +257,34 @@ class Calendar extends \Page
      */
     public function getEventsFeed(?int $limit = null, $categories = null, $fromDate = null, $toDate = null): ArrayList
     {
-        // Parse dates
-        $fromDate = $fromDate ? Carbon::parse($fromDate) : Carbon::now();
-        $toDate = $toDate ? Carbon::parse($toDate) : Carbon::now()->addMonths(6);
+        // Parse dates - only apply date filtering if dates are explicitly provided
+        $applyDateFilter = ($fromDate !== null || $toDate !== null);
+        $fromDate = $fromDate ? Carbon::parse($fromDate) : null;
+        $toDate = $toDate ? Carbon::parse($toDate) : null;
 
         $allEvents = ArrayList::create();
 
         // Get regular (non-recurring) events
-        $regularEvents = EventPage::get()
-            ->filter([
-                'ParentID' => $this->ID,
-                'Recursion' => 'NONE',
-            ])
-            ->where([
-                'StartDate >= ?' => $fromDate->format('Y-m-d'),
-                'StartDate <= ?' => $toDate->format('Y-m-d'),
-            ]);
+        $regularEventsFilter = [
+            'ParentID' => $this->ID,
+            'Recursion' => 'NONE',
+        ];
+
+        $regularEvents = EventPage::get()->filter($regularEventsFilter);
+
+        // Only apply date filtering if dates were explicitly provided
+        if ($applyDateFilter) {
+            $whereClause = [];
+            if ($fromDate) {
+                $whereClause['StartDate >= ?'] = $fromDate->format('Y-m-d');
+            }
+            if ($toDate) {
+                $whereClause['StartDate <= ?'] = $toDate->format('Y-m-d');
+            }
+            if (!empty($whereClause)) {
+                $regularEvents = $regularEvents->where($whereClause);
+            }
+        }
 
         foreach ($regularEvents as $event) {
             $allEvents->push($event);
@@ -286,8 +298,13 @@ class Calendar extends \Page
             ->exclude('Recursion', 'NONE');
 
         foreach ($recurringEvents as $event) {
+            // For recurring events, we need date ranges for occurrence generation
+            // If no dates provided, use a reasonable default range for recurring events
+            $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
+            $occurrenceToDate = $toDate ?: Carbon::now()->addYear()->endOfYear();
+
             // Get occurrences within the date range using Carbon recursion
-            $occurrences = $event->getOccurrences($fromDate, $toDate);
+            $occurrences = $event->getOccurrences($occurrenceFromDate, $occurrenceToDate);
 
             // Get event exceptions for this event
             $exceptions = $event->EventExceptions();

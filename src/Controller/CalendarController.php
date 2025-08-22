@@ -230,8 +230,8 @@ class CalendarController extends \PageController
         return [
             'Calendar' => $this->calendar,
             'Events' => $paginatedEvents,
-            'CurrentFromDate' => $fromDate->format('Y-m-d'),
-            'CurrentToDate' => $toDate->format('Y-m-d'),
+            'CurrentFromDate' => $fromDate ? $fromDate->format('Y-m-d') : null,
+            'CurrentToDate' => $toDate ? $toDate->format('Y-m-d') : null,
             'RecurringEventsCount' => $this->getRecurringEventsCount(),
             'OneTimeEventsCount' => $this->getOneTimeEventsCount(),
             'AvailableCategories' => $this->getAvailableCategoriesForTemplate($request),
@@ -240,12 +240,12 @@ class CalendarController extends \PageController
     }
 
     /**
-     * Get from date from request or default
+     * Get from date from request or null if no filter applied
      *
      * @param HTTPRequest $request
-     * @return Carbon
+     * @return Carbon|null
      */
-    protected function getFromDate(HTTPRequest $request): Carbon
+    protected function getFromDate(HTTPRequest $request): ?Carbon
     {
         $from = $request->getVar('from');
 
@@ -253,17 +253,17 @@ class CalendarController extends \PageController
             return Carbon::createFromFormat('Y-m-d', $from);
         }
 
-        // Default to start of current month
-        return Carbon::now()->startOfMonth();
+        // Return null when no date filter is applied - this will show all events
+        return null;
     }
 
     /**
-     * Get to date from request or default
+     * Get to date from request or null if no filter applied
      *
      * @param HTTPRequest $request
-     * @return Carbon
+     * @return Carbon|null
      */
-    protected function getToDate(HTTPRequest $request): Carbon
+    protected function getToDate(HTTPRequest $request): ?Carbon
     {
         $to = $request->getVar('to');
 
@@ -271,8 +271,8 @@ class CalendarController extends \PageController
             return Carbon::createFromFormat('Y-m-d', $to);
         }
 
-        // Default to end of next month
-        return Carbon::now()->addMonth()->endOfMonth();
+        // Return null when no date filter is applied - this will show all events
+        return null;
     }
 
     /**

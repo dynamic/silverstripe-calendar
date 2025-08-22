@@ -47,6 +47,13 @@ class Calendar extends \Page
     private static string $icon_class = 'font-icon-p-event-alt';
 
     /**
+     * Default window in years for recurring events when no date filter is applied
+     *
+     * @var int
+     */
+    private static int $default_recurring_window_years = 2;
+
+    /**
      * @var array
      */
     private static array $casting = [
@@ -299,9 +306,10 @@ class Calendar extends \Page
 
         foreach ($recurringEvents as $event) {
             // For recurring events, we need date ranges for occurrence generation
-            // If no dates provided, use a reasonable default range for recurring events
+            // If no dates provided, use configurable default range for recurring events
+            $windowYears = $this->config()->get('default_recurring_window_years') ?: 2;
             $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
-            $occurrenceToDate = $toDate ?: Carbon::now()->addYear()->endOfYear();
+            $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears - 1)->endOfYear();
 
             // Get occurrences within the date range using Carbon recursion
             $occurrences = $event->getOccurrences($occurrenceFromDate, $occurrenceToDate);

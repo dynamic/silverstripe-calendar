@@ -320,7 +320,8 @@ class Calendar extends \Page
             ->exclude('Recursion', 'NONE');
 
         // Retrieve the recurring window years config value once before the loop for performance
-        $windowYears = $this->config()->get('default_recurring_window_years') ?? self::config()->get('default_recurring_window_years');
+        $windowYears = $this->config()->get('default_recurring_window_years')
+            ?? self::config()->get('default_recurring_window_years');
 
         foreach ($recurringEvents as $event) {
             // For recurring events, we need date ranges for occurrence generation

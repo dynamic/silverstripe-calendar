@@ -47,6 +47,28 @@ class Calendar extends \Page
     private static string $icon_class = 'font-icon-p-event-alt';
 
     /**
+     * Default window in years for recurring events when no date filter is applied.
+     *
+     * Rationale:
+     * The default value of 2 years was chosen to provide a reasonable balance between
+     * displaying a comprehensive set of upcoming recurring events and maintaining
+     * acceptable performance. Loading all possible recurrences for events with no
+     * date filter can be expensive, especially for events with complex recurrence rules.
+     *
+     * Performance Impact:
+     * Increasing this window will result in more recurring event instances being
+     * generated and loaded, which can significantly impact page load times and
+     * server resource usage. Conversely, reducing the window may cause some future
+     * recurring events to be omitted from the display.
+     *
+     * Adjust this value based on the expected number of recurring events and the
+     * performance characteristics of your hosting environment.
+     *
+     * @var int
+     */
+    private static int $default_recurring_window_years = 2;
+
+    /**
      * @var array
      */
     private static array $casting = [
@@ -257,22 +279,34 @@ class Calendar extends \Page
      */
     public function getEventsFeed(?int $limit = null, $categories = null, $fromDate = null, $toDate = null): ArrayList
     {
-        // Parse dates
-        $fromDate = $fromDate ? Carbon::parse($fromDate) : Carbon::now();
-        $toDate = $toDate ? Carbon::parse($toDate) : Carbon::now()->addMonths(6);
+        // Parse dates - only apply date filtering if dates are explicitly provided
+        $applyDateFilter = ($fromDate !== null || $toDate !== null);
+        $fromDate = $fromDate ? Carbon::parse($fromDate) : null;
+        $toDate = $toDate ? Carbon::parse($toDate) : null;
 
         $allEvents = ArrayList::create();
 
         // Get regular (non-recurring) events
-        $regularEvents = EventPage::get()
-            ->filter([
-                'ParentID' => $this->ID,
-                'Recursion' => 'NONE',
-            ])
-            ->where([
-                'StartDate >= ?' => $fromDate->format('Y-m-d'),
-                'StartDate <= ?' => $toDate->format('Y-m-d'),
-            ]);
+        $regularEventsFilter = [
+            'ParentID' => $this->ID,
+            'Recursion' => 'NONE',
+        ];
+
+        $regularEvents = EventPage::get()->filter($regularEventsFilter);
+
+        // Only apply date filtering if dates were explicitly provided
+        if ($applyDateFilter) {
+            $whereClause = [];
+            if ($fromDate) {
+                $whereClause['StartDate >= ?'] = $fromDate->format('Y-m-d');
+            }
+            if ($toDate) {
+                $whereClause['StartDate <= ?'] = $toDate->format('Y-m-d');
+            }
+            if (!empty($whereClause)) {
+                $regularEvents = $regularEvents->where($whereClause);
+            }
+        }
 
         foreach ($regularEvents as $event) {
             $allEvents->push($event);
@@ -285,9 +319,18 @@ class Calendar extends \Page
             ])
             ->exclude('Recursion', 'NONE');
 
+        // Retrieve the recurring window years config value once before the loop for performance
+        $windowYears = $this->config()->get('default_recurring_window_years')
+            ?? self::config()->get('default_recurring_window_years');
+
         foreach ($recurringEvents as $event) {
+            // For recurring events, we need date ranges for occurrence generation
+            // If no dates provided, use configurable default range for recurring events
+            $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
+            $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
+
             // Get occurrences within the date range using Carbon recursion
-            $occurrences = $event->getOccurrences($fromDate, $toDate);
+            $occurrences = $event->getOccurrences($occurrenceFromDate, $occurrenceToDate);
 
             // Get event exceptions for this event
             $exceptions = $event->EventExceptions();

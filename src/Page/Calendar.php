@@ -319,10 +319,12 @@ class Calendar extends \Page
             ])
             ->exclude('Recursion', 'NONE');
 
+        // Retrieve the recurring window years config value once before the loop for performance
+        $windowYears = $this->config()->get('default_recurring_window_years') ?? self::$default_recurring_window_years;
+
         foreach ($recurringEvents as $event) {
             // For recurring events, we need date ranges for occurrence generation
             // If no dates provided, use configurable default range for recurring events
-            $windowYears = $this->config()->get('default_recurring_window_years') ?: self::$default_recurring_window_years;
             $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
             $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
 

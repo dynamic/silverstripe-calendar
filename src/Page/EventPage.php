@@ -469,6 +469,8 @@ class EventPage extends \Page
                 $endTime = clone $startTime;
                 $endTime->add(new \DateInterval('PT1H')); // Add 1 hour
                 $this->EndTime = $endTime->format('H:i:s');
+            } else {
+                error_log("EventPage: Failed to parse StartTime '{$this->StartTime}' with format 'H:i:s' in onBeforeWrite.");
             }
         }
 

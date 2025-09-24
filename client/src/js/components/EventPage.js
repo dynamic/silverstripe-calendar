@@ -12,7 +12,7 @@ export class EventPage {
 
     bindAddToCalendarButtons() {
         // Find all add-to-calendar buttons
-        const buttons = document.querySelectorAll('[data-add-to-calendar]');
+        const buttons = document.querySelectorAll('.js-add-to-calendar');
 
         buttons.forEach(button => {
             button.addEventListener('click', (e) => {

@@ -12,21 +12,35 @@ export class CalendarSubscription {
     }
 
     bindEvents() {
-        $(document).on('shown.bs.modal', '#subscribeModal', () => {
-            this.updateSubscribeButton();
+        // Modal shown event to populate subscription URL
+        const modal = document.getElementById('subscribeModal');
+        if (modal) {
+            modal.addEventListener('shown.bs.modal', () => {
+                this.updateSubscribeButton();
+            });
+        }
+
+        // Subscribe in App button click handler
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('.js-subscribe-app')) {
+                e.preventDefault();
+                this.subscribeInApp(e);
+            }
         });
 
-        $(document).on('click', '.js-copy-url', (e) => {
-            this.copyUrl(e);
-        });
-
-        $(document).on('click', '.js-subscribe-app', (e) => {
-            this.subscribeInApp(e);
+        // Copy URL button
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('.js-copy-subscription-url')) {
+                e.preventDefault();
+                this.copyUrl(e);
+            }
         });
 
         // Stop accordion toggle events from closing the modal
-        $(document).on('click', '#subscribeModal .accordion-button', (e) => {
-            e.stopPropagation();
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('#subscribeModal .accordion-button')) {
+                e.stopPropagation();
+            }
         });
     }
 

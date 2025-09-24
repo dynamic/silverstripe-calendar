@@ -19,6 +19,8 @@ use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TreeMultiselectField;
+use SilverStripe\AssetAdmin\Forms\UploadField;
+use SilverStripe\Assets\Image;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\FieldType\DBBoolean;
 use SilverStripe\ORM\FieldType\DBDate;
@@ -151,6 +153,20 @@ class EventPage extends \Page
      */
     private static array $has_many = [
         'EventExceptions' => EventException::class . '.OriginalEvent',
+    ];
+
+    /**
+     * @var array
+     */
+    private static array $has_one = [
+        'FeaturedImage' => Image::class,
+    ];
+
+    /**
+     * @var array
+     */
+    private static array $owns = [
+        'FeaturedImage',
     ];
 
     /**
@@ -342,6 +358,18 @@ class EventPage extends \Page
                     'Content'
                 );
             }
+
+            // Add Featured Image field
+            $fields->addFieldToTab(
+                'Root.Main',
+                UploadField::create('FeaturedImage')
+                    ->setTitle('Featured Image')
+                    ->setDescription('Main image for this event (recommended: 1200x630px)')
+                    ->setFolderName('Uploads/Events')
+                    ->setAllowedMaxFileNumber(1)
+                    ->setAllowedFileCategories('image'),
+                'Content'
+            );
 
             $fields->addFieldsToTab(
                 'Root.EventSettings',

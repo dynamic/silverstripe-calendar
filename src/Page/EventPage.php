@@ -19,6 +19,8 @@ use SilverStripe\Forms\GridField\GridFieldPaginator;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Forms\TreeMultiselectField;
+use SilverStripe\AssetAdmin\Forms\UploadField;
+use SilverStripe\Assets\Image;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\FieldType\DBBoolean;
 use SilverStripe\ORM\FieldType\DBDate;
@@ -151,6 +153,20 @@ class EventPage extends \Page
      */
     private static array $has_many = [
         'EventExceptions' => EventException::class . '.OriginalEvent',
+    ];
+
+    /**
+     * @var array
+     */
+    private static array $has_one = [
+        'FeaturedImage' => Image::class,
+    ];
+
+    /**
+     * @var array
+     */
+    private static array $owns = [
+        'FeaturedImage',
     ];
 
     /**
@@ -343,6 +359,18 @@ class EventPage extends \Page
                 );
             }
 
+            // Add Featured Image field
+            $fields->addFieldToTab(
+                'Root.Main',
+                UploadField::create('FeaturedImage')
+                    ->setTitle('Featured Image')
+                    ->setDescription('Main image for this event (recommended: 1200x630px)')
+                    ->setFolderName('Uploads/Events')
+                    ->setAllowedMaxFileNumber(1)
+                    ->setAllowedFileCategories('image'),
+                'Content'
+            );
+
             $fields->addFieldsToTab(
                 'Root.EventSettings',
                 [
@@ -433,6 +461,27 @@ class EventPage extends \Page
         parent::onBeforeWrite();
 
         $this->EventType = static::class;
+
+        // Add default 1-hour duration if start time is set but no end time
+        if ($this->StartTime && !$this->EndTime) {
+            try {
+                $startTimeObj = \SilverStripe\ORM\FieldType\DBTime::create_field('SilverStripe\ORM\FieldType\DBTime', $this->StartTime);
+                $startTimeDT = $startTimeObj->getValue() ? new \DateTime($startTimeObj->getValue()) : null;
+                if ($startTimeDT) {
+                    $startTimeDT->add(new \DateInterval('PT1H')); // Add 1 hour
+                    $this->EndTime = $startTimeDT->format('H:i:s');
+                } else {
+                    error_log("EventPage: Failed to parse StartTime '{$this->StartTime}' as DBTime in onBeforeWrite.");
+                }
+            } catch (\Exception $e) {
+                error_log("EventPage: Exception parsing StartTime '{$this->StartTime}' in onBeforeWrite: " . $e->getMessage());
+            }
+        }
+
+        // If no end date is specified, use start date
+        if ($this->StartDate && !$this->EndDate) {
+            $this->EndDate = $this->StartDate;
+        }
     }
 
     /**

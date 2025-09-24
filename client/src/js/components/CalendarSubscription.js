@@ -68,7 +68,7 @@ export class CalendarSubscription {
 
             const button = event.currentTarget;
             const originalText = button.innerHTML;
-            button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            button.innerHTML = '<i class="bi bi-check"></i> Copied!';
 
             setTimeout(() => {
                 button.innerHTML = originalText;

@@ -12,6 +12,7 @@ import { TouchInteractions } from './components/TouchInteractions';
 import { KeyboardNavigation } from './components/KeyboardNavigation';
 import { FilterEnhancements } from './components/FilterEnhancements';
 import { EventPage } from './components/EventPage';
+import { CalendarSubscription } from './components/CalendarSubscription';
 
 // Namespace for calendar utilities
 const CalendarUtils = {};
@@ -62,6 +63,9 @@ class CalendarModule {
 
     // Initialize EventPage components
     EventPage.init();
+
+    // Initialize subscription functionality
+    this.calendarSubscription = new CalendarSubscription();
 
     // Initialize accessibility features
     this.keyboardNavigation = new KeyboardNavigation();

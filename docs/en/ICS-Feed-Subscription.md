@@ -1,6 +1,6 @@
 # ICS Feed Subscription Feature
 
-The SilverStripe Calendar module now supports ICS (iCalendar) feeds, allowing users to subscribe to calendar events in external calendar applications.
+The SilverStripe Calendar module supports ICS (iCalendar) feeds, allowing users to subscribe to calendar events in external calendar applications with dynamic category filtering.
 
 ## Overview
 
@@ -34,7 +34,35 @@ The ICS feed functionality provides RFC 5545 compliant iCalendar feeds that can 
 /your-calendar-page/ical?categories[]=1&from=2024-06-01&to=2024-12-31
 ```
 
+## User Interface Subscription
+
+For end users, the easiest way to subscribe to a calendar is through the web interface:
+
+### Step-by-Step Guide
+
+1. **Navigate to any Calendar page** in your SilverStripe site
+2. **Apply desired filters** using the filter panel:
+   - Select specific categories
+   - Set date ranges 
+   - Add search terms
+   - Choose event types
+3. **Click the "Subscribe to Calendar" button** in the page header
+4. **Review your current filters** shown in the modal
+5. **Copy the generated subscription URL** using the copy button
+6. **Follow the platform-specific instructions** in the modal for:
+   - Google Calendar
+   - Microsoft Outlook  
+   - Apple Calendar
+
+The subscription URL will automatically include all your current filter settings, so you only receive events that match your preferences.
+
 ## Features
+
+### User Interface
+- **Subscribe Button**: User-friendly subscription interface directly on Calendar pages
+- **Real-time Filter Integration**: Subscription URLs automatically respect current page filter settings
+- **Copy to Clipboard**: One-click copying of subscription URLs
+- **Multi-Platform Instructions**: Built-in guides for Google Calendar, Outlook, and Apple Calendar
 
 ### Event Data Included
 - **Title** (SUMMARY)

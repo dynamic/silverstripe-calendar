@@ -1,9 +1,23 @@
 <!-- Page Header -->
 <header class="page-header">
-  <h1>$Title</h1>
-  <% if $Content %>
-    <div class="intro">$Content</div>
-  <% end_if %>
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <h1>$Title</h1>
+      <% if $Content %>
+        <div class="intro">$Content</div>
+      <% end_if %>
+    </div>
+    
+    <!-- Subscribe Button -->
+    <div class="subscribe-section">
+      <button type="button" class="btn btn-outline-primary btn-sm js-subscribe-calendar" 
+              data-calendar-url="$Link"
+              data-bs-toggle="modal" 
+              data-bs-target="#subscribeModal">
+        <i class="bi bi-calendar-plus me-2"></i>Subscribe to Calendar
+      </button>
+    </div>
+  </div>
 </header>
 
 <!-- Collapsible Filter Panel -->
@@ -57,7 +71,176 @@
 </div>
 <% end_if %>
 
+<!-- ICS Subscription Modal -->
+<div class="modal fade" id="subscribeModal" tabindex="-1" aria-labelledby="subscribeModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="subscribeModalLabel">
+          <i class="bi bi-calendar-plus me-2"></i>Subscribe to Calendar
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3">Subscribe to this calendar to receive automatic updates in your calendar application. This subscription will respect your current filter settings.</p>
+        
+        <div class="alert alert-info" role="alert">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong>Current Filters:</strong> <span id="current-filters-display">All events</span>
+        </div>
+        
+        <div class="mb-3">
+          <label for="subscription-url" class="form-label">Subscription URL:</label>
+          <div class="input-group">
+            <input type="text" class="form-control" id="subscription-url" readonly>
+            <button type="button" class="btn btn-outline-secondary js-copy-url" title="Copy URL">
+              <i class="bi bi-clipboard"></i>
+            </button>
+          </div>
+        </div>
+        
+        <div class="subscription-instructions">
+          <h6>How to subscribe:</h6>
+          <div class="accordion accordion-flush" id="subscriptionInstructions">
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="google-heading">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                        data-bs-target="#google-instructions" aria-expanded="false" aria-controls="google-instructions">
+                  Google Calendar
+                </button>
+              </h2>
+              <div id="google-instructions" class="accordion-collapse collapse" aria-labelledby="google-heading">
+                <div class="accordion-body">
+                  <ol>
+                    <li>Copy the subscription URL above</li>
+                    <li>Open Google Calendar</li>
+                    <li>On the left side, click the "+" next to "Other calendars"</li>
+                    <li>Select "From URL"</li>
+                    <li>Paste the URL and click "Add calendar"</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+            
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="outlook-heading">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                        data-bs-target="#outlook-instructions" aria-expanded="false" aria-controls="outlook-instructions">
+                  Microsoft Outlook
+                </button>
+              </h2>
+              <div id="outlook-instructions" class="accordion-collapse collapse" aria-labelledby="outlook-heading">
+                <div class="accordion-body">
+                  <ol>
+                    <li>Copy the subscription URL above</li>
+                    <li>Open Outlook Calendar</li>
+                    <li>Click "Add calendar" → "From internet"</li>
+                    <li>Paste the URL and click "OK"</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+            
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="apple-heading">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                        data-bs-target="#apple-instructions" aria-expanded="false" aria-controls="apple-instructions">
+                  Apple Calendar
+                </button>
+              </h2>
+              <div id="apple-instructions" class="accordion-collapse collapse" aria-labelledby="apple-heading">
+                <div class="accordion-body">
+                  <ol>
+                    <li>Copy the subscription URL above</li>
+                    <li>Open Calendar app</li>
+                    <li>File → New Calendar Subscription</li>
+                    <li>Paste the URL and click "Subscribe"</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary js-copy-url">
+          <i class="bi bi-clipboard me-2"></i>Copy URL
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <style>
+/* Subscribe Button Styles */
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.subscribe-section {
+  flex-shrink: 0;
+}
+
+.js-subscribe-calendar {
+  white-space: nowrap;
+}
+
+/* Modal Enhancements */
+#subscribeModal .modal-body {
+  padding: 1.5rem;
+}
+
+#subscribeModal .alert-info {
+  border-left: 4px solid #0dcaf0;
+}
+
+#subscribeModal .input-group {
+  margin-bottom: 1rem;
+}
+
+#subscribeModal .subscription-instructions {
+  margin-top: 1rem;
+}
+
+#subscribeModal .accordion-button {
+  padding: 0.75rem 1rem;
+  font-weight: 500;
+}
+
+#subscribeModal .accordion-body ol {
+  margin-bottom: 0;
+  padding-left: 1.2rem;
+}
+
+#subscribeModal .accordion-body li {
+  margin-bottom: 0.5rem;
+}
+
+/* Copy button feedback */
+.js-copy-url.copied {
+  background-color: #198754;
+  border-color: #198754;
+  color: white;
+}
+
+/* Responsive header layout */
+@media (max-width: 576px) {
+  .page-header .d-flex {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  
+  .subscribe-section {
+    margin-top: 1rem;
+  }
+  
+  .js-subscribe-calendar {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 /* Clean Calendar Layout - Ensure filter is always above calendar */
 .calendar-filter-section {
   margin: 20px 0;

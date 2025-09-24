@@ -101,10 +101,10 @@ class CalendarSubscriptionTest extends FunctionalTest
     {
         // Create a GET request to the calendar page
         $response = $this->get($this->calendar->Link());
-        
+
         // Check that the response is successful
         $this->assertEquals(200, $response->getStatusCode());
-        
+
         // Check that the subscribe button is present
         $this->assertStringContainsString('js-subscribe-calendar', $response->getBody());
         $this->assertStringContainsString('Subscribe to Calendar', $response->getBody());
@@ -118,7 +118,7 @@ class CalendarSubscriptionTest extends FunctionalTest
     {
         // Create a GET request to the calendar page
         $response = $this->get($this->calendar->Link());
-        
+
         // Check that the subscription modal is present
         $this->assertStringContainsString('id="subscribeModal"', $response->getBody());
         $this->assertStringContainsString('subscription-url', $response->getBody());

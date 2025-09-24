@@ -155,7 +155,7 @@ class CalendarController extends \PageController
 
                 // Handle both EventPage and EventInstance objects
                 $categories = null;
-                if ($event instanceof \Dynamic\Calendar\Model\EventInstance) {
+                if ($event instanceof EventInstance) {
                     // For EventInstance, get categories from the original event
                     $categories = $event->originalEvent->Categories();
                 } else {

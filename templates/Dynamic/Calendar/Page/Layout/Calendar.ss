@@ -173,9 +173,9 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <a href="#" class="btn btn-success js-subscribe-app me-2">
+        <button type="button" class="btn btn-success js-subscribe-app me-2">
           <i class="bi bi-calendar-plus me-2"></i>Subscribe in App
-        </a>
+        </button>
         <button type="button" class="btn btn-primary js-copy-url">
           <i class="bi bi-clipboard me-2"></i>Copy URL
         </button>

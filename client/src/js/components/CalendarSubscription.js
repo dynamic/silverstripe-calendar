@@ -60,21 +60,35 @@ export class CalendarSubscription {
         const input = document.querySelector('#subscription-url');
         if (!input) return;
 
-        input.select();
-        input.setSelectionRange(0, 99999);
+        // Try to use the modern Clipboard API
+        const textToCopy = input.value;
+        const button = event.currentTarget;
+        const originalText = button.innerHTML;
 
-        try {
-            document.execCommand('copy');
-
-            const button = event.currentTarget;
-            const originalText = button.innerHTML;
-            button.innerHTML = '<i class="bi bi-check"></i> Copied!';
-
-            setTimeout(() => {
-                button.innerHTML = originalText;
-            }, 2000);
-        } catch (err) {
-            console.warn('Failed to copy URL:', err);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy)
+                .then(() => {
+                    button.innerHTML = '<i class="bi bi-check"></i> Copied!';
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                    }, 2000);
+                })
+                .catch((err) => {
+                    console.warn('Failed to copy URL:', err);
+                });
+        } else {
+            // Fallback for older browsers
+            input.select();
+            input.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                button.innerHTML = '<i class="bi bi-check"></i> Copied!';
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                }, 2000);
+            } catch (err) {
+                console.warn('Failed to copy URL:', err);
+            }
         }
     }
 

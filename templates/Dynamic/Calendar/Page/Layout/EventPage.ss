@@ -86,9 +86,9 @@
                                 <button class="btn btn-success js-add-to-calendar"
                                         data-event-title="$Title"
                                         data-event-start-date="$StartDate.Format('yyyyMMdd')"
-                                        <% if not $AllDay %><% if $StartTime %>data-event-start-time="$StartTime.Format('HHmmss')"<% end_if %><% end_if %>
+                                        <% if not $AllDay && $StartTime %>data-event-start-time="$StartTime.Format('HHmmss')"<% end_if %>
                                         data-event-end-date="<% if $EndDate %>$EndDate.Format('yyyyMMdd')<% else %>$StartDate.Format('yyyyMMdd')<% end_if %>"
-                                        <% if not $AllDay %><% if $EndTime %>data-event-end-time="$EndTime.Format('HHmmss')"<% else_if $StartTime %>data-event-end-time="$StartTime.Format('HHmmss')"<% end_if %><% end_if %>
+                                        <% if not $AllDay && ($EndTime || $StartTime) %>data-event-end-time="<% if $EndTime %>$EndTime.Format('HHmmss')<% else %>$StartTime.Format('HHmmss')<% end_if %>"<% end_if %>
                                         data-event-description="<% if $Content %>$Content.Summary(50)<% else %>$Title<% end_if %>"
                                         data-event-location="<% if $LocationName %>$LocationName<% end_if %>"
                                         data-event-all-day="<% if $AllDay %>true<% else %>false<% end_if %>"

@@ -43,8 +43,13 @@ export class CalendarSubscription {
                 const calendarUrl = calendarButton.getAttribute('data-calendar-url');
                 if (calendarUrl) {
                     // Build the full ICS subscription URL using the correct /ical endpoint
-                    const baseUrl = window.location.origin;
-                    const icsUrl = `${baseUrl}${calendarUrl}/ical`;
+                    let icsUrl;
+                    if (/^https?:\/\//i.test(calendarUrl)) {
+                        icsUrl = `${calendarUrl}/ical`;
+                    } else {
+                        const baseUrl = window.location.origin;
+                        icsUrl = `${baseUrl}${calendarUrl}/ical`;
+                    }
                     urlInput.value = icsUrl;
                 }
             }
@@ -53,7 +58,8 @@ export class CalendarSubscription {
         const httpsUrl = urlInput.value;
         const webcalUrl = httpsUrl.replace(/^https?:\/\//, 'webcal://');
 
-        subscribeButton.href = webcalUrl;
+        // Store the webcal URL as data attribute for the click handler
+        subscribeButton.setAttribute('data-webcal-url', webcalUrl);
     }
 
     copyUrl(event) {

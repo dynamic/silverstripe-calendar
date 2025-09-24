@@ -36,7 +36,8 @@
             <button type="button" class="btn btn-outline-primary js-subscribe-calendar"
                     data-calendar-url="$Link"
                     data-bs-toggle="modal"
-                    data-bs-target="#subscribeModal">
+                    data-bs-target="#subscribeModal"
+                    aria-label="Subscribe to calendar">
               <i class="bi bi-calendar-plus me-2"></i>Subscribe
             </button>
           </div>
@@ -91,11 +92,6 @@
       </div>
       <div class="modal-body">
         <p class="mb-3">Subscribe to receive automatic calendar updates in your calendar app:</p>
-
-        <div class="alert alert-info" role="alert">
-          <i class="bi bi-info-circle me-2"></i>
-          <strong>Current Filters:</strong> <span id="current-filters-display">All events</span>
-        </div>
 
         <!-- Subscription URL Display -->
         <div class="mb-3">

@@ -157,7 +157,9 @@ class CalendarController extends \PageController
                 $categories = null;
                 if ($event instanceof EventInstance) {
                     // For EventInstance, get categories from the original event
-                    $categories = $event->originalEvent->Categories();
+                    if ($event->originalEvent && $event->originalEvent->exists()) {
+                        $categories = $event->originalEvent->Categories();
+                    }
                 } else {
                     // For regular EventPage objects
                     $categories = $event->Categories();

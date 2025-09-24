@@ -16,6 +16,10 @@ use SilverStripe\Dev\FunctionalTest;
  */
 class CalendarSubscriptionTest extends FunctionalTest
 {
+    const TEST_CATEGORY_RED = 'FF0000';
+    const TEST_CATEGORY_GREEN = '00FF00';
+    const TEST_CATEGORY_BLUE = '0000FF';
+
     /**
      * @var Calendar
      */
@@ -53,8 +57,8 @@ class CalendarSubscriptionTest extends FunctionalTest
 
         // Create test category
         $this->testCategory = Category::create([
-            'Title' => 'Test Category Subscription ' . uniqid(),
-            'Color' => 'FF0000',
+            'Title' => 'Test Category Subscription',
+            'Color' => self::TEST_CATEGORY_RED,
         ]);
         $this->testCategory->write();
 
@@ -122,7 +126,6 @@ class CalendarSubscriptionTest extends FunctionalTest
         // Check that the subscription modal is present
         $this->assertStringContainsString('id="subscribeModal"', $response->getBody());
         $this->assertStringContainsString('subscription-url', $response->getBody());
-        $this->assertStringContainsString('current-filters-display', $response->getBody());
         $this->assertStringContainsString('Google Calendar', $response->getBody());
         $this->assertStringContainsString('Microsoft Outlook', $response->getBody());
         $this->assertStringContainsString('Apple Calendar', $response->getBody());
@@ -135,8 +138,8 @@ class CalendarSubscriptionTest extends FunctionalTest
     {
         // Create another category and event to ensure filtering works
         $otherCategory = Category::create([
-            'Title' => 'Other Category ' . uniqid(),
-            'Color' => '00FF00',
+            'Title' => 'Other Test Category',
+            'Color' => self::TEST_CATEGORY_GREEN,
         ]);
         $otherCategory->write();
 
@@ -179,14 +182,14 @@ class CalendarSubscriptionTest extends FunctionalTest
     {
         // Create additional categories and events
         $category1 = Category::create([
-            'Title' => 'Category 1 ' . uniqid(),
-            'Color' => '00FF00',
+            'Title' => 'Test Category 1',
+            'Color' => self::TEST_CATEGORY_GREEN,
         ]);
         $category1->write();
 
         $category2 = Category::create([
-            'Title' => 'Category 2 ' . uniqid(),
-            'Color' => '0000FF',
+            'Title' => 'Test Category 2',
+            'Color' => self::TEST_CATEGORY_BLUE,
         ]);
         $category2->write();
 
@@ -285,8 +288,8 @@ class CalendarSubscriptionTest extends FunctionalTest
     {
         // Create another category and event
         $otherCategory = Category::create([
-            'Title' => 'Other Category Combined ' . uniqid(),
-            'Color' => '00FF00',
+            'Title' => 'Combined Test Category',
+            'Color' => self::TEST_CATEGORY_GREEN,
         ]);
         $otherCategory->write();
 

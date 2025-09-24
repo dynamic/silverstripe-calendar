@@ -1,6 +1,8 @@
-<%-- Calendar Filter Form - Simplified traditional form template for essentials theme.
-     Designed to be used within an external collapse container from main Calendar.ss.
-     Requires Bootstrap 5+ for form styling classes. --%>
+<%--
+    Calendar Filter Form - Simplified traditional form template for essentials theme.
+    Designed to be used within an external collapse container from main Calendar.ss.
+    Requires Bootstrap 5+ for form styling classes.
+--%>
 <form $AttributesHTML class="calendar-filter-form bg-light rounded shadow-sm p-4 mb-4" aria-label="Filter calendar events">
                     <div class="row g-3">
         <!-- Search Field -->

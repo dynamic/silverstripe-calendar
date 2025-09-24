@@ -461,6 +461,21 @@ class EventPage extends \Page
         parent::onBeforeWrite();
 
         $this->EventType = static::class;
+
+        // Add default 1-hour duration if start time is set but no end time
+        if ($this->StartTime && !$this->EndTime) {
+            $startTime = date_create_from_format('H:i:s', $this->StartTime);
+            if ($startTime) {
+                $endTime = clone $startTime;
+                $endTime->add(new \DateInterval('PT1H')); // Add 1 hour
+                $this->EndTime = $endTime->format('H:i:s');
+            }
+        }
+
+        // If no end date is specified, use start date
+        if ($this->StartDate && !$this->EndDate) {
+            $this->EndDate = $this->StartDate;
+        }
     }
 
     /**

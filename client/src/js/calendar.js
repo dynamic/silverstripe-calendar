@@ -11,6 +11,7 @@ import { SmartFiltering } from './components/SmartFiltering';
 import { TouchInteractions } from './components/TouchInteractions';
 import { KeyboardNavigation } from './components/KeyboardNavigation';
 import { FilterEnhancements } from './components/FilterEnhancements';
+import { EventPage } from './components/EventPage';
 
 // Namespace for calendar utilities
 const CalendarUtils = {};
@@ -58,6 +59,9 @@ class CalendarModule {
     if (filterForm) {
       this.smartFiltering = new SmartFiltering(filterForm);
     }
+
+    // Initialize EventPage components
+    EventPage.init();
 
     // Initialize accessibility features
     this.keyboardNavigation = new KeyboardNavigation();

@@ -7,32 +7,58 @@
         <div class="intro">$Content</div>
       <% end_if %>
     </div>
-    
-    <!-- Subscribe Button -->
-    <div class="subscribe-section">
-      <button type="button" class="btn btn-outline-primary btn-sm js-subscribe-calendar" 
-              data-calendar-url="$Link"
-              data-bs-toggle="modal" 
-              data-bs-target="#subscribeModal">
-        <i class="bi bi-calendar-plus me-2"></i>Subscribe to Calendar
-      </button>
-    </div>
   </div>
 </header>
 
+<!-- Calendar Action Toolbar -->
+<div class="calendar-toolbar">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+    
+    <!-- Filter and Subscribe Actions -->
+    <div class="toolbar-actions d-flex gap-2">
+      <% if $FilterForm %>
+      <!-- Filter Toggle Button -->
+      <button type="button" class="btn btn-outline-secondary js-toggle-filters" 
+              aria-expanded="false" 
+              data-bs-toggle="collapse" 
+              data-bs-target="#calendar-filters"
+              aria-controls="calendar-filters">
+        <i class="bi bi-funnel me-2"></i>Filter Events
+        <i class="bi bi-chevron-down ms-2 filter-chevron"></i>
+      </button>
+      <% end_if %>
+      
+      <!-- Subscribe Button -->
+      <button type="button" class="btn btn-outline-primary js-subscribe-calendar" 
+              data-calendar-url="$Link"
+              data-bs-toggle="modal" 
+              data-bs-target="#subscribeModal">
+        <i class="bi bi-calendar-plus me-2"></i>Subscribe
+      </button>
+    </div>
+    
+    <!-- Additional toolbar items could go here in the future -->
+    <div class="toolbar-secondary">
+      <!-- Space for future enhancements -->
+    </div>
+  </div>
+</div>
+
 <!-- Collapsible Filter Panel -->
 <% if $FilterForm %>
-<div class="calendar-filter-section">
-  <button type="button" class="calendar-filter-toggle" aria-expanded="false" data-target="#calendar-filters">
-    <span class="filter-icon">🔍</span>
-    <span class="filter-text">Filter Events</span>
-    <span class="filter-arrow">▼</span>
-  </button>
-  <div id="calendar-filters" class="calendar-filter-panel" style="display: none;">
-    <div class="calendar-filter-header">
-      <h5>Filter Events</h5>
+<div class="collapse calendar-filter-collapse" id="calendar-filters">
+  <div class="card mb-3">
+    <div class="card-header">
+      <div class="d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Filter Events</h5>
+        <button type="button" class="btn btn-outline-danger btn-sm js-clear-filters">
+          <i class="bi bi-x-circle me-1"></i>Clear All
+        </button>
+      </div>
     </div>
-    $FilterForm
+    <div class="card-body">
+      $FilterForm
+    </div>
   </div>
 </div>
 <% end_if %>

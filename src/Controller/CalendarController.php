@@ -152,8 +152,21 @@ class CalendarController extends \PageController
 
                 // Add category information with colors
                 $categoryColor = null;
-                if ($event->Categories()->exists()) {
-                    foreach ($event->Categories() as $category) {
+
+                // Handle both EventPage and EventInstance objects
+                $categories = null;
+                if ($event instanceof EventInstance) {
+                    // For EventInstance, get categories from the original event
+                    if ($event->originalEvent && $event->originalEvent->exists()) {
+                        $categories = $event->originalEvent->Categories();
+                    }
+                } else {
+                    // For regular EventPage objects
+                    $categories = $event->Categories();
+                }
+
+                if ($categories && $categories->exists()) {
+                    foreach ($categories as $category) {
                         $eventData['extendedProps']['categories'][] = [
                             'ID' => $category->ID,
                             'Title' => $category->Title,

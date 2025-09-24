@@ -201,10 +201,10 @@
             </a>
             <button class="btn btn-success js-add-to-calendar"
                     data-event-title="$Title"
-                    data-event-start-date="$StartDate.Format('yyyyMMdd')"
-                    data-event-start-time="<% if $StartTime %>$StartTime.Format('HHmmss')<% else %>000000<% end_if %>"
-                    data-event-end-date="<% if $EndDate %>$EndDate.Format('yyyyMMdd')<% else %>$StartDate.Format('yyyyMMdd')<% end_if %>"
-                    data-event-end-time="<% if $EndTime %>$EndTime.Format('HHmmss')<% else_if $StartTime %>$StartTime.Format('HHmmss')<% else %>235959<% end_if %>"
+                    data-event-start-date="$StartDate.Format('Ymd')"
+                    data-event-start-time="<% if $StartTime %>$StartTime.Format('His')<% else %>000000<% end_if %>"
+                    data-event-end-date="<% if $EndDate %>$EndDate.Format('Ymd')<% else %>$StartDate.Format('Ymd')<% end_if %>"
+                    data-event-end-time="<% if $EndTime %>$EndTime.Format('His')<% else_if $StartTime %>$StartTime.Format('His')<% else %>235959<% end_if %>"
                     data-event-description="$Content.Summary(50)"
                     data-event-location="<% if $LocationName %>$LocationName<% end_if %>"
                     data-event-all-day="<% if $AllDay %>true<% else %>false<% end_if %>">

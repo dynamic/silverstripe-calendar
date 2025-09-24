@@ -464,13 +464,17 @@ class EventPage extends \Page
 
         // Add default 1-hour duration if start time is set but no end time
         if ($this->StartTime && !$this->EndTime) {
-            $startTime = date_create_from_format('H:i:s', $this->StartTime);
-            if ($startTime) {
-                $endTime = clone $startTime;
-                $endTime->add(new \DateInterval('PT1H')); // Add 1 hour
-                $this->EndTime = $endTime->format('H:i:s');
-            } else {
-                error_log("EventPage: Failed to parse StartTime '{$this->StartTime}' with format 'H:i:s' in onBeforeWrite.");
+            try {
+                $startTimeObj = \SilverStripe\ORM\FieldType\DBTime::create_field('SilverStripe\ORM\FieldType\DBTime', $this->StartTime);
+                $startTimeDT = $startTimeObj->getValue() ? new \DateTime($startTimeObj->getValue()) : null;
+                if ($startTimeDT) {
+                    $startTimeDT->add(new \DateInterval('PT1H')); // Add 1 hour
+                    $this->EndTime = $startTimeDT->format('H:i:s');
+                } else {
+                    error_log("EventPage: Failed to parse StartTime '{$this->StartTime}' as DBTime in onBeforeWrite.");
+                }
+            } catch (\Exception $e) {
+                error_log("EventPage: Exception parsing StartTime '{$this->StartTime}' in onBeforeWrite: " . $e->getMessage());
             }
         }
 

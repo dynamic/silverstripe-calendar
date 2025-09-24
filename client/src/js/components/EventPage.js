@@ -23,10 +23,14 @@ export class EventPage {
 
         // Legacy support for onclick="addToCalendar()" calls
         if (typeof window.addToCalendar === 'undefined') {
-            window.addToCalendar = () => {
-                const button = document.querySelector('button[onclick*="addToCalendar"]');
+            const self = this;
+            window.addToCalendar = function(button) {
+                // If no button is passed, try to find the legacy button
+                if (!button) {
+                    button = document.querySelector('button[onclick*="addToCalendar"]');
+                }
                 if (button) {
-                    this.addToCalendar(button);
+                    self.addToCalendar(button);
                 }
             };
         }

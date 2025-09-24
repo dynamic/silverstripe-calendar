@@ -13,30 +13,30 @@
 <!-- Calendar Action Toolbar -->
 <div class="calendar-toolbar">
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-    
+
     <!-- Filter and Subscribe Actions -->
     <div class="toolbar-actions d-flex gap-2">
       <% if $FilterForm %>
       <!-- Filter Toggle Button -->
-      <button type="button" class="btn btn-outline-secondary js-toggle-filters" 
-              aria-expanded="false" 
-              data-bs-toggle="collapse" 
+      <button type="button" class="btn btn-outline-secondary js-toggle-filters"
+              aria-expanded="false"
+              data-bs-toggle="collapse"
               data-bs-target="#calendar-filters"
               aria-controls="calendar-filters">
         <i class="bi bi-funnel me-2"></i>Filter Events
         <i class="bi bi-chevron-down ms-2 filter-chevron"></i>
       </button>
       <% end_if %>
-      
+
       <!-- Subscribe Button -->
-      <button type="button" class="btn btn-outline-primary js-subscribe-calendar" 
+      <button type="button" class="btn btn-outline-primary js-subscribe-calendar"
               data-calendar-url="$Link"
-              data-bs-toggle="modal" 
+              data-bs-toggle="modal"
               data-bs-target="#subscribeModal">
         <i class="bi bi-calendar-plus me-2"></i>Subscribe
       </button>
     </div>
-    
+
     <!-- Additional toolbar items could go here in the future -->
     <div class="toolbar-secondary">
       <!-- Space for future enhancements -->
@@ -109,12 +109,12 @@
       </div>
       <div class="modal-body">
         <p class="mb-3">Subscribe to this calendar to receive automatic updates in your calendar application. This subscription will respect your current filter settings.</p>
-        
+
         <div class="alert alert-info" role="alert">
           <i class="bi bi-info-circle me-2"></i>
           <strong>Current Filters:</strong> <span id="current-filters-display">All events</span>
         </div>
-        
+
         <div class="mb-3">
           <label for="subscription-url" class="form-label">Subscription URL:</label>
           <div class="input-group">
@@ -124,13 +124,13 @@
             </button>
           </div>
         </div>
-        
+
         <div class="subscription-instructions">
           <h6>How to subscribe:</h6>
           <div class="accordion accordion-flush" id="subscriptionInstructions">
             <div class="accordion-item">
               <h2 class="accordion-header" id="google-heading">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
                         data-bs-target="#google-instructions" aria-expanded="false" aria-controls="google-instructions">
                   Google Calendar
                 </button>
@@ -147,10 +147,10 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="accordion-item">
               <h2 class="accordion-header" id="outlook-heading">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
                         data-bs-target="#outlook-instructions" aria-expanded="false" aria-controls="outlook-instructions">
                   Microsoft Outlook
                 </button>
@@ -166,10 +166,10 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="accordion-item">
               <h2 class="accordion-header" id="apple-heading">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
                         data-bs-target="#apple-instructions" aria-expanded="false" aria-controls="apple-instructions">
                   Apple Calendar
                 </button>
@@ -256,11 +256,11 @@
     flex-direction: column;
     align-items: stretch !important;
   }
-  
+
   .subscribe-section {
     margin-top: 1rem;
   }
-  
+
   .js-subscribe-calendar {
     width: 100%;
     justify-content: center;

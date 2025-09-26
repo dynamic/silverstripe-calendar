@@ -36,8 +36,7 @@
             <button type="button" class="btn btn-outline-primary js-subscribe-calendar"
                     data-calendar-url="$Link"
                     data-bs-toggle="modal"
-                    data-bs-target="#subscribeModal"
-                    aria-label="Subscribe to calendar">
+                    data-bs-target="#subscribeModal">
               <i class="bi bi-calendar-plus me-2"></i>Subscribe
             </button>
           </div>
@@ -169,9 +168,9 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-success js-subscribe-app me-2">
+        <a href="#" class="btn btn-success js-subscribe-app me-2">
           <i class="bi bi-calendar-plus me-2"></i>Subscribe in App
-        </button>
+        </a>
         <button type="button" class="btn btn-primary js-copy-url">
           <i class="bi bi-clipboard me-2"></i>Copy URL
         </button>

@@ -18,7 +18,7 @@
     ],
     "require": {
         "dft/silverstripe-frontend-multiselectfield": "^1.0",
-        "nesbot/carbon": "^3.0",
+        "nesbot/carbon": "^2.73 || ^3.0",
         "ryanpotter/silverstripe-color-field": "^1.0",
         "silverstripe/cms": "^5.0",
         "silverstripe/lumberjack": "^3.0",

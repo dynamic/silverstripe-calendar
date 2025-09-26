@@ -23,9 +23,8 @@
         "silverstripe/cms": "^5.0",
         "silverstripe/lumberjack": "^3.0",
         "symbiote/silverstripe-gridfieldextensions": "^4.0",
-        "symbiote/silverstripe-queuedjobs": "^5.0",
-        "symfony/clock": "^6.3.12",
-        "unclecheese/display-logic": "^3.0"
+    "symbiote/silverstripe-queuedjobs": "^5.0",
+    "unclecheese/display-logic": "^3.0"
     },
     "require-dev": {
         "cambis/silverstan": "^2.1",
@@ -47,14 +46,10 @@
         ]
     },
     "config": {
-        "platform": {
-            "php": "8.1.0"
-        },
         "allow-plugins": {
             "composer/installers": true,
             "silverstripe/vendor-plugin": true,
-            "silverstripe/recipe-plugin": true,
-            "phpstan/extension-installer": true
+            "silverstripe/recipe-plugin": true
         }
     }
 }

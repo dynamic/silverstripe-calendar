@@ -86,3 +86,4 @@ public/build/
 # Temporary folders
 tmp/
 temp/
+/.phpunit.result.cache

@@ -16,9 +16,9 @@ use SilverStripe\Dev\FunctionalTest;
  */
 class CalendarSubscriptionTest extends FunctionalTest
 {
-    const TEST_CATEGORY_RED = 'FF0000';
-    const TEST_CATEGORY_GREEN = '00FF00';
-    const TEST_CATEGORY_BLUE = '0000FF';
+    public const TEST_CATEGORY_RED = 'FF0000';
+    public const TEST_CATEGORY_GREEN = '00FF00';
+    public const TEST_CATEGORY_BLUE = '0000FF';
 
     /**
      * @var Calendar

@@ -1,9 +1,11 @@
 export class CalendarSubscription {
-    constructor() {
+    constructor()
+    {
         this.init();
     }
 
-    init() {
+    init()
+    {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => this.bindEvents());
         } else {
@@ -11,7 +13,8 @@ export class CalendarSubscription {
         }
     }
 
-    bindEvents() {
+    bindEvents()
+    {
         // Modal shown event to populate subscription URL
         const modal = document.getElementById('subscribeModal');
         if (modal) {
@@ -44,11 +47,14 @@ export class CalendarSubscription {
         });
     }
 
-    updateSubscribeButton() {
+    updateSubscribeButton()
+    {
         const urlInput = document.querySelector('#subscription-url');
         const subscribeButton = document.querySelector('.js-subscribe-app');
 
-        if (!urlInput || !subscribeButton) return;
+        if (!urlInput || !subscribeButton) {
+            return;
+        }
 
         // If URL input is empty, generate the subscription URL from the calendar URL
         if (!urlInput.value.trim()) {
@@ -59,10 +65,10 @@ export class CalendarSubscription {
                     // Build the full ICS subscription URL using the correct /ical endpoint
                     let icsUrl;
                     if (/^https?:\/\//i.test(calendarUrl)) {
-                        icsUrl = `${calendarUrl}/ical`;
+                        icsUrl = `${calendarUrl} / ical`;
                     } else {
                         const baseUrl = window.location.origin;
-                        icsUrl = `${baseUrl}${calendarUrl}/ical`;
+                        icsUrl = `${baseUrl}${calendarUrl} / ical`;
                     }
                     urlInput.value = icsUrl;
                 }
@@ -76,9 +82,12 @@ export class CalendarSubscription {
         subscribeButton.setAttribute('data-webcal-url', webcalUrl);
     }
 
-    copyUrl(event) {
+    copyUrl(event)
+    {
         const input = document.querySelector('#subscription-url');
-        if (!input) return;
+        if (!input) {
+            return;
+        }
 
         // Try to use the modern Clipboard API
         const textToCopy = input.value;
@@ -112,9 +121,12 @@ export class CalendarSubscription {
         }
     }
 
-    subscribeInApp(event) {
+    subscribeInApp(event)
+    {
         const urlInput = document.querySelector('#subscription-url');
-        if (!urlInput) return;
+        if (!urlInput) {
+            return;
+        }
 
         const httpsUrl = urlInput.value;
         const webcalUrl = httpsUrl.replace(/^https?:\/\//, 'webcal://');

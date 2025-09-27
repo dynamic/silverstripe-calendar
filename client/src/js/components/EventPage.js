@@ -2,15 +2,18 @@
 // Handles EventPage-specific functionality like add-to-calendar
 
 export class EventPage {
-    constructor() {
+    constructor()
+    {
         this.init();
     }
 
-    init() {
+    init()
+    {
         this.bindAddToCalendarButtons();
     }
 
-    bindAddToCalendarButtons() {
+    bindAddToCalendarButtons()
+    {
         // Find all add-to-calendar buttons
         const buttons = document.querySelectorAll('.js-add-to-calendar');
 
@@ -24,7 +27,7 @@ export class EventPage {
         // Legacy support for onclick="addToCalendar()" calls
         if (typeof window.addToCalendar === 'undefined') {
             const self = this;
-            window.addToCalendar = function(button) {
+            window.addToCalendar = function (button) {
                 // If no button is passed, try to find the legacy button
                 if (!button) {
                     button = document.querySelector('button[onclick*="addToCalendar"]');
@@ -36,7 +39,8 @@ export class EventPage {
         }
     }
 
-    addToCalendar(buttonElement = null) {
+    addToCalendar(buttonElement = null)
+    {
         // Get event data from button data attributes or page meta
         const eventData = this.getEventData(buttonElement);
 
@@ -52,7 +56,8 @@ export class EventPage {
         window.open(calendarUrl, '_blank', 'noopener,noreferrer');
     }
 
-    getEventData(buttonElement) {
+    getEventData(buttonElement)
+    {
         // Try to get data from button attributes first
         if (buttonElement) {
             const dataset = buttonElement.dataset;
@@ -70,7 +75,7 @@ export class EventPage {
 
         // Fallback to meta tags or page data
         const getMetaContent = (name) => {
-            const meta = document.querySelector(`meta[name="${name}"], meta[property="${name}"]`);
+            const meta = document.querySelector(`meta[name = "${name}"], meta[property = "${name}"]`);
             return meta ? meta.getAttribute('content') : '';
         };
 
@@ -84,26 +89,28 @@ export class EventPage {
         };
     }
 
-    createGoogleCalendarUrl(eventData) {
+    createGoogleCalendarUrl(eventData)
+    {
         const title = encodeURIComponent(eventData.title);
 
         // Format dates for Google Calendar
         let dateString;
         if (eventData.allDay) {
             // All-day events use YYYYMMDD format
-            dateString = `${eventData.startDate}/${eventData.endDate}`;
+            dateString = `${eventData.startDate} / ${eventData.endDate}`;
         } else {
             // Timed events use YYYYMMDDTHHMMSS format
             const startDateTime = eventData.startDate + 'T' + (eventData.startTime || '000000');
             const endDateTime = eventData.endDate + 'T' + (eventData.endTime || '235959');
-            dateString = `${startDateTime}/${endDateTime}`;
+            dateString = `${startDateTime} / ${endDateTime}`;
         }
 
-        return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateString}`;
+        return `https://calendar.google.com / calendar / render ? action = TEMPLATE & text = ${title} & dates = ${dateString}`;
     }
 
     // Static method for manual initialization
-    static init() {
+    static init()
+    {
         return new EventPage();
     }
 }

@@ -116,6 +116,12 @@ class CalendarController extends \PageController
                 $categoryIDs = [$categoryIDs];
             }
             $categories = Category::get()->byIDs($categoryIDs);
+        } else {
+            // If no categories provided in request, check if calendar has default categories
+            $defaultCategories = $this->calendar->DefaultCategories();
+            if ($defaultCategories && $defaultCategories->exists()) {
+                $categories = $defaultCategories;
+            }
         }
 
         $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);

@@ -286,11 +286,19 @@ class Calendar extends \Page
 
         $allEvents = ArrayList::create();
 
+        // If categories are provided, query all events across all calendars
+        // If no categories, use ParentID filtering for this calendar only
+        $queryAllEvents = ($categories && $categories->exists());
+
         // Get regular (non-recurring) events
         $regularEventsFilter = [
-            'ParentID' => $this->ID,
             'Recursion' => 'NONE',
         ];
+
+        // Only filter by ParentID if we're not doing category-based filtering across all calendars
+        if (!$queryAllEvents) {
+            $regularEventsFilter['ParentID'] = $this->ID;
+        }
 
         $regularEvents = EventPage::get()->filter($regularEventsFilter);
 
@@ -313,10 +321,15 @@ class Calendar extends \Page
         }
 
         // Get recurring events and their virtual instances
+        $recurringEventsFilter = [];
+
+        // Only filter by ParentID if we're not querying all events for category filtering
+        if (!$queryAllEvents) {
+            $recurringEventsFilter['ParentID'] = $this->ID;
+        }
+
         $recurringEvents = EventPage::get()
-            ->filter([
-                'ParentID' => $this->ID,
-            ])
+            ->filter($recurringEventsFilter)
             ->exclude('Recursion', 'NONE');
 
         // Retrieve the recurring window years config value once before the loop for performance

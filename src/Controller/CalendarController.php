@@ -52,6 +52,14 @@ class CalendarController extends \PageController
     private static int $events_per_page = 12;
 
     /**
+     * Timezone for events (should match where events are created)
+     * Events are stored in this timezone and converted to UTC for ICS feeds
+     *
+     * @var string
+     */
+    private static string $timezone = 'UTC';
+
+    /**
      * @var bool
      */
     protected bool $useDefaultFilter = false;
@@ -136,7 +144,7 @@ class CalendarController extends \PageController
                     'title' => $event->Title,
                     'start' => $event->StartDate,
                     'allDay' => true, // Default to all day
-                    'url' => $event->Link(),
+                    'url' => $event->AbsoluteLink(),
                     'extendedProps' => [
                         'summary' => $event->Summary ? $event->dbObject('Summary')->Summary(100) : '',
                         'categories' => [],
@@ -535,7 +543,7 @@ class CalendarController extends \PageController
                 $ics[] = 'LOCATION:' . $this->escapeICSValue($event->Location);
             }
 
-            // Handle dates and times
+                        // Handle dates and times
             if ($event->AllDay) {
                 // All-day event
                 $ics[] = 'DTSTART;VALUE=DATE:' . str_replace('-', '', $event->StartDate);
@@ -545,12 +553,14 @@ class CalendarController extends \PageController
                     $ics[] = 'DTEND;VALUE=DATE:' . $endDate->format('Ymd');
                 }
             } else {
-                // Timed event
-                $startDateTime = Carbon::parse($event->StartDate . ' ' . $event->StartTime);
+                // Timed event - parse in the configured timezone, then convert to UTC
+                $timezone = $this->config()->get('timezone');
+                
+                $startDateTime = Carbon::parse($event->StartDate . ' ' . $event->StartTime, $timezone);
                 $ics[] = 'DTSTART:' . $startDateTime->utc()->format('Ymd\THis\Z');
 
                 if ($event->EndDate && $event->EndTime) {
-                    $endDateTime = Carbon::parse($event->EndDate . ' ' . $event->EndTime);
+                    $endDateTime = Carbon::parse($event->EndDate . ' ' . $event->EndTime, $timezone);
                     $ics[] = 'DTEND:' . $endDateTime->utc()->format('Ymd\THis\Z');
                 } else {
                     // Default 1 hour duration
@@ -570,8 +580,9 @@ class CalendarController extends \PageController
             }
 
             // Add URL if available
-            if ($event->Link()) {
-                $ics[] = 'URL:' . $event->Link();
+            $url = $event->AbsoluteLink();
+            if ($url) {
+                $ics[] = 'URL:' . $url;
             }
 
             $ics[] = 'END:VEVENT';

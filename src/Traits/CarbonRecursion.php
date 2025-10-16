@@ -143,7 +143,8 @@ trait CarbonRecursion
         // Always respect RecursionEndDate by using the earlier of rangeEnd or RecursionEndDate
         if ($this->RecursionEndDate) {
             $recursionEnd = Carbon::parse($this->RecursionEndDate);
-            $rangeEnd = min($recursionEnd, $rangeEnd);
+            // Use the earlier date to ensure we don't exceed RecursionEndDate
+            $rangeEnd = $recursionEnd->lessThan($rangeEnd) ? $recursionEnd : $rangeEnd;
         }
 
         try {

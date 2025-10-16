@@ -580,8 +580,9 @@ class CalendarController extends \PageController
             }
 
             // Add URL if available
-            if ($event->AbsoluteLink()) {
-                $ics[] = 'URL:' . $event->AbsoluteLink();
+            $url = $event->AbsoluteLink();
+            if ($url) {
+                $ics[] = 'URL:' . $url;
             }
 
             $ics[] = 'END:VEVENT';

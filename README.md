@@ -168,7 +168,7 @@ Dynamic\Calendar\Page\EventPage:
 **IMPORTANT**: If your events are stored in a timezone other than UTC, you must configure the timezone to ensure ICS calendar feeds display correct times.
 
 ```yaml
-# mysite/_config/calendar.yml
+# app/_config/calendar.yml (or mysite/_config/calendar.yml for older projects)
 Dynamic\Calendar\Controller\CalendarController:
   # Timezone for event storage and ICS conversion
   # Use PHP timezone identifiers: https://www.php.net/manual/en/timezones.php

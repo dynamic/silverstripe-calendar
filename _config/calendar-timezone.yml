@@ -1,0 +1,9 @@
+---
+Name: calendar-timezone
+---
+Dynamic\Calendar\Controller\CalendarController:
+  # Timezone for event storage and display
+  # Events are stored in this timezone and will be converted to UTC for ICS feeds
+  # Common values: America/Chicago, America/New_York, America/Los_Angeles, etc.
+  # See: https://www.php.net/manual/en/timezones.php
+  timezone: 'America/Chicago'

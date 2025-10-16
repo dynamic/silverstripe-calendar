@@ -145,6 +145,15 @@ trait CarbonRecursion
             $rangeEnd = $rangeStart->copy()->addYears(2);
         }
 
+        // Always respect RecursionEndDate if it's set and earlier than rangeEnd
+        if ($this->RecursionEndDate) {
+            $recursionEnd = Carbon::parse($this->RecursionEndDate);
+            // Use the earlier of rangeEnd or recursionEnd
+            if ($recursionEnd->lessThan($rangeEnd)) {
+                $rangeEnd = $recursionEnd;
+            }
+        }
+
         try {
             $period = match ($this->Recursion) {
                 'DAILY' => $this->createDailyPeriod($eventStart, $rangeEnd),

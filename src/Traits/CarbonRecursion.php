@@ -135,23 +135,15 @@ trait CarbonRecursion
         $rangeStart = $startDate ? Carbon::parse($startDate) : $eventStart;
         $rangeEnd = $endDate ? Carbon::parse($endDate) : null;
 
-        // Use recursion end date if no range end specified
-        if (!$rangeEnd && $this->RecursionEndDate) {
-            $rangeEnd = Carbon::parse($this->RecursionEndDate);
-        }
-
-        // Default to 2 years if no end date
+        // Default to 2 years if no end date specified
         if (!$rangeEnd) {
             $rangeEnd = $rangeStart->copy()->addYears(2);
         }
 
-        // Always respect RecursionEndDate if it's set and earlier than rangeEnd
+        // Always respect RecursionEndDate by using the earlier of rangeEnd or RecursionEndDate
         if ($this->RecursionEndDate) {
             $recursionEnd = Carbon::parse($this->RecursionEndDate);
-            // Use the earlier of rangeEnd or recursionEnd
-            if ($recursionEnd->lessThan($rangeEnd)) {
-                $rangeEnd = $recursionEnd;
-            }
+            $rangeEnd = $recursionEnd->lessThan($rangeEnd) ? $recursionEnd : $rangeEnd;
         }
 
         try {

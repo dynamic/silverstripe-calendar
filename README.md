@@ -163,6 +163,33 @@ Dynamic\Calendar\Page\EventPage:
   default_duration: 1
 ```
 
+### Timezone Configuration
+
+**IMPORTANT**: If your events are stored in a timezone other than UTC, you must configure the timezone to ensure ICS calendar feeds display correct times.
+
+```yaml
+# mysite/_config/calendar.yml
+Dynamic\Calendar\Controller\CalendarController:
+  # Timezone for event storage and ICS conversion
+  # Use PHP timezone identifiers: https://www.php.net/manual/en/timezones.php
+  timezone: 'America/Chicago'  # Central Time (US)
+```
+
+**How it works**:
+- Event times are stored in your database in the configured timezone (e.g., 8:00 AM Central Time)
+- When generating ICS feeds, times are parsed in the configured timezone and converted to UTC
+- Calendar applications (Google Calendar, Outlook, Apple Calendar) receive UTC times and display them in the user's local timezone
+
+**Common timezone examples**:
+- `'America/New_York'` - Eastern Time (US)
+- `'America/Chicago'` - Central Time (US)
+- `'America/Denver'` - Mountain Time (US)
+- `'America/Los_Angeles'` - Pacific Time (US)
+- `'Europe/London'` - Greenwich Mean Time
+- `'Australia/Sydney'` - Australian Eastern Time
+
+**Note**: If not configured, the default timezone is `UTC`.
+
 ### Category Configuration
 
 Categories support color customization and can be managed through the Calendar Admin interface.

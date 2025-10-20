@@ -255,7 +255,8 @@ export class CalendarView {
     let resizeTimeout;
     let currentBreakpoint = this.getCurrentBreakpoint();
 
-    window.addEventListener('resize', () => {
+    // Store handler reference for cleanup
+    this.resizeHandler = () => {
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
         const newBreakpoint = this.getCurrentBreakpoint();
@@ -279,7 +280,9 @@ export class CalendarView {
         // Always update calendar size
         this.calendar.updateSize();
       }, 150);
-    });
+    };
+
+    window.addEventListener('resize', this.resizeHandler);
   }
 
   getCurrentBreakpoint() {
@@ -326,8 +329,14 @@ export class CalendarView {
   }
 
   destroy() {
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+    }
+    
     if (this.calendar) {
       this.calendar.destroy();
+      this.calendar = null;
     }
   }
 }

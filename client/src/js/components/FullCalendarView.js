@@ -50,8 +50,23 @@ export class FullCalendarView {
             this.bindCustomEvents();
             this.initializeMobileOptimizations();
         } catch (error) {
-            console.error('Failed to initialize FullCalendar:', error);
-            this.showFallbackView();
+            console.error('Error showing fallback view:', error);
+        }
+    }
+
+    /**
+     * Clean up event listeners to prevent memory leaks
+     */
+    destroy()
+    {
+        if (this.resizeHandler) {
+            window.removeEventListener('resize', this.resizeHandler);
+            this.resizeHandler = null;
+        }
+        
+        if (this.calendar) {
+            this.calendar.destroy();
+            this.calendar = null;
         }
     }
 
@@ -103,7 +118,8 @@ export class FullCalendarView {
         let resizeTimeout;
         let currentBreakpoint = this.getCurrentBreakpoint();
 
-        window.addEventListener('resize', () => {
+        // Store handler reference for cleanup
+        this.resizeHandler = () => {
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(() => {
                 const newBreakpoint = this.getCurrentBreakpoint();
@@ -127,7 +143,9 @@ export class FullCalendarView {
                 // Always update calendar size
                 this.calendar.updateSize();
             }, 150);
-        });
+        };
+
+        window.addEventListener('resize', this.resizeHandler);
     }
 
     async loadEvents(info, successCallback, failureCallback)

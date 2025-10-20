@@ -277,6 +277,26 @@ class EventPage extends \Page
     }
 
     /**
+     * Get the state of this event for GridField display
+     * 
+     * @return string
+     */
+    public function getEventState(): string
+    {
+        $today = Carbon::now()->format('Y-m-d');
+        $startDate = $this->StartDate;
+        $isRecurring = $this->eventRecurs();
+        
+        if ($startDate === $today) {
+            return $isRecurring ? 'Recurring (Today)' : 'Today';
+        } elseif ($startDate > $today) {
+            return $isRecurring ? 'Recurring (Future)' : 'Future';
+        } else {
+            return $isRecurring ? 'Recurring (Past)' : 'Past';
+        }
+    }
+
+    /**
      * Get comma-separated list of category names for summary fields
      * Uses instance variable caching to prevent repeated database queries
      *

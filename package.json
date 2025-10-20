@@ -29,7 +29,7 @@
   "devDependencies": {
     "@babel/core": "^7.22.0",
     "@babel/preset-env": "^7.22.0",
-    "@playwright/test": "^1.40.0",
+    "@playwright/test": "^1.56.1",
     "babel-loader": "^9.1.0",
     "css-loader": "^6.8.0",
     "eslint": "^8.45.0",

@@ -555,7 +555,7 @@ class CalendarController extends \PageController
             } else {
                 // Timed event - parse in the configured timezone, then convert to UTC
                 $timezone = $this->config()->get('timezone');
-                
+
                 $startDateTime = Carbon::parse($event->StartDate . ' ' . $event->StartTime, $timezone);
                 $ics[] = 'DTSTART:' . $startDateTime->utc()->format('Ymd\THis\Z');
 

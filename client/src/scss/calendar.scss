@@ -43,9 +43,36 @@
   // Mobile optimizations
   @media (max-width: 767.98px) {
     .fc-header-toolbar {
+      // Stack toolbar: nav left, views right (same row), title below centered
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+
+      .fc-toolbar-chunk:first-child {
+        // Previous/Next buttons - left aligned on first row
+        order: 1;
+        flex: 0 0 auto;
+      }
+
+      .fc-toolbar-chunk:last-child {
+        // View buttons - right aligned on first row  
+        order: 2;
+        flex: 0 0 auto;
+      }
+
+      .fc-toolbar-chunk:nth-child(2) {
+        // Title - full width second row, centered
+        order: 3;
+        flex-basis: 100%;
+        text-align: center;
+        margin-top: 0.5rem;
+      }
+
       .fc-toolbar-title {
         font-size: 1.25rem;
-        margin: 0.5rem 0;
+        margin: 0;
       }
 
       .fc-button-group {

@@ -6,6 +6,9 @@ import listPlugin from '@fullcalendar/list';
 import bootstrap5Plugin from '@fullcalendar/bootstrap5';
 import interactionPlugin from '@fullcalendar/interaction';
 
+// Shared constants
+const RESIZE_DEBOUNCE_MS = 150;
+
 export class CalendarView {
   constructor(element, options = {}) {
     this.element = element;
@@ -227,21 +230,21 @@ export class CalendarView {
     const isTablet = window.innerWidth >= 768 && window.innerWidth < 1200;
 
     if (isSmallScreen) {
-      // Mobile: All three views available, but start with list-friendly default
+      // Mobile (< md breakpoint): Only list view available for better mobile experience
       return {
         left: 'prev,next',
         center: 'title',
-        right: 'dayGridMonth,timeGridWeek,listWeek'
+        right: 'listWeek'
       };
     } else if (isTablet) {
-      // Tablet: All views with today button
+      // Tablet (md to lg): All views with today button
       return {
         left: 'prev,next today',
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,listWeek'
       };
     } else {
-      // Desktop: Full single-row layout
+      // Desktop (>= lg): Full single-row layout with all views
       return {
         left: 'prev,next today',
         center: 'title',
@@ -251,18 +254,45 @@ export class CalendarView {
   }
 
   initializeMobileOptimizations() {
-    // Simple resize handler - FullCalendar handles most responsive behavior automatically
+    // Handle responsive view switching on resize
     let resizeTimeout;
-    window.addEventListener('resize', () => {
+    let currentBreakpoint = this.getCurrentBreakpoint();
+
+    // Store handler reference for cleanup
+    this.resizeHandler = () => {
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
-        // Just update the size and let FullCalendar handle the rest
-        this.calendar.updateSize();
+        const newBreakpoint = this.getCurrentBreakpoint();
 
-        // Update header toolbar for optimal layout
-        this.calendar.setOption('headerToolbar', this.getResponsiveHeaderToolbar());
-      }, 150);
-    });
+        // Only update if breakpoint changed to avoid unnecessary re-renders
+        if (newBreakpoint !== currentBreakpoint) {
+          currentBreakpoint = newBreakpoint;
+
+          // Update header toolbar for optimal layout
+          this.calendar.setOption('headerToolbar', this.getResponsiveHeaderToolbar());
+
+          // Force list view on mobile if currently in month/week view
+          if (newBreakpoint === 'mobile') {
+            const currentView = this.calendar.view.type;
+            if (currentView === 'dayGridMonth' || currentView === 'timeGridWeek') {
+              this.calendar.changeView('listWeek');
+            }
+          }
+        }
+
+        // Always update calendar size
+        this.calendar.updateSize();
+      }, RESIZE_DEBOUNCE_MS);
+    };
+
+    window.addEventListener('resize', this.resizeHandler);
+  }
+
+  getCurrentBreakpoint() {
+    const width = window.innerWidth;
+    if (width < 768) return 'mobile';
+    if (width < 1200) return 'tablet';
+    return 'desktop';
   }
 
   showEventPopup(event) {
@@ -302,8 +332,14 @@ export class CalendarView {
   }
 
   destroy() {
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+    }
+    
     if (this.calendar) {
       this.calendar.destroy();
+      this.calendar = null;
     }
   }
 }

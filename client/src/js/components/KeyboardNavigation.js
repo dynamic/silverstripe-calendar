@@ -298,7 +298,7 @@ export class KeyboardNavigation {
 
     clearFocus()
     {
-        document.activeElement ? .blur();
+        document.activeElement?.blur();
     }
 
   // Helper methods

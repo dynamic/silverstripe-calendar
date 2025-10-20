@@ -1,23 +1,23 @@
 // FullCalendar View Component
 // Handles FullCalendar integration and event rendering
 
+// Shared constants
+const RESIZE_DEBOUNCE_MS = 150;
+
 export class FullCalendarView {
     constructor(container, options = {})
     {
         this.container = container;
         this.options = {
-            initialView: 'dayGridMonth',
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridWeek,listWeek'
-            },
+            initialView: this.getResponsiveInitialView(),
+            headerToolbar: this.getResponsiveHeaderToolbar(),
             eventDisplay: 'block',
             dayMaxEvents: 3,
             moreLinkClick: 'popover',
             eventClick: this.handleEventClick.bind(this),
             eventDidMount: this.styleEvent.bind(this),
             loading: this.handleLoading.bind(this),
+            windowResizeDelay: RESIZE_DEBOUNCE_MS,
             ...options
         };
 
@@ -51,10 +51,104 @@ export class FullCalendarView {
 
             this.calendar.render();
             this.bindCustomEvents();
+            this.initializeMobileOptimizations();
         } catch (error) {
-            console.error('Failed to initialize FullCalendar:', error);
-            this.showFallbackView();
+            console.error('Failed to initialize calendar:', error);
         }
+    }
+
+    /**
+     * Clean up event listeners to prevent memory leaks
+     */
+    destroy()
+    {
+        if (this.resizeHandler) {
+            window.removeEventListener('resize', this.resizeHandler);
+            this.resizeHandler = null;
+        }
+        
+        if (this.calendar) {
+            this.calendar.destroy();
+            this.calendar = null;
+        }
+    }
+
+    getResponsiveInitialView()
+    {
+        // Start with list view on mobile for better UX
+        return window.innerWidth < 768 ? 'listWeek' : 'dayGridMonth';
+    }
+
+    getResponsiveHeaderToolbar()
+    {
+        const width = window.innerWidth;
+
+        if (width < 768) {
+            // Mobile (< md breakpoint): Only list view for optimal mobile experience
+            return {
+                left: 'prev,next',
+                center: 'title',
+                right: 'listWeek'
+            };
+        } else if (width < 1200) {
+            // Tablet (md to lg): All views with today button
+            return {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,listWeek'
+            };
+        } else {
+            // Desktop (>= lg): Full layout with all views
+            return {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,listWeek'
+            };
+        }
+    }
+
+    getCurrentBreakpoint()
+    {
+        const width = window.innerWidth;
+        if (width < 768) return 'mobile';
+        if (width < 1200) return 'tablet';
+        return 'desktop';
+    }
+
+    initializeMobileOptimizations()
+    {
+        // Handle responsive view switching on resize
+        let resizeTimeout;
+        let currentBreakpoint = this.getCurrentBreakpoint();
+
+        // Store handler reference for cleanup
+        this.resizeHandler = () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                const newBreakpoint = this.getCurrentBreakpoint();
+
+                // Only update if breakpoint changed
+                if (newBreakpoint !== currentBreakpoint) {
+                    currentBreakpoint = newBreakpoint;
+
+                    // Update header toolbar
+                    this.calendar.setOption('headerToolbar', this.getResponsiveHeaderToolbar());
+
+                    // Force list view on mobile if in month/week view
+                    if (newBreakpoint === 'mobile') {
+                        const currentView = this.calendar.view.type;
+                        if (currentView === 'dayGridMonth' || currentView === 'timeGridWeek') {
+                            this.calendar.changeView('listWeek');
+                        }
+                    }
+                }
+
+                // Always update calendar size
+                this.calendar.updateSize();
+            }, RESIZE_DEBOUNCE_MS);
+        };
+
+        window.addEventListener('resize', this.resizeHandler);
     }
 
     async loadEvents(info, successCallback, failureCallback)

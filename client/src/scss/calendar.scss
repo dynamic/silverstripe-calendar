@@ -43,9 +43,35 @@
   // Mobile optimizations
   @media (max-width: 767.98px) {
     .fc-header-toolbar {
+      // Mobile: Match desktop layout - controls left, views right, space between
+      display: flex !important;
+      flex-wrap: wrap;
+      flex-direction: row-reverse !important;
+      justify-content: space-between !important;
+      align-items: center;
+      width: 100%;
+
+      .fc-toolbar-chunk:first-child {
+        // Navigation buttons (prev/next)
+        flex: 0 0 auto;
+      }
+
+      .fc-toolbar-chunk:last-child {
+        // View buttons (list)
+        flex: 0 0 auto;
+      }
+
+      .fc-toolbar-chunk:nth-child(2) {
+        // Title - full width second row, centered
+        order: 3;
+        flex-basis: 100%;
+        text-align: center;
+        margin-top: 0.5rem;
+      }
+
       .fc-toolbar-title {
         font-size: 1.25rem;
-        margin: 0.5rem 0;
+        margin: 0;
       }
 
       .fc-button-group {

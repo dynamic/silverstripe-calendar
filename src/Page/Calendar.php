@@ -5,6 +5,7 @@ namespace Dynamic\Calendar\Page;
 use Carbon\Carbon;
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
+use SilverStripe\Lumberjack\Model\Lumberjack;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Traits\EventPageOptimizations;
@@ -13,7 +14,6 @@ use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\HeaderField;
 use SilverStripe\Forms\NumericField;
-use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\Lumberjack\Forms\GridFieldConfig_Lumberjack;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;
@@ -133,6 +133,8 @@ class Calendar extends \Page
         Lumberjack::class,
     ];
 
+
+
     /**
      * @var bool
      */
@@ -146,19 +148,7 @@ class Calendar extends \Page
         return 'Events';
     }
 
-    /**
-     * Configure the Lumberjack GridField Config
-     * This method is called by the Lumberjack extension to get the GridField configuration
-     *
-     * @return GridFieldConfig_Lumberjack
-     */
-    public function getLumberjackGridFieldConfig()
-    {
-        // Use EventsPerPage from database field, with sensible fallback
-        $eventsPerPage = $this->EventsPerPage ?: $this->config()->get('defaults')['EventsPerPage'] ?: 50;
 
-        return GridFieldConfig_Lumberjack::create($eventsPerPage);
-    }
 
     /**
      * @return FieldList
@@ -218,7 +208,7 @@ class Calendar extends \Page
     {
         $list = EventPage::get()
             ->filter(['ParentID' => $this->ID])
-            ->sort(['StartDate' => 'ASC', 'StartTime' => 'ASC']);
+            ->sort(['StartDate' => 'DESC', 'StartTime' => 'DESC']);
 
         $list = $this->addEventPageOptimizations($list);
 

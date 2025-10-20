@@ -330,4 +330,121 @@ class CarbonRecursionTest extends SapphireTest
         $occurrences = iterator_to_array($event->getOccurrences('2025-06-21', '2025-06-25'));
         $this->assertCount(0, $occurrences);
     }
+
+    /**
+     * Test that RecursionEndDate is respected even when requesting a broader range
+     * This is a regression test for the bug where recursion end date was not respected
+     */
+    public function testRecursionEndDateIsRespected()
+    {
+        $event = EventPage::create([
+            'Title' => 'Weekly Meeting with End Date',
+            'StartDate' => '2025-06-16',
+            'StartTime' => '10:00:00',
+            'EndTime' => '11:00:00',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-07-14', // Should end on this date
+            'ParentID' => $this->parentPage->ID,
+        ]);
+
+        $event->write();
+
+        // Request occurrences for a range that extends beyond the RecursionEndDate
+        // This simulates what Calendar->getEventsFeed does with a 2-year window
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-16', '2025-12-31'));
+
+        // Should only have 5 weekly occurrences, stopping at RecursionEndDate
+        $this->assertCount(5, $occurrences);
+
+        // Check that the last occurrence is on or before RecursionEndDate
+        $dates = array_map(function ($occ) {
+            return $occ->StartDate;
+        }, $occurrences);
+        $lastDate = end($dates);
+        $this->assertLessThanOrEqual('2025-07-14', $lastDate, 'Last occurrence should not be after RecursionEndDate');
+
+        // Verify no occurrences after the RecursionEndDate
+        foreach ($dates as $date) {
+            $this->assertLessThanOrEqual('2025-07-14', $date, "Date $date should not be after RecursionEndDate");
+        }
+
+        // Expected dates should be exactly these 5
+        $expectedDates = ['2025-06-16', '2025-06-23', '2025-06-30', '2025-07-07', '2025-07-14'];
+        $this->assertEquals($expectedDates, $dates);
+    }
+
+    /**
+     * Test that daily recurring events respect RecursionEndDate
+     */
+    public function testDailyRecursionEndDateIsRespected()
+    {
+        $event = EventPage::create([
+            'Title' => 'Daily Standup with End Date',
+            'StartDate' => '2025-06-16',
+            'StartTime' => '09:00:00',
+            'EndTime' => '09:15:00',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-06-20', // Should end on this date (5 days total)
+            'ParentID' => $this->parentPage->ID,
+        ]);
+
+        $event->write();
+
+        // Request occurrences for a range that extends far beyond the RecursionEndDate
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-16', '2025-12-31'));
+
+        // Should have exactly 5 daily occurrences
+        $this->assertCount(5, $occurrences);
+
+        // Check that no occurrences are after the RecursionEndDate
+        $dates = array_map(function ($occ) {
+            return $occ->StartDate;
+        }, $occurrences);
+        foreach ($dates as $date) {
+            $this->assertLessThanOrEqual('2025-06-20', $date, "Date $date should not be after RecursionEndDate");
+        }
+
+        // Expected dates should be 5 consecutive days
+        $expectedDates = ['2025-06-16', '2025-06-17', '2025-06-18', '2025-06-19', '2025-06-20'];
+        $this->assertEquals($expectedDates, $dates);
+    }
+
+    /**
+     * Test that monthly recurring events respect RecursionEndDate
+     */
+    public function testMonthlyRecursionEndDateIsRespected()
+    {
+        $event = EventPage::create([
+            'Title' => 'Monthly Team Review',
+            'StartDate' => '2025-06-15',
+            'StartTime' => '14:00:00',
+            'EndTime' => '16:00:00',
+            'Recursion' => 'MONTHLY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-09-15', // Should end on this date (4 months)
+            'ParentID' => $this->parentPage->ID,
+        ]);
+
+        $event->write();
+
+        // Request occurrences for a range that extends beyond the RecursionEndDate
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-15', '2025-12-31'));
+
+        // Should have exactly 4 monthly occurrences
+        $this->assertCount(4, $occurrences);
+
+        // Check that no occurrences are after the RecursionEndDate
+        $dates = array_map(function ($occ) {
+            return $occ->StartDate;
+        }, $occurrences);
+        foreach ($dates as $date) {
+            $this->assertLessThanOrEqual('2025-09-15', $date, "Date $date should not be after RecursionEndDate");
+        }
+
+        // Expected dates should be 4 months
+        $expectedDates = ['2025-06-15', '2025-07-15', '2025-08-15', '2025-09-15'];
+        $this->assertEquals($expectedDates, $dates);
+    }
 }

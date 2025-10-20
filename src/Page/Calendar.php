@@ -13,7 +13,6 @@ use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\HeaderField;
 use SilverStripe\Forms\NumericField;
-use SilverStripe\Lumberjack\Forms\GridFieldConfig_Lumberjack;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;

@@ -80,13 +80,16 @@ module.exports = (env, argv) => {
         splitChunks: {
             chunks: 'all',
             cacheGroups: {
-                vendor: {
-                    test: /[\\/]node_modules[\\ / ] / ,
+                vendors: {
+                    test: /[\\/]node_modules[\\/]/,
                     name: 'vendors',
-                    chunks: 'all'
+                    chunks: 'all',
+                    priority: 10,
+                    enforce: true
                 }
             }
-        }
+        },
+        chunkIds: 'named'
         },
         resolve: {
             alias: {

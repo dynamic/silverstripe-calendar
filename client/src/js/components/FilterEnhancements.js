@@ -68,7 +68,7 @@ export class FilterEnhancements {
             }
 
             const isActive = fieldValue && fieldValue.trim() !== '';
-            const fieldPreviouslyActive = formData.get(fieldName) ? .trim() !== '';
+            const fieldPreviouslyActive = formData.get(fieldName)?.trim() !== '';
 
             if (isActive && !fieldPreviouslyActive) {
                 activeCount++;

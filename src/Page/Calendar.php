@@ -133,8 +133,6 @@ class Calendar extends \Page
         Lumberjack::class,
     ];
 
-
-
     /**
      * @var bool
      */

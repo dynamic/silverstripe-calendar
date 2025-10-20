@@ -285,17 +285,14 @@ class EventPage extends \Page
     {
         $today = Carbon::now()->format('Y-m-d');
         $startDate = $this->StartDate;
-        
-        if ($this->eventRecurs()) {
-            return 'Recurring';
-        }
+        $isRecurring = $this->eventRecurs();
         
         if ($startDate === $today) {
-            return 'Today';
+            return $isRecurring ? 'Recurring (Today)' : 'Today';
         } elseif ($startDate > $today) {
-            return 'Future';
+            return $isRecurring ? 'Recurring (Future)' : 'Future';
         } else {
-            return 'Past';
+            return $isRecurring ? 'Recurring (Past)' : 'Past';
         }
     }
 

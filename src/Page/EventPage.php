@@ -283,7 +283,7 @@ class EventPage extends \Page
      */
     public function getEventState(): string
     {
-        $today = date('Y-m-d');
+        $today = Carbon::now()->format('Y-m-d');
         $startDate = $this->StartDate;
         
         if ($this->eventRecurs()) {

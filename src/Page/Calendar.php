@@ -5,7 +5,6 @@ namespace Dynamic\Calendar\Page;
 use Carbon\Carbon;
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
-use SilverStripe\Lumberjack\Model\Lumberjack;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Traits\EventPageOptimizations;
@@ -15,6 +14,7 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\HeaderField;
 use SilverStripe\Forms\NumericField;
 use SilverStripe\Lumberjack\Forms\GridFieldConfig_Lumberjack;
+use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;
 

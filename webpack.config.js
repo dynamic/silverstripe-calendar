@@ -90,8 +90,8 @@ module.exports = (env, argv) => {
             }
         },
         chunkIds: 'named'
-        },
-        resolve: {
+    },
+    resolve: {
             alias: {
                 '@': path.resolve(__dirname, 'client/src')
             }

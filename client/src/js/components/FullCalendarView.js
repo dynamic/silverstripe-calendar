@@ -1,6 +1,9 @@
 // FullCalendar View Component
 // Handles FullCalendar integration and event rendering
 
+// Shared constants
+const RESIZE_DEBOUNCE_MS = 150;
+
 export class FullCalendarView {
     constructor(container, options = {})
     {
@@ -14,7 +17,7 @@ export class FullCalendarView {
             eventClick: this.handleEventClick.bind(this),
             eventDidMount: this.styleEvent.bind(this),
             loading: this.handleLoading.bind(this),
-            windowResizeDelay: 150,
+            windowResizeDelay: RESIZE_DEBOUNCE_MS,
             ...options
         };
 
@@ -50,7 +53,7 @@ export class FullCalendarView {
             this.bindCustomEvents();
             this.initializeMobileOptimizations();
         } catch (error) {
-            console.error('Error showing fallback view:', error);
+            console.error('Failed to initialize calendar:', error);
         }
     }
 
@@ -142,7 +145,7 @@ export class FullCalendarView {
 
                 // Always update calendar size
                 this.calendar.updateSize();
-            }, 150);
+            }, RESIZE_DEBOUNCE_MS);
         };
 
         window.addEventListener('resize', this.resizeHandler);

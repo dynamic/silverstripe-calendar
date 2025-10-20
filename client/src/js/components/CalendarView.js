@@ -6,6 +6,9 @@ import listPlugin from '@fullcalendar/list';
 import bootstrap5Plugin from '@fullcalendar/bootstrap5';
 import interactionPlugin from '@fullcalendar/interaction';
 
+// Shared constants
+const RESIZE_DEBOUNCE_MS = 150;
+
 export class CalendarView {
   constructor(element, options = {}) {
     this.element = element;
@@ -279,7 +282,7 @@ export class CalendarView {
 
         // Always update calendar size
         this.calendar.updateSize();
-      }, 150);
+      }, RESIZE_DEBOUNCE_MS);
     };
 
     window.addEventListener('resize', this.resizeHandler);

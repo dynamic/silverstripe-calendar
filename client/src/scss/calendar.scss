@@ -43,22 +43,21 @@
   // Mobile optimizations
   @media (max-width: 767.98px) {
     .fc-header-toolbar {
-      // Stack toolbar: nav left, views right (same row), title below centered
-      display: flex;
+      // Mobile: Match desktop layout - controls left, views right, space between
+      display: flex !important;
       flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 0.5rem;
+      flex-direction: row-reverse !important;
+      justify-content: space-between !important;
+      align-items: center;
+      width: 100%;
 
       .fc-toolbar-chunk:first-child {
-        // Previous/Next buttons - left aligned on first row
-        order: 1;
+        // Navigation buttons (prev/next)
         flex: 0 0 auto;
       }
 
       .fc-toolbar-chunk:last-child {
-        // View buttons - right aligned on first row  
-        order: 2;
+        // View buttons (list)
         flex: 0 0 auto;
       }
 

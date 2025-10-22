@@ -12,6 +12,9 @@ use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\PaginatedList;
 use SilverStripe\View\ArrayData;
+use SilverStripe\Core\Injector\Injector;
+use SilverStripe\Core\Cache\CacheFactory;
+use Psr\SimpleCache\CacheInterface;
 
 /**
  * Calendar Controller
@@ -112,6 +115,20 @@ class CalendarController extends \PageController
      */
     public function events(HTTPRequest $request)
     {
+        // Check cache for JSON responses first
+        if ($this->isAjaxRequest($request)) {
+            $cacheKey = $this->generateEventsCacheKey($request);
+            $cache = $this->getEventsCache();
+            $cachedJson = $cache->get($cacheKey);
+
+            if ($cachedJson !== null) {
+                $response = $this->getResponse();
+                $response->addHeader('Content-Type', 'application/json');
+                $response->addHeader('X-Calendar-Cache', 'HIT');
+                return $response->setBody($cachedJson);
+            }
+        }
+
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
@@ -203,9 +220,17 @@ class CalendarController extends \PageController
                 $eventsData[] = $eventData;
             }
 
+            $json = json_encode($eventsData);
+
+            // Cache the JSON response
+            $cacheKey = $this->generateEventsCacheKey($request);
+            $cache = $this->getEventsCache();
+            $cache->set($cacheKey, $json, 3600); // 1 hour TTL
+
             $response = $this->getResponse();
             $response->addHeader('Content-Type', 'application/json');
-            return $response->setBody(json_encode($eventsData));
+            $response->addHeader('X-Calendar-Cache', 'MISS');
+            return $response->setBody($json);
         }
 
         // For non-AJAX requests, return template data
@@ -607,5 +632,43 @@ class CalendarController extends \PageController
         $value = str_replace(['\\', ';', ',', "\n", "\r"], ['\\\\', '\\;', '\\,', '\\n', '\\n'], $value);
 
         return $value;
+    }
+
+    /**
+     * Generate a cache key for the events JSON response
+     *
+     * @param HTTPRequest $request
+     * @return string
+     */
+    private function generateEventsCacheKey(HTTPRequest $request): string
+    {
+        // Symfony cache keys cannot contain: {}()/\@:
+        // Hash timestamps to avoid special characters
+        $start = $request->getVar('start') ? md5($request->getVar('start')) : 'no-start';
+        $end = $request->getVar('end') ? md5($request->getVar('end')) : 'no-end';
+        $cats = $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats';
+
+        $parts = [
+            'calendar_json',
+            $this->calendar->ID,
+            $start,
+            $end,
+            $cats
+        ];
+
+        return implode('_', $parts);
+    }
+
+    /**
+     * Get cache instance for events JSON
+     *
+     * @return CacheInterface
+     */
+    private function getEventsCache(): CacheInterface
+    {
+        return Injector::inst()->get(CacheFactory::class)->create(
+            'CalendarJSON',
+            ['defaultLifetime' => 3600]
+        );
     }
 }

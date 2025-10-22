@@ -27,11 +27,6 @@ use Psr\SimpleCache\CacheInterface;
 class CalendarController extends \PageController
 {
     /**
-     * Cache TTL in seconds (1 hour)
-     */
-    private const CACHE_TTL = 3600;
-
-    /**
      * @var Calendar
      */
     protected Calendar $calendar;
@@ -222,18 +217,17 @@ class CalendarController extends \PageController
                     $eventData['textColor'] = $this->getContrastColor($categoryColor);
                 }
 
-            $eventsData[] = $eventData;
-        }
+                $eventsData[] = $eventData;
+            }
 
-        $json = json_encode($eventsData);
-        if ($json === false) {
-            throw new \RuntimeException('Failed to encode events data: ' . json_last_error_msg());
-        }
+            $json = json_encode($eventsData);
 
-        // Cache the JSON response
-        $cacheKey = $this->generateEventsCacheKey($request);
-        $cache = $this->getEventsCache();
-        $cache->set($cacheKey, $json, self::CACHE_TTL);            $response = $this->getResponse();
+            // Cache the JSON response
+            $cacheKey = $this->generateEventsCacheKey($request);
+            $cache = $this->getEventsCache();
+            $cache->set($cacheKey, $json, 3600); // 1 hour TTL
+
+            $response = $this->getResponse();
             $response->addHeader('Content-Type', 'application/json');
             $response->addHeader('X-Calendar-Cache', 'MISS');
             return $response->setBody($json);
@@ -674,7 +668,7 @@ class CalendarController extends \PageController
     {
         return Injector::inst()->get(CacheFactory::class)->create(
             'CalendarJSON',
-            ['defaultLifetime' => self::CACHE_TTL]
+            ['defaultLifetime' => 3600]
         );
     }
 }

@@ -120,7 +120,7 @@ class CalendarController extends \PageController
             $cacheKey = $this->generateEventsCacheKey($request);
             $cache = $this->getEventsCache();
             $cachedJson = $cache->get($cacheKey);
-            
+
             if ($cachedJson !== null) {
                 $response = $this->getResponse();
                 $response->addHeader('Content-Type', 'application/json');
@@ -221,12 +221,12 @@ class CalendarController extends \PageController
             }
 
             $json = json_encode($eventsData);
-            
+
             // Cache the JSON response
             $cacheKey = $this->generateEventsCacheKey($request);
             $cache = $this->getEventsCache();
             $cache->set($cacheKey, $json, 3600); // 1 hour TTL
-            
+
             $response = $this->getResponse();
             $response->addHeader('Content-Type', 'application/json');
             $response->addHeader('X-Calendar-Cache', 'MISS');
@@ -649,7 +649,7 @@ class CalendarController extends \PageController
             $request->getVar('end') ?? 'no-end',
             $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats'
         ];
-        
+
         return implode('_', $parts);
     }
 

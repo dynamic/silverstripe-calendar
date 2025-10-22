@@ -266,10 +266,10 @@ class Calendar extends \Page
      */
     public function getEventsFeed(?int $limit = null, $categories = null, $fromDate = null, $toDate = null): ArrayList
     {
-        // Parse dates - only apply date filtering if dates are explicitly provided
-        $applyDateFilter = ($fromDate !== null || $toDate !== null);
+        // Parse dates - always apply date filtering to prevent returning all events
         $fromDate = $fromDate ? Carbon::parse($fromDate) : null;
         $toDate = $toDate ? Carbon::parse($toDate) : null;
+        $applyDateFilter = ($fromDate !== null || $toDate !== null);
 
         $allEvents = ArrayList::create();
 
@@ -394,6 +394,38 @@ class Calendar extends \Page
             }
             $allEvents = $filteredEvents;
         }
+
+        // Filter out events with invalid dates or dates outside the requested range
+        $dateFilteredEvents = ArrayList::create();
+        foreach ($allEvents as $event) {
+            // Skip events with null/empty StartDate
+            if (!$event->StartDate || $event->StartDate === '') {
+                continue;
+            }
+
+            // If date filtering was requested, ensure event is within range
+            if ($applyDateFilter) {
+                try {
+                    $eventDate = Carbon::parse($event->StartDate);
+                    
+                    // Skip events before the requested start date (compare dates only, not times)
+                    if ($fromDate && $eventDate->startOfDay()->lt($fromDate->copy()->startOfDay())) {
+                        continue;
+                    }
+                    
+                    // Skip events after the requested end date (compare dates only, not times)
+                    if ($toDate && $eventDate->startOfDay()->gt($toDate->copy()->endOfDay())) {
+                        continue;
+                    }
+                } catch (\Exception $e) {
+                    // Skip events with unparseable dates
+                    continue;
+                }
+            }
+
+            $dateFilteredEvents->push($event);
+        }
+        $allEvents = $dateFilteredEvents;
 
         // Sort events by start date
         $allEvents = $allEvents->sort('StartDate', 'ASC');

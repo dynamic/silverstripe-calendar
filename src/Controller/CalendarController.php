@@ -299,7 +299,8 @@ class CalendarController extends \PageController
      */
     protected function getFromDate(HTTPRequest $request): ?Carbon
     {
-        $from = $request->getVar('from');
+        // Support both 'from' (legacy) and 'start' (FullCalendar) parameter names
+        $from = $request->getVar('from') ?? $request->getVar('start');
 
         if ($from && Carbon::hasFormat($from, 'Y-m-d')) {
             return Carbon::createFromFormat('Y-m-d', $from);
@@ -317,13 +318,14 @@ class CalendarController extends \PageController
      */
     protected function getToDate(HTTPRequest $request): ?Carbon
     {
-        $to = $request->getVar('to');
+        // Support both 'to' (legacy) and 'end' (FullCalendar) parameter names
+        $to = $request->getVar('to') ?? $request->getVar('end');
 
         if ($to && Carbon::hasFormat($to, 'Y-m-d')) {
             return Carbon::createFromFormat('Y-m-d', $to);
         }
 
-        // Return null when no date filter is applied - this will show all events
+        // Return null when no date filter is applied
         return null;
     }
 
@@ -644,8 +646,9 @@ class CalendarController extends \PageController
     {
         // Symfony cache keys cannot contain: {}()/\@:
         // Hash timestamps to avoid special characters
-        $start = $request->getVar('start') ? md5($request->getVar('start')) : 'no-start';
-        $end = $request->getVar('end') ? md5($request->getVar('end')) : 'no-end';
+        // Support both start/end (FullCalendar) and from/to parameter names
+        $start = ($request->getVar('start') ?? $request->getVar('from')) ? md5($request->getVar('start') ?? $request->getVar('from')) : 'no-start';
+        $end = ($request->getVar('end') ?? $request->getVar('to')) ? md5($request->getVar('end') ?? $request->getVar('to')) : 'no-end';
         $cats = $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats';
 
         $parts = [

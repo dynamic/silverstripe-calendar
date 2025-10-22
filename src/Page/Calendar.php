@@ -329,8 +329,8 @@ class Calendar extends \Page
             $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
             $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
 
-            // Get occurrences within the date range using Carbon recursion
-            $occurrences = $event->getOccurrences($occurrenceFromDate, $occurrenceToDate);
+            // Get occurrences within the date range using Carbon recursion with caching
+            $occurrences = $event->getCachedOccurrences($occurrenceFromDate, $occurrenceToDate);
 
             // Get event exceptions for this event
             $exceptions = $event->EventExceptions();

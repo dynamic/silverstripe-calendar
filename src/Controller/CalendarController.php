@@ -635,19 +635,25 @@ class CalendarController extends \PageController
     }
 
     /**
-     * Generate cache key for events JSON response
+     * Generate a cache key for the events JSON response
      *
      * @param HTTPRequest $request
      * @return string
      */
     private function generateEventsCacheKey(HTTPRequest $request): string
     {
+        // Symfony cache keys cannot contain: {}()/\@:
+        // Hash timestamps to avoid special characters
+        $start = $request->getVar('start') ? md5($request->getVar('start')) : 'no-start';
+        $end = $request->getVar('end') ? md5($request->getVar('end')) : 'no-end';
+        $cats = $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats';
+
         $parts = [
             'calendar_json',
             $this->calendar->ID,
-            $request->getVar('start') ?? 'no-start',
-            $request->getVar('end') ?? 'no-end',
-            $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats'
+            $start,
+            $end,
+            $cats
         ];
 
         return implode('_', $parts);

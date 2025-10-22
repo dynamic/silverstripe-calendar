@@ -661,7 +661,6 @@ class CalendarController extends \PageController
     private function getEventsCache(): CacheInterface
     {
         return Injector::inst()->get(CacheFactory::class)->create(
-            'CalendarJSONCache',
             'CalendarJSON',
             ['defaultLifetime' => 3600]
         );

@@ -516,13 +516,13 @@ class EventException extends DataObject implements PermissionProvider
                     ->setHTML5(true),
                 TimeField::create('ModifiedStartTime', 'Modified Start Time')
                     ->setDescription('Leave empty to use the original start time. Set to 00:00:00 for midnight.')
-                    ->setAttribute('value', $this->ModifiedStartTime ?: ''),
+                    ->setAttribute('value', $this->ModifiedStartTime ?? ''),
                 DateField::create('ModifiedEndDate', 'Modified End Date')
                     ->setDescription('Leave empty to use the original end date')
                     ->setHTML5(true),
                 TimeField::create('ModifiedEndTime', 'Modified End Time')
                     ->setDescription('Leave empty to use the original end time. Set to 00:00:00 for midnight.')
-                    ->setAttribute('value', $this->ModifiedEndTime ?: ''),
+                    ->setAttribute('value', $this->ModifiedEndTime ?? ''),
                 CheckboxField::create('ModifiedAllDay', 'All Day Event')
                     ->setDescription('Override the all-day setting for this instance'),
             ]

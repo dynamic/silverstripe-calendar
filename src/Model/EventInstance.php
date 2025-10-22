@@ -355,7 +355,7 @@ class EventInstance extends ViewableData
         if ($data['IsModified'] || $data['IsDeleted']) {
             $exception = EventException::get()->filter([
                 'OriginalEventID' => $originalEvent->ID,
-                'ExceptionDate' => $data['StartDate']
+                'InstanceDate' => $data['StartDate']
             ])->first();
         }
 

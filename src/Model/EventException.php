@@ -144,7 +144,7 @@ class EventException extends DataObject implements PermissionProvider
     ];
 
     /**
-     * Check if this exception has an override for a specific property
+     * Check if a specific property has an override value
      *
      * @param string $property
      * @return bool
@@ -158,9 +158,16 @@ class EventException extends DataObject implements PermissionProvider
         }
 
         $overrideField = $overridableFields[$property];
+        $value = $this->$overrideField;
+
+        // For time fields, check if value is explicitly set (not NULL)
+        // This allows users to intentionally set midnight (00:00:00) as an override
+        if (in_array($overrideField, ['ModifiedStartTime', 'ModifiedEndTime'])) {
+            return $value !== null;
+        }
 
         // Check if the override field has a value
-        return !empty($this->$overrideField);
+        return !empty($value);
     }
 
     /**
@@ -508,12 +515,14 @@ class EventException extends DataObject implements PermissionProvider
                     ->setDescription('Leave empty to use the original start date')
                     ->setHTML5(true),
                 TimeField::create('ModifiedStartTime', 'Modified Start Time')
-                    ->setDescription('Leave empty to use the original start time'),
+                    ->setDescription('Leave empty to use the original start time. Set to 00:00:00 for midnight.')
+                    ->setAttribute('value', $this->ModifiedStartTime ?? ''),
                 DateField::create('ModifiedEndDate', 'Modified End Date')
                     ->setDescription('Leave empty to use the original end date')
                     ->setHTML5(true),
                 TimeField::create('ModifiedEndTime', 'Modified End Time')
-                    ->setDescription('Leave empty to use the original end time'),
+                    ->setDescription('Leave empty to use the original end time. Set to 00:00:00 for midnight.')
+                    ->setAttribute('value', $this->ModifiedEndTime ?? ''),
                 CheckboxField::create('ModifiedAllDay', 'All Day Event')
                     ->setDescription('Override the all-day setting for this instance'),
             ]

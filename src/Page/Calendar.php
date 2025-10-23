@@ -414,7 +414,7 @@ class Calendar extends \Page
                     }
                     
                     // Skip events after the requested end date (compare dates only, not times)
-                    if ($toDate && $eventDate->startOfDay()->gt($toDate->copy()->endOfDay())) {
+                    if ($toDate && $eventDate->startOfDay()->gt($toDate->copy()->startOfDay())) {
                         continue;
                     }
                 } catch (\Exception $e) {

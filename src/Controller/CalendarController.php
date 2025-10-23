@@ -647,8 +647,10 @@ class CalendarController extends \PageController
         // Symfony cache keys cannot contain: {}()/\@:
         // Hash timestamps to avoid special characters
         // Support both start/end (FullCalendar) and from/to parameter names
-        $start = ($request->getVar('start') ?? $request->getVar('from')) ? md5($request->getVar('start') ?? $request->getVar('from')) : 'no-start';
-        $end = ($request->getVar('end') ?? $request->getVar('to')) ? md5($request->getVar('end') ?? $request->getVar('to')) : 'no-end';
+        $startParam = $request->getVar('start') ?? $request->getVar('from');
+        $start = $startParam ? md5($startParam) : 'no-start';
+        $endParam = $request->getVar('end') ?? $request->getVar('to');
+        $end = $endParam ? md5($endParam) : 'no-end';
         $cats = $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats';
 
         $parts = [

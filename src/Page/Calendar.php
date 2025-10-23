@@ -407,12 +407,12 @@ class Calendar extends \Page
             if ($applyDateFilter) {
                 try {
                     $eventDate = Carbon::parse($event->StartDate);
-                    
+
                     // Skip events before the requested start date (compare dates only, not times)
                     if ($fromDate && $eventDate->startOfDay()->lt($fromDate->copy()->startOfDay())) {
                         continue;
                     }
-                    
+
                     // Skip events after the requested end date (compare dates only, not times)
                     if ($toDate && $eventDate->startOfDay()->gt($toDate->copy()->startOfDay())) {
                         continue;

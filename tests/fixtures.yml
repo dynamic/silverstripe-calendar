@@ -1,0 +1,9 @@
+Dynamic\Calendar\Page\Calendar:
+  calendar1:
+    Title: 'Test Calendar'
+    URLSegment: 'test-calendar'
+
+Dynamic\Calendar\Model\Category:
+  category1:
+    Title: 'Test Category'
+    Color: '#FF0000'

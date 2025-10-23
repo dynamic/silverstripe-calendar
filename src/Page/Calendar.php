@@ -266,7 +266,7 @@ class Calendar extends \Page
      */
     public function getEventsFeed(?int $limit = null, $categories = null, $fromDate = null, $toDate = null): ArrayList
     {
-        // Parse dates - always apply date filtering to prevent returning all events
+        // Parse dates - date filtering is only applied if date parameters are provided
         $fromDate = $fromDate ? Carbon::parse($fromDate) : null;
         $toDate = $toDate ? Carbon::parse($toDate) : null;
         $applyDateFilter = ($fromDate !== null || $toDate !== null);

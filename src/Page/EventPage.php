@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Page;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Controller\EventPageController;
+use Dynamic\Calendar\Extension\CalendarCacheInvalidation;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
@@ -49,6 +50,7 @@ use SilverStripe\Versioned\Versioned;
 class EventPage extends \Page
 {
     use CarbonRecursion;
+    use CalendarCacheInvalidation;
 
     /**
      * Recurring pattern options for event frequency
@@ -747,6 +749,9 @@ class EventPage extends \Page
         if ($this->recursionChanged()) {
             \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
         }
+
+        // Clear JSON cache when event is modified
+        $this->clearCalendarJSONCache();
     }
 
     /**
@@ -757,5 +762,8 @@ class EventPage extends \Page
         parent::onAfterDelete();
 
         \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
+
+        // Clear JSON cache when event is deleted
+        $this->clearCalendarJSONCache();
     }
 }

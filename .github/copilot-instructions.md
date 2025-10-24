@@ -156,10 +156,10 @@ npm test
 
 ### Frontend Changes
 1. Edit source files in `client/src/`
-2. Run `npm run build:dev` to compile
+2. Run `npm run dev` for development with automatic recompilation on file changes
 3. Test in browser with dev tools open
-4. Run `npm run build` for production before committing
-5. Never commit `client/dist/` files (handled by build)
+4. Run `npm run build` for production build before committing
+5. Commit both source and built `client/dist/` files (dist is exposed via composer)
 
 ## SilverStripe-Specific Guidelines
 

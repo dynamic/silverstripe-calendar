@@ -318,6 +318,60 @@ class CalendarControllerCacheTest extends FunctionalTest
     }
 
     /**
+     * Test 8: Category relationship changes invalidate cache
+     */
+    public function testCategoryRelationshipChangesInvalidateCache()
+    {
+        // Create a category
+        $category = \Dynamic\Calendar\Model\Category::create([
+            'Title' => 'Test Category',
+            'URLSegment' => 'test-category',
+        ]);
+        $category->write();
+
+        // Create an event without categories
+        $event = EventPage::create([
+            'Title' => 'Event Without Category',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        // Get event feed (populate cache)
+        $request1 = $this->createAjaxRequest();
+        $response1 = $this->controller->events($request1);
+        $this->assertEquals('MISS', $response1->getHeader('X-Calendar-Cache'));
+
+        // Make second request to ensure cache is working
+        $request2 = $this->createAjaxRequest();
+        $response2 = $this->controller->events($request2);
+        $this->assertEquals('HIT', $response2->getHeader('X-Calendar-Cache'));
+
+        // Add category to event (many-to-many relationship change)
+        $event->Categories()->add($category);
+
+        // Get event feed again (should be cache MISS due to invalidation)
+        $request3 = $this->createAjaxRequest();
+        $response3 = $this->controller->events($request3);
+        $this->assertEquals('MISS', $response3->getHeader('X-Calendar-Cache'), 'Cache should be invalidated after category added');
+
+        // Make another request to populate cache
+        $request4 = $this->createAjaxRequest();
+        $response4 = $this->controller->events($request4);
+        $this->assertEquals('HIT', $response4->getHeader('X-Calendar-Cache'));
+
+        // Remove category from event
+        $event->Categories()->remove($category);
+
+        // Get event feed again (should be cache MISS due to invalidation)
+        $request5 = $this->createAjaxRequest();
+        $response5 = $this->controller->events($request5);
+        $this->assertEquals('MISS', $response5->getHeader('X-Calendar-Cache'), 'Cache should be invalidated after category removed');
+    }
+
+    /**
      * Helper method to create an AJAX request
      *
      * @return HTTPRequest

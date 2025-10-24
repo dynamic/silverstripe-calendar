@@ -23,6 +23,7 @@ use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\AssetAdmin\Forms\UploadField;
 use SilverStripe\Assets\Image;
 use SilverStripe\Lumberjack\Model\Lumberjack;
+use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBBoolean;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBField;
@@ -765,5 +766,39 @@ class EventPage extends \Page
 
         // Clear JSON cache when event is deleted
         $this->clearCalendarJSONCache();
+    }
+
+    /**
+     * Clear caches when a category is added to this event
+     * This is triggered when the many-to-many relationship changes
+     *
+     * @param DataObject $category
+     * @param string $relationName
+     */
+    public function onAfterLink(DataObject $category, string $relationName): void
+    {
+        parent::onAfterLink($category, $relationName);
+
+        // Clear JSON cache when categories are modified
+        if ($relationName === 'Categories') {
+            $this->clearCalendarJSONCache();
+        }
+    }
+
+    /**
+     * Clear caches when a category is removed from this event
+     * This is triggered when the many-to-many relationship changes
+     *
+     * @param DataObject $category
+     * @param string $relationName
+     */
+    public function onAfterUnlink(DataObject $category, string $relationName): void
+    {
+        parent::onAfterUnlink($category, $relationName);
+
+        // Clear JSON cache when categories are modified
+        if ($relationName === 'Categories') {
+            $this->clearCalendarJSONCache();
+        }
     }
 }

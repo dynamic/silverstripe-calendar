@@ -23,14 +23,17 @@ trait CalendarCacheInvalidation
      * Since this cache is isolated by namespace, clearing it won't
      * affect other caches in the system.
      *
+     * Note: The defaultLifetime parameter is not needed when clearing,
+     * but we still pass it to ensure the same cache instance is used.
+     * The value doesn't affect the clear operation.
+     *
      * @return void
      */
     protected function clearCalendarJSONCache(): void
     {
-        $cache = Injector::inst()->get(CacheFactory::class)->create(
-            'CalendarJSON',
-            ['defaultLifetime' => 1800]
-        );
+        // Get the cache instance - TTL doesn't matter for clearing
+        // but we need to use the same cache name
+        $cache = Injector::inst()->get(CacheFactory::class)->create('CalendarJSON');
         $cache->clear();
     }
 }

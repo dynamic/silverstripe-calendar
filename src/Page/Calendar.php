@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Page;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Controller\CalendarController;
+use Dynamic\Calendar\Extension\CalendarCacheInvalidation;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\EventPage;
@@ -24,6 +25,7 @@ use SilverStripe\ORM\DataList;
 class Calendar extends \Page
 {
     use EventPageOptimizations;
+    use CalendarCacheInvalidation;
 
     /**
      * @var string
@@ -438,5 +440,16 @@ class Calendar extends \Page
         $this->extend('updateEventsFeed', $allEvents);
 
         return $allEvents;
+    }
+
+    /**
+     * Clear caches when calendar settings are modified
+     */
+    public function onAfterWrite(): void
+    {
+        parent::onAfterWrite();
+
+        // Clear JSON cache when calendar settings change
+        $this->clearCalendarJSONCache();
     }
 }

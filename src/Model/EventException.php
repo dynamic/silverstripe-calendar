@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Model;
 
+use Dynamic\Calendar\Extension\CalendarCacheInvalidation;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\Director;
 use SilverStripe\Forms\CheckboxField;
@@ -39,6 +40,8 @@ use SilverStripe\Security\PermissionProvider;
  */
 class EventException extends DataObject implements PermissionProvider
 {
+    use CalendarCacheInvalidation;
+
     /**
      * Check if validation should be skipped
      * More specific than Director::isDev() for better control
@@ -346,6 +349,38 @@ class EventException extends DataObject implements PermissionProvider
         if (!$originalEvent->eventRecurs()) {
             throw ValidationException::create('EventExceptions can only be created for recurring events');
         }
+    }
+
+    /**
+     * Clear caches when exception is modified
+     */
+    protected function onAfterWrite()
+    {
+        parent::onAfterWrite();
+
+        // Clear parent event's instance cache
+        if ($this->OriginalEvent()->exists()) {
+            EventInstanceCache::clearEventCache($this->OriginalEvent());
+        }
+
+        // Clear JSON cache
+        $this->clearCalendarJSONCache();
+    }
+
+    /**
+     * Clear caches when exception is deleted
+     */
+    protected function onAfterDelete()
+    {
+        parent::onAfterDelete();
+
+        // Clear parent event's instance cache
+        if ($this->OriginalEvent()->exists()) {
+            EventInstanceCache::clearEventCache($this->OriginalEvent());
+        }
+
+        // Clear JSON cache
+        $this->clearCalendarJSONCache();
     }
 
     /**

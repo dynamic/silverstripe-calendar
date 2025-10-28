@@ -50,6 +50,14 @@ class CalendarController extends \PageController
     ];
 
     /**
+     * JSON cache TTL in seconds (default 30 minutes)
+     * Can be configured per project via YAML config
+     *
+     * @var int
+     */
+    private static int $json_cache_ttl = 1800;
+
+    /**
      * @var int
      */
     private static int $events_per_page = 12;
@@ -225,7 +233,7 @@ class CalendarController extends \PageController
             // Cache the JSON response
             $cacheKey = $this->generateEventsCacheKey($request);
             $cache = $this->getEventsCache();
-            $cache->set($cacheKey, $json, 3600); // 1 hour TTL
+            $cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'));
 
             $response = $this->getResponse();
             $response->addHeader('Content-Type', 'application/json');
@@ -673,7 +681,7 @@ class CalendarController extends \PageController
     {
         return Injector::inst()->get(CacheFactory::class)->create(
             'CalendarJSON',
-            ['defaultLifetime' => 3600]
+            ['defaultLifetime' => $this->config()->get('json_cache_ttl')]
         );
     }
 }

@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Page;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Controller\EventPageController;
+use Dynamic\Calendar\Extension\CalendarCacheInvalidation;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
@@ -22,6 +23,7 @@ use SilverStripe\Forms\TreeMultiselectField;
 use SilverStripe\AssetAdmin\Forms\UploadField;
 use SilverStripe\Assets\Image;
 use SilverStripe\Lumberjack\Model\Lumberjack;
+use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBBoolean;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBField;
@@ -49,6 +51,7 @@ use SilverStripe\Versioned\Versioned;
 class EventPage extends \Page
 {
     use CarbonRecursion;
+    use CalendarCacheInvalidation;
 
     /**
      * Recurring pattern options for event frequency
@@ -747,6 +750,9 @@ class EventPage extends \Page
         if ($this->recursionChanged()) {
             \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
         }
+
+        // Clear JSON cache when event is modified
+        $this->clearCalendarJSONCache();
     }
 
     /**
@@ -757,5 +763,38 @@ class EventPage extends \Page
         parent::onAfterDelete();
 
         \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
+
+        // Clear JSON cache when event is deleted
+        $this->clearCalendarJSONCache();
+    }
+
+    /**
+     * Clear caches when a category is added to this event
+     * This is triggered when the many-to-many relationship changes
+     *
+     * @param DataObject $category
+     * @param string $relationName
+     */
+    public function onAfterLink(DataObject $category, string $relationName): void
+    {
+        // Clear JSON cache when categories are modified
+        if ($relationName === 'Categories') {
+            $this->clearCalendarJSONCache();
+        }
+    }
+
+    /**
+     * Clear caches when a category is removed from this event
+     * This is triggered when the many-to-many relationship changes
+     *
+     * @param DataObject $category
+     * @param string $relationName
+     */
+    public function onAfterUnlink(DataObject $category, string $relationName): void
+    {
+        // Clear JSON cache when categories are modified
+        if ($relationName === 'Categories') {
+            $this->clearCalendarJSONCache();
+        }
     }
 }

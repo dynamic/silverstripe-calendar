@@ -12,6 +12,13 @@ SilverStripe\Core\Cache\CacheFactory:
       namespace: 'calendar_instances'
       defaultLifetime: 3600  # 1 hour
 
+  # Calendar JSON feed cache (used by CalendarController)
+  CalendarJSON:
+    factory: 'SilverStripe\Core\Cache\DefaultCacheFactory'
+    options:
+      namespace: 'calendar_json'
+      defaultLifetime: 1800  # 30 minutes (configurable per project)
+
 # Configuration for EventPage caching behavior
 Dynamic\Calendar\Page\EventPage:
   # Performance settings for virtual instances

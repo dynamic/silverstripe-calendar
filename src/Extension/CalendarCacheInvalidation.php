@@ -33,7 +33,7 @@ trait CalendarCacheInvalidation
             'CalendarJSON',
             ['defaultLifetime' => 1800]
         );
-        
+
         // Clear all items in the cache namespace
         $cache->clear();
     }

@@ -353,7 +353,7 @@ class CalendarControllerCacheTest extends FunctionalTest
         // Add category to event (many-to-many relationship change)
         // Note: add() should trigger onAfterLink automatically
         $event->Categories()->add($category);
-        
+
         // Force a write to ensure the relationship is saved and hooks are triggered
         $event->write();
 
@@ -378,12 +378,12 @@ class CalendarControllerCacheTest extends FunctionalTest
         $request = new HTTPRequest('GET', '/events');
         $request->addHeader('Accept', 'application/json');
         $request->addHeader('X-Requested-With', 'XMLHttpRequest');
-        
+
         // Add date parameters to ensure consistent cache keys
         $start = Carbon::now()->subMonth()->format('Y-m-d');
         $end = Carbon::now()->addMonth()->format('Y-m-d');
         $request->setUrl('/events?start=' . $start . '&end=' . $end);
-        
+
         return $request;
     }
 }

@@ -20,20 +20,21 @@ trait CalendarCacheInvalidation
      * Clear CalendarController JSON cache
      *
      * This method clears the entire CalendarJSON cache namespace.
-     * Since this cache is isolated by namespace, clearing it won't
-     * affect other caches in the system.
-     *
-     * Note: The defaultLifetime parameter is not needed when clearing,
-     * but we still pass it to ensure the same cache instance is used.
-     * The value doesn't affect the clear operation.
+     * We create the cache with the exact same parameters as CalendarController
+     * to ensure we're clearing the correct cache instance.
      *
      * @return void
      */
     protected function clearCalendarJSONCache(): void
     {
-        // Get the cache instance - TTL doesn't matter for clearing
-        // but we need to use the same cache name
-        $cache = Injector::inst()->get(CacheFactory::class)->create('CalendarJSON');
+        // Get the cache factory and create cache with same parameters as CalendarController
+        $cacheFactory = Injector::inst()->get(CacheFactory::class);
+        $cache = $cacheFactory->create(
+            'CalendarJSON',
+            ['defaultLifetime' => 1800]
+        );
+        
+        // Clear all items in the cache namespace
         $cache->clear();
     }
 }

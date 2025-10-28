@@ -220,7 +220,11 @@ class CalendarControllerCacheTest extends FunctionalTest
         // Get event feed again (should be cache MISS due to invalidation)
         $request3 = $this->createAjaxRequest();
         $response3 = $this->controller->events($request3);
-        $this->assertEquals('MISS', $response3->getHeader('X-Calendar-Cache'), 'Cache should be invalidated after exception creation');
+        $this->assertEquals(
+            'MISS',
+            $response3->getHeader('X-Calendar-Cache'),
+            'Cache should be invalidated after exception creation'
+        );
     }
 
     /**
@@ -256,7 +260,11 @@ class CalendarControllerCacheTest extends FunctionalTest
         // Get event feed again (should be cache MISS due to invalidation)
         $request3 = $this->createAjaxRequest();
         $response3 = $this->controller->events($request3);
-        $this->assertEquals('MISS', $response3->getHeader('X-Calendar-Cache'), 'Cache should be invalidated after calendar modification');
+        $this->assertEquals(
+            'MISS',
+            $response3->getHeader('X-Calendar-Cache'),
+            'Cache should be invalidated after calendar modification'
+        );
     }
 
     /**
@@ -360,7 +368,11 @@ class CalendarControllerCacheTest extends FunctionalTest
         // Get event feed again (should be cache MISS due to invalidation)
         $request3 = $this->createAjaxRequest();
         $response3 = $this->controller->events($request3);
-        $this->assertEquals('MISS', $response3->getHeader('X-Calendar-Cache'), 'Cache should be invalidated after category added');
+        $this->assertEquals(
+            'MISS',
+            $response3->getHeader('X-Calendar-Cache'),
+            'Cache should be invalidated after category added'
+        );
 
         // Verify the cache works again after being repopulated
         $request4 = $this->createAjaxRequest();

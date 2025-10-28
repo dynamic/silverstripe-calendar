@@ -777,8 +777,6 @@ class EventPage extends \Page
      */
     public function onAfterLink(DataObject $category, string $relationName): void
     {
-        parent::onAfterLink($category, $relationName);
-
         // Clear JSON cache when categories are modified
         if ($relationName === 'Categories') {
             $this->clearCalendarJSONCache();
@@ -794,8 +792,6 @@ class EventPage extends \Page
      */
     public function onAfterUnlink(DataObject $category, string $relationName): void
     {
-        parent::onAfterUnlink($category, $relationName);
-
         // Clear JSON cache when categories are modified
         if ($relationName === 'Categories') {
             $this->clearCalendarJSONCache();

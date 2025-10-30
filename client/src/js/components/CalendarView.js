@@ -5,21 +5,10 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import bootstrap5Plugin from '@fullcalendar/bootstrap5';
 import interactionPlugin from '@fullcalendar/interaction';
+import { getRollingListWeekView } from './rollingListWeekView';
 
 // Shared constants
 const RESIZE_DEBOUNCE_MS = 150;
-
-const getRollingListWeekView = () => ({
-  type: 'list',
-  duration: { days: 7 },
-  visibleRange(currentDate) {
-    const start = new Date(currentDate.valueOf());
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start.valueOf());
-    end.setDate(end.getDate() + 7);
-    return { start, end };
-  }
-});
 
 export class CalendarView {
   constructor(element, options = {}) {

@@ -1,20 +1,10 @@
 // FullCalendar View Component
 // Handles FullCalendar integration and event rendering
 
+import { getRollingListWeekView } from './rollingListWeekView';
+
 // Shared constants
 const RESIZE_DEBOUNCE_MS = 150;
-
-const getRollingListWeekView = () => ({
-    type: 'list',
-    duration: { days: 7 },
-    visibleRange(currentDate) {
-        const start = new Date(currentDate.valueOf());
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(start.valueOf());
-        end.setDate(end.getDate() + 7);
-        return { start, end };
-    }
-});
 
 export class FullCalendarView {
     constructor(container, options = {})

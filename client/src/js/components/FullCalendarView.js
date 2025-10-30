@@ -4,10 +4,24 @@
 // Shared constants
 const RESIZE_DEBOUNCE_MS = 150;
 
+const getRollingListWeekView = () => ({
+    type: 'list',
+    duration: { days: 7 },
+    visibleRange(currentDate) {
+        const start = new Date(currentDate.valueOf());
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start.valueOf());
+        end.setDate(end.getDate() + 7);
+        return { start, end };
+    }
+});
+
 export class FullCalendarView {
     constructor(container, options = {})
     {
         this.container = container;
+        const { views: customViews = {}, ...restOptions } = options;
+
         this.options = {
             initialView: this.getResponsiveInitialView(),
             headerToolbar: this.getResponsiveHeaderToolbar(),
@@ -18,7 +32,14 @@ export class FullCalendarView {
             eventDidMount: this.styleEvent.bind(this),
             loading: this.handleLoading.bind(this),
             windowResizeDelay: RESIZE_DEBOUNCE_MS,
-            ...options
+            views: {
+                ...customViews,
+                listWeek: {
+                    ...getRollingListWeekView(),
+                    ...(customViews.listWeek || {})
+                }
+            },
+            ...restOptions
         };
 
         this.calendar = null;

@@ -243,14 +243,16 @@ $calendar-spacing: var(--bs-gutter-x, 1.5rem) !default;
 
     &.recurring-event {
       border-left: 3px solid var(--bs-warning);
+      position: relative;
 
       &::after {
-        content: "↻";
+        content: var(--calendar-recurring-indicator-content, none);
         position: absolute;
         top: 2px;
         right: 4px;
         font-size: 0.75rem;
         opacity: 0.7;
+        color: var(--calendar-recurring-indicator-color, currentColor);
       }
     }
   }

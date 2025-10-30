@@ -9,6 +9,18 @@ import interactionPlugin from '@fullcalendar/interaction';
 // Shared constants
 const RESIZE_DEBOUNCE_MS = 150;
 
+const getRollingListWeekView = () => ({
+  type: 'list',
+  duration: { days: 7 },
+  visibleRange(currentDate) {
+    const start = new Date(currentDate.valueOf());
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start.valueOf());
+    end.setDate(end.getDate() + 7);
+    return { start, end };
+  }
+});
+
 export class CalendarView {
   constructor(element, options = {}) {
     this.element = element;
@@ -32,6 +44,9 @@ export class CalendarView {
       eventDisplay: 'block',
       dayMaxEvents: true,
       moreLinkClick: 'popover',
+      views: {
+        listWeek: getRollingListWeekView()
+      },
 
       // Window resize handling for responsive behavior
       windowResizeDelay: 150

@@ -246,7 +246,7 @@ $calendar-spacing: var(--bs-gutter-x, 1.5rem) !default;
       position: relative;
 
       &::after {
-        content: var(--calendar-recurring-indicator-content, none);
+        content: var(--calendar-recurring-indicator-content, '');
         position: absolute;
         top: 2px;
         right: 4px;

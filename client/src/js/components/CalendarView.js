@@ -5,6 +5,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import bootstrap5Plugin from '@fullcalendar/bootstrap5';
 import interactionPlugin from '@fullcalendar/interaction';
+import { getRollingListWeekView } from './rollingListWeekView';
 
 // Shared constants
 const RESIZE_DEBOUNCE_MS = 150;
@@ -32,6 +33,9 @@ export class CalendarView {
       eventDisplay: 'block',
       dayMaxEvents: true,
       moreLinkClick: 'popover',
+      views: {
+        listWeek: getRollingListWeekView()
+      },
 
       // Window resize handling for responsive behavior
       windowResizeDelay: 150

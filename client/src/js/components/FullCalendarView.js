@@ -1,6 +1,8 @@
 // FullCalendar View Component
 // Handles FullCalendar integration and event rendering
 
+import { getRollingListWeekView } from './rollingListWeekView';
+
 // Shared constants
 const RESIZE_DEBOUNCE_MS = 150;
 
@@ -8,6 +10,8 @@ export class FullCalendarView {
     constructor(container, options = {})
     {
         this.container = container;
+        const { views: customViews = {}, ...restOptions } = options;
+
         this.options = {
             initialView: this.getResponsiveInitialView(),
             headerToolbar: this.getResponsiveHeaderToolbar(),
@@ -18,7 +22,14 @@ export class FullCalendarView {
             eventDidMount: this.styleEvent.bind(this),
             loading: this.handleLoading.bind(this),
             windowResizeDelay: RESIZE_DEBOUNCE_MS,
-            ...options
+            views: {
+                ...customViews,
+                listWeek: {
+                    ...getRollingListWeekView(),
+                    ...(customViews.listWeek || {})
+                }
+            },
+            ...restOptions
         };
 
         this.calendar = null;

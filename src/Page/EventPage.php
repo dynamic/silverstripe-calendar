@@ -254,6 +254,11 @@ class EventPage extends \Page
      */
     public function getGridFieldTime()
     {
+        // Return "All Day" for all-day events
+        if ($this->AllDay) {
+            return _t('EventPage.ALL_DAY', 'All Day');
+        }
+
         /** @var DBTime $date */
         $time = DBField::create_field(DBTime::class, $this->StartTime);
 

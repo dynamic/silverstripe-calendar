@@ -256,7 +256,7 @@ class EventPage extends \Page
     {
         // Return "All Day" for all-day events
         if ($this->AllDay) {
-            return 'All Day';
+            return _t('EventPage.ALL_DAY', 'All Day');
         }
 
         /** @var DBTime $date */

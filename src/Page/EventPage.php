@@ -210,6 +210,18 @@ class EventPage extends \Page
     /**
      * @var array
      */
+    private static array $searchable_fields = [
+        'Title' => 'PartialMatchFilter',
+        'Content' => 'PartialMatchFilter',
+        'StartDate' => 'GreaterThanOrEqualFilter',
+        'Categories.ID' => 'ExactMatchFilter',
+        'AllDay' => 'ExactMatchFilter',
+        'Recursion' => 'ExactMatchFilter',
+    ];
+
+    /**
+     * @var array
+     */
     private static array $recursion_days = [
         '1' => 'Monday',
         '2' => 'Tuesday',

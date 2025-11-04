@@ -89,6 +89,15 @@ class Category extends DataObject implements PermissionProvider
     /**
      * @var array
      */
+    private static array $searchable_fields = [
+        'Title' => 'PartialMatchFilter',
+        'Description' => 'PartialMatchFilter',
+        'ParentID' => 'ExactMatchFilter',
+    ];
+
+    /**
+     * @var array
+     */
     private static array $casting = [
         'IsSubcategory' => 'Boolean',
         'ColorPreview' => 'HTMLText',

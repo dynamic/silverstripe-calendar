@@ -211,6 +211,9 @@ class Calendar extends \Page
 
         $list = $this->addEventPageOptimizations($list);
 
+        // Allow extensions to modify the list before returning
+        $this->extend('updateLumberjackPagesForGridfield', $list, $excluded);
+
         // Let Lumberjack handle pagination through GridField components
         // Don't apply limit() here as it interferes with Lumberjack's pagination
         return $list;

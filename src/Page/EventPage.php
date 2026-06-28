@@ -706,13 +706,13 @@ class EventPage extends \Page
      *
      * For the Carbon system, this returns an ArrayList of virtual instances
      *
-     * @return \SilverStripe\ORM\ArrayList
+     * @return \SilverStripe\Model\List\ArrayList
      */
     public function allChildren()
     {
         // Use virtual instances with Carbon system
         if (!$this->eventRecurs()) {
-            return \SilverStripe\ORM\ArrayList::create();
+            return \SilverStripe\Model\List\ArrayList::create();
         }
 
         // Get occurrences within a reasonable timeframe for testing
@@ -720,7 +720,7 @@ class EventPage extends \Page
             Carbon::parse($this->StartDate)->addMonth();
         $occurrences = $this->getOccurrences($this->StartDate, $endDate);
 
-        $children = \SilverStripe\ORM\ArrayList::create();
+        $children = \SilverStripe\Model\List\ArrayList::create();
         $originalStartDate = $this->StartDate;
 
         foreach ($occurrences as $occurrence) {

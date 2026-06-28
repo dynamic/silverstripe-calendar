@@ -3,8 +3,10 @@
 namespace Dynamic\Calendar\Task;
 
 use Dynamic\Calendar\Page\EventPage;
-use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\BuildTask;
+use SilverStripe\PolyExecution\PolyOutput;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputInterface;
 
 /**
  * Carbon Recursion Migration Task
@@ -18,127 +20,106 @@ use SilverStripe\Dev\BuildTask;
  */
 class CarbonRecursionMigrationTask extends BuildTask
 {
-    /**
-     * @var string
-     */
-    protected $title = 'Carbon Recursion Migration';
+    private static $segment = 'carbon-recursion-migration';
 
-    /**
-     * @var string
-     */
-    protected $description = 'Validates Carbon-based recurring events (migration no longer needed)';
+    protected string $title = 'Carbon Recursion Migration';
 
-    /**
-     * @var bool
-     */
-    protected $enabled = true;
+    protected static string $description = 'Validates Carbon-based recurring events (migration no longer needed)';
 
-    /**
-     * @param HTTPRequest $request
-     */
-    public function run($request)
+    protected function execute(InputInterface $input, PolyOutput $output): int
     {
-        $this->printHeader();
+        $this->printHeader($output);
 
         // Check if RecursiveEvent class exists (legacy RRule system)
         if (!class_exists('Dynamic\Calendar\Page\RecursiveEvent')) {
             $this->printMessage(
+                $output,
                 "Migration is no longer needed - RecursiveEvent class has been removed " .
                 "as part of the Carbon system migration.",
                 'notice'
             );
             $this->printMessage(
+                $output,
                 "This task was designed to migrate from the legacy RRule system to the Carbon system.",
                 'notice'
             );
             $this->printMessage(
+                $output,
                 "Since the legacy system has been completely removed, running validation instead...",
                 'success'
             );
-            $this->printMessage("");
+            $this->printMessage($output, "");
 
-            $this->validateCarbonRecurrence();
+            $this->validateCarbonRecurrence($output);
         } else {
             $this->printMessage(
+                $output,
                 "RecursiveEvent class still exists - this indicates the migration may not be complete.",
                 'warning'
             );
         }
 
-        $this->printFooter();
+        $this->printFooter($output);
+
+        return Command::SUCCESS;
     }
 
-    /**
-     * Validate Carbon-based recurrence patterns
-     */
-    protected function validateCarbonRecurrence(): void
+    protected function validateCarbonRecurrence(PolyOutput $output): void
     {
-        $this->printMessage("Validating Carbon-based recurrence patterns...");
+        $this->printMessage($output, "Validating Carbon-based recurrence patterns...");
 
         $recurringEvents = EventPage::get()->filter('Recursion:not', 'NONE');
         $validCount = 0;
         $invalidCount = 0;
 
         if ($recurringEvents->count() === 0) {
-            $this->printMessage("No recurring events found to validate");
+            $this->printMessage($output, "No recurring events found to validate");
             return;
         }
 
         foreach ($recurringEvents as $event) {
             try {
-                // Test that we can generate occurrences
                 $occurrences = iterator_to_array($event->getOccurrences(null, null, 5));
 
                 if (count($occurrences) > 0) {
                     $validCount++;
-                    $this->printMessage("✓ Valid: {$event->Title} ({$event->getRecurrenceDescription()})");
+                    $this->printMessage($output, "✓ Valid: {$event->Title} ({$event->getRecurrenceDescription()})");
                 } else {
                     $invalidCount++;
-                    $this->printMessage("✗ No occurrences: {$event->Title}", 'warning');
+                    $this->printMessage($output, "✗ No occurrences: {$event->Title}", 'warning');
                 }
             } catch (\Exception $e) {
                 $invalidCount++;
-                $this->printMessage("✗ Error in {$event->Title}: " . $e->getMessage(), 'error');
+                $this->printMessage($output, "✗ Error in {$event->Title}: " . $e->getMessage(), 'error');
             }
         }
 
         $this->printMessage(
+            $output,
             "Validation complete: {$validCount} valid, {$invalidCount} invalid",
             $invalidCount > 0 ? 'warning' : 'success'
         );
     }
 
-    /**
-     * Print header
-     */
-    protected function printHeader(): void
+    protected function printHeader(PolyOutput $output): void
     {
-        $this->printMessage("=== Carbon Recursion Migration Task ===", 'header');
-        $this->printMessage("This task validates Carbon-based recurring events.");
-        $this->printMessage("The original migration functionality is no longer needed.");
-        $this->printMessage("");
+        $this->printMessage($output, "=== Carbon Recursion Migration Task ===", 'header');
+        $this->printMessage($output, "This task validates Carbon-based recurring events.");
+        $this->printMessage($output, "The original migration functionality is no longer needed.");
+        $this->printMessage($output, "");
     }
 
-    /**
-     * Print footer
-     */
-    protected function printFooter(): void
+    protected function printFooter(PolyOutput $output): void
     {
-        $this->printMessage("");
-        $this->printMessage("=== Task Complete ===", 'header');
-        $this->printMessage("If you found any validation errors, check:");
-        $this->printMessage("1. Event recurrence configuration in the CMS");
-        $this->printMessage("2. Carbon date formatting and rules");
-        $this->printMessage("3. Custom recurrence patterns");
+        $this->printMessage($output, "");
+        $this->printMessage($output, "=== Task Complete ===", 'header');
+        $this->printMessage($output, "If you found any validation errors, check:");
+        $this->printMessage($output, "1. Event recurrence configuration in the CMS");
+        $this->printMessage($output, "2. Carbon date formatting and rules");
+        $this->printMessage($output, "3. Custom recurrence patterns");
     }
 
-    /**
-     * Print a formatted message
-     *
-     * @param string $message
-     * @param string $type
-     */
-    protected function printMessage(string $message, string $type = 'info'): void
+    protected function printMessage(PolyOutput $output, string $message, string $type = 'info'): void
     {
         $prefix = match ($type) {
             'header' => '### ',
@@ -149,6 +130,6 @@ class CarbonRecursionMigrationTask extends BuildTask
             default => '  '
         };
 
-        echo $prefix . $message . PHP_EOL;
+        $output->writeln($prefix . $message);
     }
 }

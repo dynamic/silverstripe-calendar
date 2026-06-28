@@ -32,7 +32,7 @@ class LegacyFieldCleanupTask extends BuildTask
 
         if (!Director::isDev()) {
             $output->writeln('ERROR: This task should only be run in dev mode for safety.');
-            return Command::SUCCESS;
+            return Command::FAILURE;
         }
 
         $this->checkDeprecatedData($output);

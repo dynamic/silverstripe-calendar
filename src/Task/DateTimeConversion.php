@@ -52,7 +52,7 @@ class DateTimeConversion extends BuildTask
                 $event->writeToStage(Versioned::DRAFT);
 
                 if ($isPublished && $latestPublished) {
-                    $event->publishRecursive();
+                    $event->copyVersionToStage(Versioned::DRAFT, Versioned::LIVE);
                 }
             }
         }

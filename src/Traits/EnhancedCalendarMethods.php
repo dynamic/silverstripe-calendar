@@ -5,7 +5,7 @@ namespace Dynamic\Calendar\Traits;
 use Carbon\Carbon;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\EventPage;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DataList;
 
 /**

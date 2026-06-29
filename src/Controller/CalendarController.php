@@ -11,7 +11,7 @@ use Dynamic\Calendar\Form\CalendarFilterForm;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\PaginatedList;
-use SilverStripe\View\ArrayData;
+use SilverStripe\Model\ArrayData;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Cache\CacheFactory;
 use Psr\SimpleCache\CacheInterface;

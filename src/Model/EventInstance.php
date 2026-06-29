@@ -6,7 +6,7 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\FieldType\DBField;
-use SilverStripe\View\ViewableData;
+use SilverStripe\Model\ModelData;
 
 /**
  * Virtual Event Instance
@@ -16,7 +16,7 @@ use SilverStripe\View\ViewableData;
  *
  * @package Dynamic\Calendar\Model
  */
-class EventInstance extends ViewableData
+class EventInstance extends ModelData
 {
     use Injectable;
 

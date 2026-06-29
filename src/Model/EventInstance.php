@@ -96,7 +96,7 @@ class EventInstance extends ModelData
      * @param mixed $property
      * @return mixed
      */
-    public function __get($property)
+    public function __get(string $property): mixed
     {
         // Check if there's an exception override for this property
         if ($this->exception && $this->exception->hasOverride($property)) {

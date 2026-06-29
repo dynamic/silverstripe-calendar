@@ -214,7 +214,6 @@ class EventPage extends \Page
         'Title' => 'PartialMatchFilter',
         'Content' => 'PartialMatchFilter',
         'StartDate' => 'GreaterThanOrEqualFilter',
-        'Categories.ID' => 'ExactMatchFilter',
         'AllDay' => 'ExactMatchFilter',
         'Recursion' => 'ExactMatchFilter',
     ];

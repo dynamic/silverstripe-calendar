@@ -291,7 +291,7 @@ class EventException extends DataObject implements PermissionProvider
      *
      * @return \SilverStripe\Core\Validation\ValidationResult
      */
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = parent::validate();
 

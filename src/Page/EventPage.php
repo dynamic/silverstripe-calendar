@@ -741,7 +741,7 @@ class EventPage extends \Page
     /**
      * Validate that a parent Calendar is selected
      */
-    public function validate()
+    public function validate(): ValidationResult
     {
         $result = parent::validate();
 

@@ -132,11 +132,11 @@ class EventInstance extends ModelData
      * @param string $property
      * @return bool
      */
-    public function hasField($property)
+    public function hasField(string $fieldName): bool
     {
-        return isset($this->virtualProperties[$property]) ||
-               ($this->exception && $this->exception->hasOverride($property)) ||
-               $this->originalEvent->hasField($property);
+        return isset($this->virtualProperties[$fieldName]) ||
+               ($this->exception && $this->exception->hasOverride($fieldName)) ||
+               $this->originalEvent->hasField($fieldName);
     }
 
     /**

@@ -13,7 +13,7 @@ use SilverStripe\Forms\TextField;
 use SilverStripe\Forms\TimeField;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\ValidationException;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionProvider;
 
@@ -289,7 +289,7 @@ class EventException extends DataObject implements PermissionProvider
     /**
      * Validation
      *
-     * @return \SilverStripe\ORM\ValidationResult
+     * @return \SilverStripe\Core\Validation\ValidationResult
      */
     public function validate()
     {

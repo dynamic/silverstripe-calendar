@@ -30,7 +30,7 @@ use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Versioned\Versioned;
 
 /**

@@ -15,7 +15,7 @@ use SilverStripe\Forms\GridField\GridFieldConfig_RecordViewer;
 use TractorCow\Colorpicker\Forms\ColorField;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\Hierarchy\Hierarchy;
-use SilverStripe\ORM\ValidationResult;
+use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Security\Permission;
 use SilverStripe\Security\PermissionProvider;
 

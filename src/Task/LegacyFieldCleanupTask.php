@@ -24,7 +24,8 @@ class LegacyFieldCleanupTask extends BuildTask
 
     protected string $title = 'Calendar Legacy Field Cleanup';
 
-    protected static string $description = 'Migrates data from deprecated StartDatetime/EndDatetime fields to StartDate/StartTime/EndDate/EndTime fields';
+    protected static string $description = 'Migrates data from deprecated StartDatetime/EndDatetime fields'
+        . ' to StartDate/StartTime/EndDate/EndTime fields';
 
     protected function execute(InputInterface $input, PolyOutput $output): int
     {

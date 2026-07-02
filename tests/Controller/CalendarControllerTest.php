@@ -8,7 +8,7 @@ use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\FunctionalTest;
-use SilverStripe\ORM\ArrayList;
+use SilverStripe\Model\List\ArrayList;
 
 /**
  * Class CalendarControllerTest
@@ -74,7 +74,7 @@ class CalendarControllerTest extends FunctionalTest
         $this->assertArrayHasKey('OneTimeEventsCount', $result);
 
         $this->assertEquals($this->calendar->ID, $result['Calendar']->ID);
-        $this->assertInstanceOf('SilverStripe\ORM\PaginatedList', $result['Events']);
+        $this->assertInstanceOf(\SilverStripe\Model\List\PaginatedList::class, $result['Events']);
     }
 
     /**

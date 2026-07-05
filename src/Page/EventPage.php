@@ -366,6 +366,25 @@ class EventPage extends \Page
     public function getCMSFields()
     {
         $this->beforeUpdateCMSFields(function (FieldList $fields) {
+            // SS6 scaffolds custom $db / $has_one / $many_many fields into the form.
+            // Remove the scaffolded versions: this closure re-adds the curated fields
+            // below, and duplicates make FieldList::dataFields() throw in SS6.
+            $fields->removeByName([
+                'StartDatetime',
+                'EndDatetime',
+                'StartDate',
+                'EndDate',
+                'StartTime',
+                'EndTime',
+                'AllDay',
+                'Recursion',
+                'Interval',
+                'RecursionEndDate',
+                'EventType',
+                'Categories',
+                'FeaturedImage',
+            ]);
+
             // Add ParentID dropdown for Calendar selection
             $calendars = Calendar::get();
             if ($calendars->exists()) {
@@ -638,13 +657,13 @@ class EventPage extends \Page
      * @param null $member
      * @return bool
      */
-    public function canArchive($member = null)
+    public function canDelete($member = null)
     {
         if ($this->isCopy()) {
             return false;
         }
 
-        return parent::canArchive($member);
+        return parent::canDelete($member);
     }
 
     /**

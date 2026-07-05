@@ -259,12 +259,12 @@ class CalendarFilterFormTest extends SapphireTest
 
         // Check that fields have the correct values
         $searchField = $form->Fields()->dataFieldByName('search');
-        $this->assertEquals('test event', $searchField->Value());
+        $this->assertEquals('test event', $searchField->getValue());
 
         $fromField = $form->Fields()->dataFieldByName('from');
-        $this->assertEquals('2025-01-01', $fromField->Value());
+        $this->assertEquals('2025-01-01', $fromField->getValue());
 
         $toField = $form->Fields()->dataFieldByName('to');
-        $this->assertEquals('2025-12-31', $toField->Value());
+        $this->assertEquals('2025-12-31', $toField->getValue());
     }
 }

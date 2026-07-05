@@ -220,11 +220,11 @@ trait EnhancedCalendarMethods
     /**
      * Get paginated combined events
      *
-     * @return \SilverStripe\ORM\PaginatedList
+     * @return \SilverStripe\Model\List\PaginatedList
      */
     public function getPaginatedCombinedEvents()
     {
-        return \SilverStripe\ORM\PaginatedList::create($this->getCombinedEvents(), $this->getRequest())
+        return \SilverStripe\Model\List\PaginatedList::create($this->getCombinedEvents(), $this->getRequest())
             ->setPageLength($this->data()->config()->get('events_per_page'));
     }
 

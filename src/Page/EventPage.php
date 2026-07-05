@@ -657,13 +657,13 @@ class EventPage extends \Page
      * @param null $member
      * @return bool
      */
-    public function canArchive($member = null)
+    public function canDelete($member = null)
     {
         if ($this->isCopy()) {
             return false;
         }
 
-        return parent::canArchive($member);
+        return parent::canDelete($member);
     }
 
     /**

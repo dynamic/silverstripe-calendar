@@ -350,16 +350,16 @@ export class FullCalendarView {
         let html = '';
 
       // Date and time
-        html += `<p><strong>Date:</strong>${this.formatEventDate(event)}</p>`;
+        html += `<p><strong>Date:</strong> ${this.formatEventDate(event)}</p>`;
 
       // Location
         if (props.location) {
-            html += `<p><strong>Location:</strong>${props.location}</p>`;
+            html += `<p><strong>Location:</strong> ${props.location}</p>`;
         }
 
       // Category
         if (props.category) {
-            html += `<p><strong>Category:</strong>${props.category}</p>`;
+            html += `<p><strong>Category:</strong> ${props.category}</p>`;
         }
 
       // Description

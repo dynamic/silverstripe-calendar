@@ -80,10 +80,10 @@ export class SmartFiltering {
         }
 
         suggestionsContainer.innerHTML = suggestions.map(suggestion => `
-        < div class = "search-suggestion" data - id = "${suggestion.id}" >
-        < div class = "suggestion-title" > ${suggestion.title} < / div >
-        < div class = "suggestion-meta" > ${suggestion.date} • ${suggestion.type} < / div >
-        <  / div >
+        <div class="search-suggestion" data-id="${suggestion.id}">
+        <div class="suggestion-title">${suggestion.title}</div>
+        <div class="suggestion-meta">${suggestion.date} • ${suggestion.type}</div>
+        </div>
         `).join('');
 
         suggestionsContainer.style.display = 'block';

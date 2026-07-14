@@ -83,7 +83,7 @@ export class TouchInteractions {
     showSwipeIndicator(direction)
     {
         const indicator = document.createElement('div');
-        indicator.className = `swipe - indicator swipe - ${direction}`;
+        indicator.className = `swipe-indicator swipe-${direction}`;
         indicator.innerHTML = direction === 'left' ? '→' : '←';
 
         document.body.appendChild(indicator);
@@ -153,8 +153,8 @@ export class TouchInteractions {
             indicator = document.createElement('div');
             indicator.className = 'pull-refresh-indicator';
             indicator.innerHTML = `
-            < div class = "spinner-border spinner-border-sm" role = "status" > < / div >
-            < span > ${ready ? 'Release to refresh' : 'Pull to refresh'} < / span >
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span>${ready ? 'Release to refresh' : 'Pull to refresh'}</span>
             `;
             document.body.appendChild(indicator);
         }
@@ -196,9 +196,9 @@ export class TouchInteractions {
         const toast = document.createElement('div');
         toast.className = 'toast align-items-center text-white bg-success border-0';
         toast.innerHTML = `
-        < div class = "d-flex" >
-        < div class = "toast-body" > Calendar refreshed! < / div >
-        <  / div >
+        <div class="d-flex">
+        <div class="toast-body">Calendar refreshed!</div>
+        </div>
         `;
 
         document.body.appendChild(toast);

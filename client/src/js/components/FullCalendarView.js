@@ -197,7 +197,7 @@ export class FullCalendarView {
 
       // Use current page URL as base
         const baseUrl = window.location.pathname;
-        return `${baseUrl}events ? ${params.toString()}`;
+        return `${baseUrl}events?${params.toString()}`;
     }
 
     transformEvents(events)
@@ -233,7 +233,7 @@ export class FullCalendarView {
         }
 
         if (event.Category) {
-            classes.push(`category - ${event.Category.toLowerCase().replace(/\s+/g, '-')}`);
+            classes.push(`category-${event.Category.toLowerCase().replace(/\s+/g, '-')}`);
         }
 
         return classes.join(' ');
@@ -250,7 +250,7 @@ export class FullCalendarView {
       // Add category-specific styling
         const category = event.extendedProps.category;
         if (category) {
-            const categoryClass = `bg - ${this.getCategoryColor(category)}`;
+            const categoryClass = `bg-${this.getCategoryColor(category)}`;
             element.classList.add(categoryClass);
         }
 
@@ -309,25 +309,25 @@ export class FullCalendarView {
     {
       // Create Bootstrap modal for event details
         const modalHtml = `
-        < div class = "modal fade" id = "eventModal" tabindex = "-1" aria - labelledby = "eventModalLabel" aria - hidden = "true" >
-        < div class = "modal-dialog" >
-          < div class = "modal-content" >
-            < div class = "modal-header" >
-              < h5 class = "modal-title" id = "eventModalLabel" > ${event.title} < / h5 >
-              < button type = "button" class = "btn-close" data - bs - dismiss = "modal" aria - label = "Close" > < / button >
-            <  / div >
-            < div class = "modal-body" >
-              < div class = "event-details" >
+        <div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="eventModalLabel">${event.title}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="event-details">
                 ${this.renderEventDetails(event)}
-              <  / div >
-            <  / div >
-            < div class = "modal-footer" >
-              < a href = "${event.url}" class = "btn btn-primary" > View Full Details < / a >
-              < button type = "button" class = "btn btn-secondary" data - bs - dismiss = "modal" > Close < / button >
-            <  / div >
-          <  / div >
-        <  / div >
-        <  / div >
+              </div>
+            </div>
+            <div class="modal-footer">
+              <a href="${event.url}" class="btn btn-primary">View Full Details</a>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>
+        </div>
         `;
 
       // Remove existing modal
@@ -350,21 +350,21 @@ export class FullCalendarView {
         let html = '';
 
       // Date and time
-        html += ` < p > < strong > Date: < / strong > ${this.formatEventDate(event)} < / p > `;
+        html += `<p><strong>Date:</strong> ${this.formatEventDate(event)}</p>`;
 
       // Location
         if (props.location) {
-            html += ` < p > < strong > Location: < / strong > ${props.location} < / p > `;
+            html += `<p><strong>Location:</strong> ${props.location}</p>`;
         }
 
       // Category
         if (props.category) {
-            html += ` < p > < strong > Category: < / strong > ${props.category} < / p > `;
+            html += `<p><strong>Category:</strong> ${props.category}</p>`;
         }
 
       // Description
         if (props.description) {
-            html += ` < div > < strong > Description: < / strong > < div class = "mt-2" > ${props.description} < / div > < / div > `;
+            html += `<div><strong>Description:</strong><div class="mt-2">${props.description}</div></div>`;
         }
 
         return html;
@@ -452,11 +452,11 @@ export class FullCalendarView {
     {
       // Show a simple list view if FullCalendar fails to load
         this.container.innerHTML = `
-        < div class = "alert alert-warning" >
-        < h5 > Calendar View Unavailable < / h5 >
-        < p > The calendar view could not be loaded. Please refresh the page or try again later.< / p >
-        < a href = "${window.location.pathname}?view=list" class = "btn btn-primary" > View Events List < / a >
-        <  / div >
+        <div class="alert alert-warning">
+        <h5>Calendar View Unavailable</h5>
+        <p>The calendar view could not be loaded. Please refresh the page or try again later.</p>
+        <a href="${window.location.pathname}?view=list" class="btn btn-primary">View Events List</a>
+        </div>
         `;
     }
 

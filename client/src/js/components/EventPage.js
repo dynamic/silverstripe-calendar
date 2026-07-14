@@ -75,7 +75,7 @@ export class EventPage {
 
         // Fallback to meta tags or page data
         const getMetaContent = (name) => {
-            const meta = document.querySelector(`meta[name = "${name}"], meta[property = "${name}"]`);
+            const meta = document.querySelector(`meta[name="${name}"], meta[property="${name}"]`);
             return meta ? meta.getAttribute('content') : '';
         };
 
@@ -97,15 +97,15 @@ export class EventPage {
         let dateString;
         if (eventData.allDay) {
             // All-day events use YYYYMMDD format
-            dateString = `${eventData.startDate} / ${eventData.endDate}`;
+            dateString = `${eventData.startDate}/${eventData.endDate}`;
         } else {
             // Timed events use YYYYMMDDTHHMMSS format
             const startDateTime = eventData.startDate + 'T' + (eventData.startTime || '000000');
             const endDateTime = eventData.endDate + 'T' + (eventData.endTime || '235959');
-            dateString = `${startDateTime} / ${endDateTime}`;
+            dateString = `${startDateTime}/${endDateTime}`;
         }
 
-        return `https://calendar.google.com / calendar / render ? action = TEMPLATE & text = ${title} & dates = ${dateString}`;
+        return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateString}`;
     }
 
     // Static method for manual initialization

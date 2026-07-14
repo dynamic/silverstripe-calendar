@@ -65,10 +65,10 @@ export class CalendarSubscription {
                     // Build the full ICS subscription URL using the correct /ical endpoint
                     let icsUrl;
                     if (/^https?:\/\//i.test(calendarUrl)) {
-                        icsUrl = `${calendarUrl} / ical`;
+                        icsUrl = `${calendarUrl}/ical`;
                     } else {
                         const baseUrl = window.location.origin;
-                        icsUrl = `${baseUrl}${calendarUrl} / ical`;
+                        icsUrl = `${baseUrl}${calendarUrl}/ical`;
                     }
                     urlInput.value = icsUrl;
                 }

@@ -767,17 +767,19 @@ class EventPage extends \Page
         if (!$this->ParentID || $this->ParentID == 0) {
             $result->addError('Please select a Calendar for this event.');
         } else {
-            // Ensure the selected parent is actually a Calendar. Look it up on the Draft
-            // stage explicitly rather than the ambient reading mode: both `Calendar::get()`
-            // and `$this->Parent()` (via SiteTree's has_one component fetch) are Versioned +
-            // stage-bound, so a Calendar that only exists on Draft (e.g. during fixture/API
-            // population, before being published) is invisible if the current reading mode
-            // is Stage=Live, and this check would incorrectly reject a perfectly valid
-            // parent. Draft is always a superset of Live (publishing never removes the Draft
-            // record), so querying Draft explicitly is the stage-agnostic way to confirm the
-            // parent exists and is a Calendar.
-            $parent = Versioned::get_by_stage(Calendar::class, Versioned::DRAFT)
-                ->byID($this->ParentID);
+            // Ensure the selected parent is actually a Calendar. Look it up explicitly on
+            // Draft, falling back to Live, rather than the ambient reading mode: both
+            // `Calendar::get()` and `$this->Parent()` (via SiteTree's has_one component
+            // fetch) are Versioned + stage-bound, so a Calendar that only exists on Draft
+            // (e.g. during fixture/API population, before being published) is invisible if
+            // the current reading mode is Stage=Live, and this check would incorrectly
+            // reject a perfectly valid parent. Draft is normally a superset of Live
+            // (publishing never removes the Draft record) so checking Draft first covers
+            // the common case; the Live fallback covers the rarer case where a Calendar's
+            // Draft row was explicitly removed (e.g. `deleteFromStage(DRAFT)` in a cleanup
+            // task) while its Live row is still published and functioning.
+            $parent = Versioned::get_by_stage(Calendar::class, Versioned::DRAFT)->byID($this->ParentID)
+                ?: Versioned::get_by_stage(Calendar::class, Versioned::LIVE)->byID($this->ParentID);
             if (!$parent) {
                 $result->addError('Selected parent must be a Calendar page.');
             }

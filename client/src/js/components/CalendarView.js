@@ -72,17 +72,25 @@ export class CalendarView {
   getConfigFromElement() {
     const config = {};
 
-    // Read configuration from data attributes
-    if (this.element.dataset.calendarId) {
-      config.calendarId = this.element.dataset.calendarId;
+    // The calendar-id/default-view/events-url data attributes live on the
+    // #fullcalendar-view container that wraps this element (nesting depth
+    // varies by template — the module's own template nests it 3 levels
+    // deep via .card/.card-body, the theme override nests it directly), not
+    // on this.element itself. Resolve via that container so this method is
+    // correct standalone, not only when a caller also forwards these values
+    // explicitly as constructor options (as calendar.js currently does).
+    const attrSource = this.element.closest('#fullcalendar-view') || this.element;
+
+    if (attrSource.dataset.calendarId) {
+      config.calendarId = attrSource.dataset.calendarId;
     }
 
-    if (this.element.dataset.defaultView) {
-      config.initialView = this.element.dataset.defaultView;
+    if (attrSource.dataset.defaultView) {
+      config.defaultView = attrSource.dataset.defaultView;
     }
 
-    if (this.element.dataset.eventsUrl) {
-      config.eventsUrl = this.element.dataset.eventsUrl;
+    if (attrSource.dataset.eventsUrl) {
+      config.eventsUrl = attrSource.dataset.eventsUrl;
     }
 
     return config;

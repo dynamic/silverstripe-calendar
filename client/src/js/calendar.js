@@ -97,7 +97,8 @@ class CalendarModule {
             try {
                 this.calendarView = new CalendarView(calendarElement, {
                     eventsUrl: eventsUrl,
-                    calendarId: calendarId
+                    calendarId: calendarId,
+                    defaultView: fullCalendarSection.dataset.defaultView
                 });
                 console.log('FullCalendar initialized successfully');
             } catch (error) {

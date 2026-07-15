@@ -195,9 +195,14 @@ export class FullCalendarView {
             format: 'json'
         });
 
-      // Use current page URL as base
-        const baseUrl = window.location.pathname;
-        return `${baseUrl}events?${params.toString()}`;
+      // Prefer an explicitly configured events URL (data attribute); fall back
+      // to the current page path with a normalized trailing slash so "events"
+      // is never concatenated straight onto a path with no separator (e.g.
+      // "/calendar" + "events" -> "/calendarevents").
+        const eventsUrl = this.container.dataset.eventsUrl
+            || `${window.location.pathname.replace(/\/?$/, '/')}events`;
+
+        return `${eventsUrl}?${params.toString()}`;
     }
 
     transformEvents(events)

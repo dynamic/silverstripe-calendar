@@ -771,8 +771,16 @@ class EventPage extends \Page
         if (!$this->ParentID || $this->ParentID == 0) {
             $result->addError('Please select a Calendar for this event.');
         } else {
-            // Ensure the selected parent is actually a Calendar
-            $parent = Calendar::get()->byID($this->ParentID);
+            // Ensure the selected parent is actually a Calendar.
+            //
+            // Backport of the branch-3 fix for issue #123 (PR #124): a bare
+            // Calendar::get() is stage-sensitive, so validating during a
+            // publish (Live mode) rejected a perfectly valid parent whose
+            // Calendar row only existed in Draft. Draft is normally a superset
+            // of Live; the Live fallback covers a Draft row that was
+            // explicitly removed while its Live row is still published.
+            $parent = Versioned::get_by_stage(Calendar::class, Versioned::DRAFT)->byID($this->ParentID)
+                ?: Versioned::get_by_stage(Calendar::class, Versioned::LIVE)->byID($this->ParentID);
             if (!$parent) {
                 $result->addError('Selected parent must be a Calendar page.');
             }

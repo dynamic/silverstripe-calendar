@@ -8,6 +8,7 @@ use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Form\CalendarFilterForm;
+use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataObject;
@@ -518,38 +519,35 @@ class CalendarController extends \PageController
      */
     protected function getAvailableCategoriesForTemplate(HTTPRequest $request): ArrayList
     {
-        $selectedCategoryIDs = $request->getVar('categories') ?: [];
-        if (!is_array($selectedCategoryIDs)) {
-            $selectedCategoryIDs = [$selectedCategoryIDs];
-        }
+        $selectedIDs = $this->getSelectedCategoryIDs($request);
 
-        // Get categories that are actually used by events in this calendar
-        // Use efficient join query to avoid N+1 problem
-        $categoryIDs = EventPage::get()
-            ->filter(['ParentID' => $this->calendar->ID])
-            ->leftJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"')
-            ->leftJoin('Category', '"EventPage_Categories"."CategoryID" = "Category"."ID"')
-            ->column('Category.ID');
-
-        // Remove duplicates and null values
-        $categoryIDs = array_unique(array_filter($categoryIDs));
-
-        // Get the category objects
         $availableCategories = ArrayList::create();
-        if (!empty($categoryIDs)) {
-            $categories = Category::get()->byIDs($categoryIDs)->sort('Title ASC');
-
-            foreach ($categories as $category) {
-                $categoryData = ArrayData::create([
-                    'ID' => $category->ID,
-                    'Title' => $category->Title,
-                    'IsSelected' => in_array($category->ID, $selectedCategoryIDs),
-                ]);
-                $availableCategories->push($categoryData);
-            }
+        foreach ($this->calendar->getUsedCategories() as $category) {
+            $availableCategories->push(ArrayData::create([
+                'ID' => $category->ID,
+                'Title' => $category->Title,
+                'Selected' => in_array($category->ID, $selectedIDs),
+            ]));
         }
 
         return $availableCategories;
+    }
+
+    /**
+     * Selected category IDs from the request, normalised to ints.
+     *
+     * @param HTTPRequest $request
+     * @return array<int>
+     */
+    protected function getSelectedCategoryIDs(HTTPRequest $request): array
+    {
+        $ids = $request->getVar('categories');
+
+        if (!$ids) {
+            return [];
+        }
+
+        return array_map('intval', is_array($ids) ? $ids : [$ids]);
     }
 
     /**
@@ -682,7 +680,12 @@ class CalendarController extends \PageController
                 // For recurring event instances, include the instance date in the ID
                 $uniqueId .= '-' . $event->getInstanceDate()->format('Ymd');
             }
-            $ics[] = 'UID:' . $uniqueId . '@' . $_SERVER['HTTP_HOST'] ?? 'calendar.local';
+            // Previously read $_SERVER['HTTP_HOST'] with a dead null-coalesce
+            // ('.' binds tighter than '??'), so in any CLI/queued-job/test
+            // context the undefined-index error made transformEventToICS()
+            // return null - silently emptying the entire ICS feed.
+            $host = parse_url(Director::absoluteBaseURL(), PHP_URL_HOST) ?: 'calendar.local';
+            $ics[] = 'UID:' . $uniqueId . '@' . $host;
 
             // Add timestamp
             $ics[] = 'DTSTAMP:' . gmdate('Ymd\THis\Z');

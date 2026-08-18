@@ -185,7 +185,14 @@ class CalendarController extends \PageController
             }
         }
 
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+        $events = $this->calendar->getEventsFeed(
+            null,
+            $categories,
+            $fromDate,
+            $toDate,
+            null,
+            $this->getFilterParams($request)
+        );
 
         // Check if this is an AJAX request for JSON data
         if ($this->isAjaxRequest($request)) {
@@ -391,7 +398,14 @@ class CalendarController extends \PageController
                 $categories = Category::get()->byIDs($categoryIDs);
             }
 
-            $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+            $events = $this->calendar->getEventsFeed(
+                null,
+                $categories,
+                $fromDate,
+                $toDate,
+                null,
+                $this->getFilterParams($request)
+            );
 
             $paginatedEvents = PaginatedList::create($events, $request);
             $paginatedEvents->setPageLength($this->config()->get('events_per_page'));
@@ -411,6 +425,35 @@ class CalendarController extends \PageController
      * @param HTTPRequest $request
      * @return Carbon|null
      */
+    /**
+     * Extract the optional feed filters from the request.
+     *
+     * These params were sent by CalendarFilterForm and appended to the
+     * events XHR by CalendarView.js all along - the controller just never
+     * read them (issue #133). Note allDay uses strict comparisons: '0'
+     * (Timed Events) is a real filter value that if($var) would drop.
+     *
+     * @return array{search: string, eventType: string, allDay: string|null}
+     */
+    protected function getFilterParams(HTTPRequest $request): array
+    {
+        $search = trim((string) $request->getVar('search'));
+
+        $eventType = (string) $request->getVar('eventType');
+        if (!in_array($eventType, ['one-time', 'recurring'], true)) {
+            $eventType = '';
+        }
+
+        $allDay = $request->getVar('allDay');
+        $allDay = ($allDay === null || $allDay === '') ? null : (string) (int) (bool) $allDay;
+
+        return [
+            'search' => $search,
+            'eventType' => $eventType,
+            'allDay' => $allDay,
+        ];
+    }
+
     protected function getFromDate(HTTPRequest $request): ?Carbon
     {
         // Support both 'from' (legacy) and 'start' (FullCalendar) parameter names
@@ -632,7 +675,14 @@ class CalendarController extends \PageController
         }
 
         // Use the existing Calendar page's getEventsFeed method
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+        $events = $this->calendar->getEventsFeed(
+            null,
+            $categories,
+            $fromDate,
+            $toDate,
+            null,
+            $this->getFilterParams($request)
+        );
 
         // Generate ICS content manually for now
         $icsContent = $this->generateICSContent($events);
@@ -814,6 +864,15 @@ class CalendarController extends \PageController
         // which content stamp governs it.
         $crossCalendar = (bool) $this->calendar->config()->get('allow_cross_calendar_feed');
 
+        // The filters change the response body, so they must be part of the
+        // key - a shared entry would serve filtered results to unfiltered
+        // requests and vice versa. Hashed: search is free text and Symfony
+        // cache keys forbid several characters.
+        $filters = $this->getFilterParams($request);
+        $filterPart = ($filters['search'] === '' && $filters['eventType'] === '' && $filters['allDay'] === null)
+            ? 'no-filters'
+            : md5($filters['search'] . '|' . $filters['eventType'] . '|' . ($filters['allDay'] ?? ''));
+
         $parts = [
             'calendar_json',
             $this->calendar->ID,
@@ -825,7 +884,8 @@ class CalendarController extends \PageController
             CalendarCacheVersion::relationFingerprint(),
             $from ? $from->format('Ymd') : 'no-start',
             $to ? $to->format('Ymd') : 'no-end',
-            $cats
+            $cats,
+            $filterPart
         ];
 
         return implode('_', $parts);

@@ -293,6 +293,9 @@ class Calendar extends \Page
      *                                allow_cross_calendar_feed config value
      *                                (false). Previously ANY category filter
      *                                silently widened the feed to all calendars.
+     * @param array|null $filters Optional filters: 'search' (matches Title and
+     *                            Content), 'eventType' ('one-time'|'recurring'),
+     *                            'allDay' ('1'|'0'; '' and null mean no filter)
      * @return ArrayList
      */
     public function getEventsFeed(
@@ -300,8 +303,17 @@ class Calendar extends \Page
         $categories = null,
         $fromDate = null,
         $toDate = null,
-        ?bool $allCalendars = null
+        ?bool $allCalendars = null,
+        ?array $filters = null
     ): ArrayList {
+        // Normalise the optional filters. 'eventType' selects a branch
+        // (one-time vs recurring); 'search' and 'allDay' are predicates.
+        // allDay arrives as the string '1'/'0' - '' and null mean "no filter",
+        // and '0' (Timed Events) is a real filter, hence the strict checks.
+        $search = trim((string) ($filters['search'] ?? ''));
+        $eventType = $filters['eventType'] ?? '';
+        $allDay = $filters['allDay'] ?? null;
+        $allDay = ($allDay === null || $allDay === '') ? null : (bool) $allDay;
         // Parse dates - date filtering is only applied if date parameters are provided
         $fromDate = $fromDate ? Carbon::parse($fromDate)->startOfDay() : null;
         $toDate = $toDate ? Carbon::parse($toDate)->endOfDay() : null;
@@ -316,10 +328,20 @@ class Calendar extends \Page
 
         // ------------------------------------------------------------------
         // Non-recurring events: filter, sort AND limit entirely in SQL.
+        //
+        // eventType selects a BRANCH rather than post-filtering the merged
+        // list: a PHP filter after the SQL LIMIT would break the over-fetch
+        // proof and return fewer than $limit rows.
         // ------------------------------------------------------------------
         $regularEvents = EventPage::get()
             ->filter('Recursion', 'NONE')
             ->exclude('StartDate', null);
+
+        if ($eventType === 'recurring') {
+            // Empty result set with a well-defined shape; no query is issued
+            // for an unfetched DataList.
+            $regularEvents = $regularEvents->filter('ID', 0);
+        }
 
         if (!$allCalendars) {
             $regularEvents = $regularEvents->filter('ParentID', $this->ID);
@@ -329,6 +351,21 @@ class Calendar extends \Page
             // DataQuery is distinct-by-default, so the many_many join cannot
             // duplicate rows.
             $regularEvents = $regularEvents->filter('Categories.ID', $categoryIDs);
+        }
+
+        // Non-recurring events have no per-occurrence overrides, so search
+        // and allDay are safe as SQL predicates here (unlike the recurring
+        // branch, where EventException can override Title/Content/AllDay
+        // per instance).
+        if ($search !== '') {
+            $regularEvents = $regularEvents->filterAny([
+                'Title:PartialMatch' => $search,
+                'Content:PartialMatch' => $search,
+            ]);
+        }
+
+        if ($allDay !== null) {
+            $regularEvents = $regularEvents->filter('AllDay', $allDay);
         }
 
         if ($fromDate) {
@@ -376,6 +413,10 @@ class Calendar extends \Page
                 'RecursionEndDate' => null,
                 'RecursionEndDate:GreaterThanOrEqual' => $windowStart->format('Y-m-d'),
             ]);
+
+        if ($eventType === 'one-time') {
+            $recurringEvents = $recurringEvents->filter('ID', 0);
+        }
 
         if (!$allCalendars) {
             $recurringEvents = $recurringEvents->filter('ParentID', $this->ID);
@@ -442,6 +483,24 @@ class Calendar extends \Page
                         if ($moved->lt($windowStart) || $moved->gt($windowEnd)) {
                             continue;
                         }
+                    }
+                }
+
+                // search/allDay apply per-occurrence here, NOT as SQL on the
+                // parent event: EventException can override Title, Content and
+                // AllDay for individual instances, so a parent-level predicate
+                // would wrongly include/exclude overridden occurrences. The
+                // values below are already exception-resolved by
+                // EventInstance::__get(), and the candidate set is window-
+                // bounded, so this loop adds no queries.
+                if ($allDay !== null && (bool) $occurrence->AllDay !== $allDay) {
+                    continue;
+                }
+
+                if ($search !== '') {
+                    $haystack = (string) $occurrence->Title . ' ' . (string) $occurrence->Content;
+                    if (mb_stripos($haystack, $search) === false) {
+                        continue;
                     }
                 }
 

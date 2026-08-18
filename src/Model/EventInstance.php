@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Model;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Page\EventPage;
+use SilverStripe\Control\Director;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\View\ViewableData;
@@ -302,7 +303,12 @@ class EventInstance extends ViewableData
      */
     public function AbsoluteLink($action = null): string
     {
-        return $this->originalEvent->AbsoluteLink($this->Link($action));
+        // Link() already returns the full relative URL (including the ?instance
+        // query string). Passing it through SiteTree::AbsoluteLink() as $action
+        // appended it to the page path a second time, producing
+        // /calendar/event/calendar/event?instance=... - a 404 for every
+        // recurring instance in the JSON and ICS feeds.
+        return Director::absoluteURL($this->Link($action));
     }
 
     /**
@@ -315,10 +321,12 @@ class EventInstance extends ViewableData
         return [
             'ID' => $this->ID,
             'Title' => $this->Title,
-            'StartDate' => $this->StartDate,
-            'StartTime' => $this->StartTime,
-            'EndDate' => $this->EndDate,
-            'EndTime' => $this->EndTime,
+            // Raw scalar values: __get wraps dates/times in DBField objects,
+            // which would otherwise be serialized into the instance cache.
+            'StartDate' => $this->rawFieldValue('StartDate'),
+            'StartTime' => $this->rawFieldValue('StartTime'),
+            'EndDate' => $this->rawFieldValue('EndDate'),
+            'EndTime' => $this->rawFieldValue('EndTime'),
             'AllDay' => $this->AllDay,
             'URLSegment' => $this->URLSegment,
             'Link' => $this->Link(),
@@ -330,33 +338,72 @@ class EventInstance extends ViewableData
     }
 
     /**
+     * The raw (unwrapped) value for a field, honouring exception overrides.
+     *
+     * @param string $property
+     * @return mixed
+     */
+    private function rawFieldValue(string $property)
+    {
+        if ($this->exception && $this->exception->hasOverride($property)) {
+            return $this->exception->getOverride($property);
+        }
+
+        if (array_key_exists($property, $this->virtualProperties)) {
+            return $this->virtualProperties[$property];
+        }
+
+        return $this->originalEvent->getField($property);
+    }
+
+    /**
      * Create EventInstance from array data (for cache deserialization)
      *
      * @param array $data
+     * @param EventPage|null $originalEvent The already-loaded owner. Without it a
+     *                                      cache HIT costs one byID() query per
+     *                                      instance - as expensive as a miss.
+     * @param array<string,EventException>|null $exceptions Prefetched map keyed by Y-m-d
      * @return EventInstance|null
      */
-    public static function fromArray(array $data): ?EventInstance
-    {
+    public static function fromArray(
+        array $data,
+        ?EventPage $originalEvent = null,
+        ?array $exceptions = null
+    ): ?EventInstance {
         if (!isset($data['OriginalEventID']) || !isset($data['StartDate'])) {
             return null;
         }
 
-        // Get the original event
-        $originalEvent = EventPage::get()->byID($data['OriginalEventID']);
+        // Entries written before toArray() stored raw scalars may hold DBField objects.
+        $startDate = $data['StartDate'] instanceof DBField
+            ? $data['StartDate']->getValue()
+            : $data['StartDate'];
+
+        if (!$startDate) {
+            return null;
+        }
+
+        if ($originalEvent === null || (int) $originalEvent->ID !== (int) $data['OriginalEventID']) {
+            $originalEvent = EventPage::get()->byID($data['OriginalEventID']);
+        }
+
         if (!$originalEvent) {
             return null;
         }
 
         // Parse the instance date
-        $instanceDate = Carbon::parse($data['StartDate']);
+        $instanceDate = Carbon::parse($startDate);
 
         // Get any exception for this date (if modified/deleted)
         $exception = null;
-        if ($data['IsModified'] || $data['IsDeleted']) {
-            $exception = EventException::get()->filter([
-                'OriginalEventID' => $originalEvent->ID,
-                'InstanceDate' => $data['StartDate']
-            ])->first();
+        if (!empty($data['IsModified']) || !empty($data['IsDeleted'])) {
+            $exception = $exceptions !== null
+                ? ($exceptions[$instanceDate->format('Y-m-d')] ?? null)
+                : EventException::get()->filter([
+                    'OriginalEventID' => $originalEvent->ID,
+                    'InstanceDate' => $instanceDate->format('Y-m-d'),
+                ])->first();
         }
 
         return new self($originalEvent, $instanceDate, $exception);

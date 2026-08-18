@@ -444,10 +444,12 @@ class CalendarController extends \PageController
             return Carbon::createFromFormat('!Y-m-d', $value);
         }
 
-        if (!preg_match(
-            '/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/',
-            $value
-        )) {
+        if (
+            !preg_match(
+                '/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/',
+                $value
+            )
+        ) {
             return null;
         }
 

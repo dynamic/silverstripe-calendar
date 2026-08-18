@@ -179,7 +179,7 @@ class CalendarModule {
 
       // Fetch events from current page with AJAX
         const currentUrl = new URL(window.location);
-        const eventsUrl = `${currentUrl.pathname} ? ${params.toString()}`;
+        const eventsUrl = `${currentUrl.pathname}?${params.toString()}`;
 
         fetch(eventsUrl, {
             headers: {
@@ -210,7 +210,7 @@ class CalendarModule {
         params.append('end', info.end.toISOString().split('T')[0]);
         params.append('format', 'json');
 
-        const fullEventsUrl = `${eventsUrl} ? ${params.toString()}`;
+        const fullEventsUrl = `${eventsUrl}?${params.toString()}`;
 
         fetch(fullEventsUrl, {
             headers: {

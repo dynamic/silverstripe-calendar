@@ -197,7 +197,7 @@ export class FullCalendarView {
 
       // Use current page URL as base
         const baseUrl = window.location.pathname;
-        return `${baseUrl}events ? ${params.toString()}`;
+        return `${baseUrl}events?${params.toString()}`;
     }
 
     transformEvents(events)

@@ -308,14 +308,7 @@ class CalendarController extends \PageController
     protected function getFromDate(HTTPRequest $request): ?Carbon
     {
         // Support both 'from' (legacy) and 'start' (FullCalendar) parameter names
-        $from = $request->getVar('from') ?? $request->getVar('start');
-
-        if ($from && Carbon::hasFormat($from, 'Y-m-d')) {
-            return Carbon::createFromFormat('Y-m-d', $from);
-        }
-
-        // Return null when no date filter is applied - this will show all events
-        return null;
+        return $this->parseRequestDate($request->getVar('from') ?? $request->getVar('start'));
     }
 
     /**
@@ -327,14 +320,52 @@ class CalendarController extends \PageController
     protected function getToDate(HTTPRequest $request): ?Carbon
     {
         // Support both 'to' (legacy) and 'end' (FullCalendar) parameter names
-        $to = $request->getVar('to') ?? $request->getVar('end');
+        return $this->parseRequestDate($request->getVar('to') ?? $request->getVar('end'));
+    }
 
-        if ($to && Carbon::hasFormat($to, 'Y-m-d')) {
-            return Carbon::createFromFormat('Y-m-d', $to);
+    /**
+     * Parse a date request parameter into a Carbon instance.
+     *
+     * FullCalendar sends info.startStr / info.endStr, which are plain Y-m-d in
+     * dayGridMonth but full ISO-8601 with a UTC offset in timeGrid and list
+     * views (e.g. 2026-08-01T00:00:00-05:00). The old Carbon::hasFormat(...,
+     * 'Y-m-d') gate rejected the latter and returned null - which disabled
+     * date filtering entirely and expanded the whole event corpus on every
+     * week/day/list request.
+     *
+     * Deliberately restricted to ISO-like shapes: bare Carbon::parse() also
+     * accepts relative strings ("yesterday", "+1 week"), which would hand
+     * visitors control of the cache key.
+     *
+     * @param mixed $value
+     * @return Carbon|null
+     */
+    protected function parseRequestDate($value): ?Carbon
+    {
+        if (!$value || !is_string($value) || strlen($value) > 40) {
+            return null;
         }
 
-        // Return null when no date filter is applied
-        return null;
+        // Fast path: '!' zeroes unspecified fields instead of inheriting the
+        // current wall-clock time.
+        if (Carbon::hasFormat($value, 'Y-m-d')) {
+            return Carbon::createFromFormat('!Y-m-d', $value);
+        }
+
+        if (!preg_match(
+            '/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/',
+            $value
+        )) {
+            return null;
+        }
+
+        try {
+            // The string carries its own offset, so format('Y-m-d') yields the
+            // browser-local calendar date the grid is drawing.
+            return Carbon::parse($value)->startOfDay();
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**
@@ -652,20 +683,28 @@ class CalendarController extends \PageController
      */
     private function generateEventsCacheKey(HTTPRequest $request): string
     {
-        // Symfony cache keys cannot contain: {}()/\@:
-        // Hash timestamps to avoid special characters
-        // Support both start/end (FullCalendar) and from/to parameter names
-        $startParam = $request->getVar('start') ?? $request->getVar('from');
-        $start = $startParam ? md5($startParam) : 'no-start';
-        $endParam = $request->getVar('end') ?? $request->getVar('to');
-        $end = $endParam ? md5($endParam) : 'no-end';
-        $cats = $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats';
+        // Key on the PARSED dates, not the raw strings: 2026-08-17 and
+        // 2026-08-17T00:00:00-05:00 describe the same window and must share a
+        // cache entry, otherwise every calendar navigation is a fresh miss.
+        // (Symfony cache keys cannot contain: {}()/\@:)
+        $from = $this->getFromDate($request);
+        $to = $this->getToDate($request);
+
+        $cats = $request->getVar('categories');
+        if ($cats) {
+            $cats = is_array($cats) ? $cats : [$cats];
+            $cats = array_map('intval', $cats);
+            sort($cats);
+            $cats = md5(implode('-', $cats));
+        } else {
+            $cats = 'no-cats';
+        }
 
         $parts = [
             'calendar_json',
             $this->calendar->ID,
-            $start,
-            $end,
+            $from ? $from->format('Ymd') : 'no-start',
+            $to ? $to->format('Ymd') : 'no-end',
             $cats
         ];
 

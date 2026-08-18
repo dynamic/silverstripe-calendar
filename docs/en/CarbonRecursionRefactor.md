@@ -15,7 +15,7 @@ The Carbon-based recursion refactor has been **successfully completed** and is f
 - **✅ Developer Experience:** Clean, unified API with comprehensive test coverage (39 passing tests)
 - **✅ Frontend Integration:** Playwright-verified UI showing proper event display and filtering
 
-**Live Demo:** https://bethlehem.ddev.site/new-calendar - Both recurring "Weekly Team Meeting" and regular "Party!" events displaying correctly with dynamic date filtering.
+**Verified locally:** Both recurring "Weekly Team Meeting" and regular "Party!" events displaying correctly with dynamic date filtering on a local development site.
 
 ---
 

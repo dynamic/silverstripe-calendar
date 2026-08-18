@@ -193,9 +193,9 @@ class Category extends DataObject implements PermissionProvider
     private static function getLegacyColorMap(): array
     {
         return [
-            'Navy Blue' => '#010E3B',        // Bethlehem primary navy
-            'Blue' => '#334597',             // Bethlehem secondary blue
-            'Gold' => '#E1AD3C',             // Bethlehem gold accent
+            'Navy Blue' => '#010E3B',        // Default primary navy
+            'Blue' => '#334597',             // Default secondary blue
+            'Gold' => '#E1AD3C',             // Default gold accent
             'Light Blue' => '#6FA8DC',       // Light blue accent (standardized)
             'Dark Blue' => '#1C4587',        // Dark blue accent
             'Brown' => '#71624E',            // Brown accent
@@ -260,7 +260,7 @@ class Category extends DataObject implements PermissionProvider
     public function getColorPreview(): string
     {
         if (!$this->Color) {
-            return '#334597'; // Default to Bethlehem blue if no color set
+            return '#334597'; // Default blue fallback if no color set
         }
 
         // If the color starts with #, it's already a hex value (from ColorField)
@@ -276,7 +276,7 @@ class Category extends DataObject implements PermissionProvider
 
         // Otherwise, it's a legacy color name from ColorPaletteField - map to hex values
         $colorMap = self::getLegacyColorMap();
-        return $colorMap[$this->Color] ?? '#334597'; // Fallback to Bethlehem blue
+        return $colorMap[$this->Color] ?? '#334597'; // Fallback to default blue
     }
 
     /**

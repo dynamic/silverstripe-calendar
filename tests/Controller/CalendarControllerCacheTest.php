@@ -421,8 +421,10 @@ class CalendarControllerCacheTest extends FunctionalTest
         $event->Categories()->add($category);
         $event->publishRecursive();
 
-        $this->assertEquals('MISS', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
-        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('MISS', $response->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('HIT', $response->getHeader('X-Calendar-Cache'));
 
         // Pure relation removal, no write() - only the fingerprint sees this.
         $event->Categories()->remove($category);
@@ -447,8 +449,10 @@ class CalendarControllerCacheTest extends FunctionalTest
         $event->write();
         $event->publishRecursive();
 
-        $this->assertEquals('MISS', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
-        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('MISS', $response->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('HIT', $response->getHeader('X-Calendar-Cache'));
 
         // An exception (deleted occurrence) must reach the feed cache via
         // OriginalEvent()->ParentID.
@@ -472,8 +476,10 @@ class CalendarControllerCacheTest extends FunctionalTest
         $event->write();
         $event->publishRecursive();
 
-        $this->assertEquals('MISS', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
-        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('MISS', $response->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('HIT', $response->getHeader('X-Calendar-Cache'));
 
         CalendarCacheVersion::flush();
 
@@ -485,7 +491,8 @@ class CalendarControllerCacheTest extends FunctionalTest
 
         // And caching must work again immediately after a flush (stamps are
         // re-seeded, not left absent).
-        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('HIT', $response->getHeader('X-Calendar-Cache'));
     }
 
     public function testDraftStageRequestBypassesCache()
@@ -500,8 +507,10 @@ class CalendarControllerCacheTest extends FunctionalTest
         $event->publishRecursive();
 
         // Warm the Live cache.
-        $this->assertEquals('MISS', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
-        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('MISS', $response->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('HIT', $response->getHeader('X-Calendar-Cache'));
 
         // A draft-stage request must neither serve the Live entry nor write
         // its own draft content into the shared pool.
@@ -518,6 +527,7 @@ class CalendarControllerCacheTest extends FunctionalTest
         );
 
         // The Live entry must be untouched.
-        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $response = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('HIT', $response->getHeader('X-Calendar-Cache'));
     }
 }

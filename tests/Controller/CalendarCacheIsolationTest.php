@@ -9,6 +9,7 @@ use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Dev\SapphireTest;
+use SilverStripe\Versioned\Versioned;
 
 /**
  * Guards the 2.3.0 generational invalidation (issue #132).
@@ -28,8 +29,22 @@ class CalendarCacheIsolationTest extends SapphireTest
     {
         parent::setUp();
 
+        // Fixtures exist in draft only; the feed cache is Live-stage-only by
+        // design (draft requests bypass it), so publish them and pin Live.
+        Versioned::withVersionedMode(function () {
+            Versioned::set_stage(Versioned::DRAFT);
+            foreach (Calendar::get() as $page) {
+                $page->publishSingle();
+            }
+            foreach (EventPage::get() as $page) {
+                $page->publishSingle();
+            }
+        });
+        Versioned::set_stage(Versioned::LIVE);
+
         // The DB rolls back between tests but the cache pool and the static
-        // stamp memo do not - flush so every test starts cold.
+        // stamp memo do not - flush so every test starts cold (publishing
+        // above also bumped stamps, so this must come last).
         CalendarCacheVersion::flush();
     }
 

@@ -2,9 +2,12 @@
 
 namespace Dynamic\Calendar\Cache;
 
+use Dynamic\Calendar\Page\EventPage;
 use Psr\SimpleCache\CacheInterface;
 use SilverStripe\Core\Flushable;
 use SilverStripe\Core\Injector\Injector;
+use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\DB;
 
 /**
  * Generational invalidation for the calendar JSON feed cache.
@@ -107,6 +110,36 @@ class CalendarCacheVersion implements Flushable
         self::$memo = [];
         self::stampCache()->clear();
         Injector::inst()->get(CacheInterface::class . '.calendarJSON')->clear();
+
+        // Seed durable stamps immediately: get() deliberately never writes
+        // (see below), so without seeding here a quiet site would not cache
+        // again until its next content edit.
+        self::bump(self::SCOPE_ANY);
+        self::bump(self::SCOPE_TAXONOMY);
+    }
+
+    /**
+     * A fingerprint of the EventPage<->Category join table, folded into every
+     * feed cache key. ManyManyList::add()/remove() fire no extension hooks
+     * (onAfterLink/onAfterUnlink never existed in the framework), so a pure
+     * relation mutation with no accompanying write() cannot bump a stamp -
+     * instead the key itself observes the relation state.
+     *
+     * (COUNT, MAX(ID)) is change-sensitive: IDs auto-increment, so any add
+     * raises MAX; any removal changes COUNT or removes the MAX row. One
+     * PK-indexed query per feed request, memoized.
+     */
+    public static function relationFingerprint(): string
+    {
+        // Deliberately not memoized: the whole point is observing relation
+        // state the hooks cannot see, and the cost is one PK-indexed
+        // aggregate per key computation.
+        $table = DataObject::getSchema()->tableName(EventPage::class) . '_Categories';
+        $row = DB::query(
+            "SELECT COUNT(*) AS c, COALESCE(MAX(\"ID\"), 0) AS m FROM \"{$table}\""
+        )->record();
+
+        return "r{$row['c']}x{$row['m']}";
     }
 
     private static function get(string $scope): string
@@ -115,13 +148,17 @@ class CalendarCacheVersion implements Flushable
             return self::$memo[$scope];
         }
 
-        $cache = self::stampCache();
-        $key = "calendar_version_{$scope}";
-        $stamp = $cache->get($key);
+        $stamp = self::stampCache()->get("calendar_version_{$scope}");
 
         if (!$stamp) {
+            // Do NOT persist on the read path. A reader that misses right
+            // after a flush could otherwise overwrite a concurrent writer's
+            // fresh bump and then cache a stale response under that stamp for
+            // the full TTL (TOCTOU). Instead: memoize a throwaway stamp for
+            // this request (consistent keys within the request, entries land
+            // under a never-reused key = harmless orphans), and let flush()
+            // seeding or the next bump() establish the durable stamp.
             $stamp = self::freshStamp();
-            $cache->set($key, $stamp, self::STAMP_TTL);
         }
 
         return self::$memo[$scope] = (string) $stamp;

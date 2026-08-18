@@ -15,6 +15,7 @@ use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\DB;
 use SilverStripe\ORM\PaginatedList;
+use SilverStripe\Versioned\Versioned;
 use SilverStripe\View\ArrayData;
 use SilverStripe\Core\Injector\Injector;
 use Psr\SimpleCache\CacheInterface;
@@ -139,8 +140,15 @@ class CalendarController extends \PageController
      */
     public function events(HTTPRequest $request)
     {
+        // The cache stores Live-stage responses only. A draft-stage request
+        // (?stage=Stage, or Versioned.use_session) must neither read a Live
+        // entry nor poison the pool with draft content that would previously
+        // have been wiped by the next save but now survives the full TTL.
+        $cacheable = $this->isAjaxRequest($request)
+            && Versioned::get_stage() === Versioned::LIVE;
+
         // Check cache for JSON responses first
-        if ($this->isAjaxRequest($request)) {
+        if ($cacheable) {
             $cacheKey = $this->generateEventsCacheKey($request);
             $cache = $this->getEventsCache();
             $cachedJson = $cache->get($cacheKey);
@@ -177,6 +185,7 @@ class CalendarController extends \PageController
 
         // Check if this is an AJAX request for JSON data
         if ($this->isAjaxRequest($request)) {
+            $writeToCache = $cacheable;
             // Prefetch the category map (two queries for the whole response)
             // and resolve each parent EventPage's absolute link once - the
             // loop previously issued ~2 queries per row via Categories() and
@@ -247,14 +256,16 @@ class CalendarController extends \PageController
 
             $json = json_encode($eventsData);
 
-            // Cache the JSON response
-            $cacheKey = $this->generateEventsCacheKey($request);
-            $cache = $this->getEventsCache();
-            $cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'));
+            // Cache the JSON response - Live stage only (see $cacheable above)
+            if ($writeToCache) {
+                $cacheKey = $this->generateEventsCacheKey($request);
+                $cache = $this->getEventsCache();
+                $cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'));
+            }
 
             $response = $this->getResponse();
             $response->addHeader('Content-Type', 'application/json');
-            $response->addHeader('X-Calendar-Cache', 'MISS');
+            $response->addHeader('X-Calendar-Cache', $writeToCache ? 'MISS' : 'BYPASS');
             return $response->setBody($json);
         }
 
@@ -806,6 +817,9 @@ class CalendarController extends \PageController
             // Generational invalidation: writes bump these stamps instead of
             // wiping the pool, so entries die by becoming unreachable.
             CalendarCacheVersion::keyFragment($crossCalendar ? null : (int) $this->calendar->ID),
+            // Relation mutations fire no hooks, so the key observes the join
+            // table directly (one memoized PK-indexed query per request).
+            CalendarCacheVersion::relationFingerprint(),
             $from ? $from->format('Ymd') : 'no-start',
             $to ? $to->format('Ymd') : 'no-end',
             $cats

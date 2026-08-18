@@ -820,32 +820,4 @@ class EventPage extends \Page
 
         $this->bumpCalendarCacheVersion((int) $this->ParentID);
     }
-
-    /**
-     * Invalidate cached feeds when a category is added to this event
-     * This is triggered when the many-to-many relationship changes
-     *
-     * @param DataObject $category
-     * @param string $relationName
-     */
-    public function onAfterLink(DataObject $category, string $relationName): void
-    {
-        if ($relationName === 'Categories') {
-            $this->bumpCalendarCacheVersion((int) $this->ParentID);
-        }
-    }
-
-    /**
-     * Invalidate cached feeds when a category is removed from this event
-     * This is triggered when the many-to-many relationship changes
-     *
-     * @param DataObject $category
-     * @param string $relationName
-     */
-    public function onAfterUnlink(DataObject $category, string $relationName): void
-    {
-        if ($relationName === 'Categories') {
-            $this->bumpCalendarCacheVersion((int) $this->ParentID);
-        }
-    }
 }

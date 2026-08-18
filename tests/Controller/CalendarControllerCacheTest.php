@@ -3,13 +3,16 @@
 namespace Dynamic\Calendar\Tests\Controller;
 
 use Carbon\Carbon;
+use Dynamic\Calendar\Cache\CalendarCacheVersion;
 use Dynamic\Calendar\Controller\CalendarController;
+use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\FunctionalTest;
+use SilverStripe\Versioned\Versioned;
 
 /**
  * Calendar Controller Cache Test
@@ -37,6 +40,11 @@ class CalendarControllerCacheTest extends FunctionalTest
     protected function setUp(): void
     {
         parent::setUp();
+
+        // The feed cache is Live-stage-only by design (draft requests bypass
+        // it), and real front-end traffic reads Live. SapphireTest defaults to
+        // draft, so pin Live for these tests.
+        Versioned::set_stage(Versioned::LIVE);
 
         $this->calendar = Calendar::create([
             'Title' => 'Cache Test Calendar',
@@ -358,12 +366,11 @@ class CalendarControllerCacheTest extends FunctionalTest
         $response2 = $this->controller->events($request2);
         $this->assertEquals('HIT', $response2->getHeader('X-Calendar-Cache'));
 
-        // Add category to event (many-to-many relationship change)
-        // Note: add() should trigger onAfterLink automatically
+        // Add category to event WITHOUT a trailing write(). ManyManyList::add()
+        // fires no extension hooks, so no stamp bump happens here - the MISS
+        // below is produced by the relation fingerprint in the cache key
+        // observing the join-table change directly.
         $event->Categories()->add($category);
-
-        // Force a write to ensure the relationship is saved and hooks are triggered
-        $event->write();
 
         // Get event feed again (should be cache MISS due to invalidation)
         $request3 = $this->createAjaxRequest();
@@ -397,5 +404,120 @@ class CalendarControllerCacheTest extends FunctionalTest
         $request->setUrl('/events?start=' . $start . '&end=' . $end);
 
         return $request;
+    }
+
+    public function testRelationRemovalWithoutWriteInvalidatesCache()
+    {
+        $category = Category::create(['Title' => 'Removal Cat ' . uniqid()]);
+        $category->write();
+
+        $event = EventPage::create([
+            'Title' => 'Removal Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->Categories()->add($category);
+        $event->publishRecursive();
+
+        $this->assertEquals('MISS', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+
+        // Pure relation removal, no write() - only the fingerprint sees this.
+        $event->Categories()->remove($category);
+
+        $this->assertEquals(
+            'MISS',
+            $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'),
+            'A relation removal without an accompanying write() must invalidate the feed'
+        );
+    }
+
+    public function testEventExceptionWriteInvalidatesCache()
+    {
+        $event = EventPage::create([
+            'Title' => 'Exception Cache Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'RecursionEndDate' => Carbon::now()->addMonths(2)->format('Y-m-d'),
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $this->assertEquals('MISS', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+
+        // An exception (deleted occurrence) must reach the feed cache via
+        // OriginalEvent()->ParentID.
+        $event->createException(Carbon::now()->addWeek()->format('Y-m-d'), 'DELETED');
+
+        $this->assertEquals(
+            'MISS',
+            $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'),
+            'An EventException write must invalidate the owning calendar\'s cached feeds'
+        );
+    }
+
+    public function testFlushClearsWarmCache()
+    {
+        $event = EventPage::create([
+            'Title' => 'Flush Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $this->assertEquals('MISS', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+
+        CalendarCacheVersion::flush();
+
+        $this->assertEquals(
+            'MISS',
+            $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'),
+            'flush() must invalidate warm feed caches'
+        );
+
+        // And caching must work again immediately after a flush (stamps are
+        // re-seeded, not left absent).
+        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+    }
+
+    public function testDraftStageRequestBypassesCache()
+    {
+        $event = EventPage::create([
+            'Title' => 'Stage Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        // Warm the Live cache.
+        $this->assertEquals('MISS', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
+
+        // A draft-stage request must neither serve the Live entry nor write
+        // its own draft content into the shared pool.
+        $bypass = Versioned::withVersionedMode(function () {
+            Versioned::set_stage(Versioned::DRAFT);
+
+            return $this->controller->events($this->createAjaxRequest());
+        });
+
+        $this->assertEquals(
+            'BYPASS',
+            $bypass->getHeader('X-Calendar-Cache'),
+            'Draft-stage requests must bypass the feed cache entirely'
+        );
+
+        // The Live entry must be untouched.
+        $this->assertEquals('HIT', $this->controller->events($this->createAjaxRequest())->getHeader('X-Calendar-Cache'));
     }
 }

@@ -10,6 +10,8 @@ use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Form\CalendarFilterForm;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\ArrayList;
+use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\DB;
 use SilverStripe\ORM\PaginatedList;
 use SilverStripe\View\ArrayData;
 use SilverStripe\Core\Injector\Injector;
@@ -56,6 +58,19 @@ class CalendarController extends \PageController
      * @var int
      */
     private static int $json_cache_ttl = 1800;
+
+    /**
+     * Whether index() should build the full event list, pagination and counts.
+     *
+     * The module's own Calendar.ss uses none of them (FullCalendar fetches
+     * events from the /events endpoint), so this defaults to false. Enable it
+     * if a project template renders $Events, $RecurringEventsCount,
+     * $OneTimeEventsCount or $AvailableCategories.
+     *
+     * @config
+     * @var bool
+     */
+    private static bool $index_provides_event_list = false;
 
     /**
      * @var int
@@ -161,6 +176,12 @@ class CalendarController extends \PageController
 
         // Check if this is an AJAX request for JSON data
         if ($this->isAjaxRequest($request)) {
+            // Prefetch the category map (two queries for the whole response)
+            // and resolve each parent EventPage's absolute link once - the
+            // loop previously issued ~2 queries per row via Categories() and
+            // AbsoluteLink()'s Parent() walk.
+            $categoriesByEvent = $this->prefetchEventCategories($events);
+
             // Transform events for FullCalendar format
             $eventsData = [];
             foreach ($events as $event) {
@@ -192,20 +213,15 @@ class CalendarController extends \PageController
                 // Add category information with colors
                 $categoryColor = null;
 
-                // Handle both EventPage and EventInstance objects
-                $categories = null;
-                if ($event instanceof EventInstance) {
-                    // For EventInstance, get categories from the original event
-                    if ($event->originalEvent && $event->originalEvent->exists()) {
-                        $categories = $event->originalEvent->Categories();
-                    }
-                } else {
-                    // For regular EventPage objects
-                    $categories = $event->Categories();
-                }
+                // Handle both EventPage and EventInstance objects - instances
+                // resolve through their original event's ID.
+                $ownerID = $event instanceof EventInstance
+                    ? (int) $event->getOriginalEvent()->ID
+                    : (int) $event->ID;
+                $eventCategories = $categoriesByEvent[$ownerID] ?? [];
 
-                if ($categories && $categories->exists()) {
-                    foreach ($categories as $category) {
+                if ($eventCategories) {
+                    foreach ($eventCategories as $category) {
                         $eventData['extendedProps']['categories'][] = [
                             'ID' => $category->ID,
                             'Title' => $category->Title,
@@ -249,6 +265,70 @@ class CalendarController extends \PageController
     }
 
     /**
+     * Prefetch every event's categories in two queries.
+     *
+     * The JSON transform previously called Categories() per row - one
+     * many-many query per event, repeated for every occurrence of the same
+     * recurring event. This resolves the join table once and hydrates each
+     * Category once, keyed by owning EventPage ID.
+     *
+     * @param iterable $events Mixed EventPage|EventInstance list
+     * @return array<int,array<int,Category>>
+     */
+    protected function prefetchEventCategories(iterable $events): array
+    {
+        $eventIDs = [];
+        foreach ($events as $event) {
+            $eventIDs[] = $event instanceof EventInstance
+                ? (int) $event->getOriginalEvent()->ID
+                : (int) $event->ID;
+        }
+        $eventIDs = array_values(array_unique(array_filter($eventIDs)));
+
+        if (!$eventIDs) {
+            return [];
+        }
+
+        $joinTable = DataObject::getSchema()->tableName(EventPage::class) . '_Categories';
+        $placeholders = implode(',', array_fill(0, count($eventIDs), '?'));
+
+        $rows = DB::prepared_query(
+            "SELECT \"EventPageID\", \"CategoryID\" FROM \"{$joinTable}\""
+            . " WHERE \"EventPageID\" IN ({$placeholders})"
+            . ' ORDER BY "SortOrder" ASC',
+            $eventIDs
+        );
+
+        $categoryIDsByEvent = [];
+        $allCategoryIDs = [];
+
+        foreach ($rows as $row) {
+            $categoryIDsByEvent[(int) $row['EventPageID']][] = (int) $row['CategoryID'];
+            $allCategoryIDs[(int) $row['CategoryID']] = true;
+        }
+
+        if (!$allCategoryIDs) {
+            return [];
+        }
+
+        $categoriesByID = [];
+        foreach (Category::get()->byIDs(array_keys($allCategoryIDs)) as $category) {
+            $categoriesByID[(int) $category->ID] = $category;
+        }
+
+        $map = [];
+        foreach ($categoryIDsByEvent as $eventID => $categoryIDs) {
+            foreach ($categoryIDs as $categoryID) {
+                if (isset($categoriesByID[$categoryID])) {
+                    $map[$eventID][] = $categoriesByID[$categoryID];
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * Get the calendar filter form
      *
      * @return CalendarFilterForm
@@ -269,34 +349,45 @@ class CalendarController extends \PageController
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
-        // Get category filter
-        $categoryIDs = $request->getVar('categories');
-        $categories = null;
-
-        if ($categoryIDs) {
-            if (!is_array($categoryIDs)) {
-                $categoryIDs = [$categoryIDs];
-            }
-            $categories = Category::get()->byIDs($categoryIDs);
-        }
-
-        // Use the Calendar page's getEventsFeed method with category filtering
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
-
-        // Create paginated list
-        $paginatedEvents = PaginatedList::create($events, $request);
-        $paginatedEvents->setPageLength($this->config()->get('events_per_page'));
-
-        return [
+        $data = [
             'Calendar' => $this->calendar,
-            'Events' => $paginatedEvents,
             'CurrentFromDate' => $fromDate ? $fromDate->format('Y-m-d') : null,
             'CurrentToDate' => $toDate ? $toDate->format('Y-m-d') : null,
-            'RecurringEventsCount' => $this->getRecurringEventsCount(),
-            'OneTimeEventsCount' => $this->getOneTimeEventsCount(),
-            'AvailableCategories' => $this->getAvailableCategoriesForTemplate($request),
             'ShowCategoryFilter' => $this->calendar->ShowCategoryFilter,
         ];
+
+        // The module's own Calendar.ss renders none of the event data -
+        // FullCalendar loads everything through the /events AJAX endpoint - so
+        // by default the initial page load no longer materialises the full
+        // feed just to discard it. Projects whose templates render $Events,
+        // $RecurringEventsCount, $OneTimeEventsCount or $AvailableCategories
+        // can restore them with one line of YAML:
+        //
+        //   Dynamic\Calendar\Controller\CalendarController:
+        //     index_provides_event_list: true
+        if ($this->config()->get('index_provides_event_list')) {
+            $categoryIDs = $request->getVar('categories');
+            $categories = null;
+
+            if ($categoryIDs) {
+                if (!is_array($categoryIDs)) {
+                    $categoryIDs = [$categoryIDs];
+                }
+                $categories = Category::get()->byIDs($categoryIDs);
+            }
+
+            $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+
+            $paginatedEvents = PaginatedList::create($events, $request);
+            $paginatedEvents->setPageLength($this->config()->get('events_per_page'));
+
+            $data['Events'] = $paginatedEvents;
+            $data['RecurringEventsCount'] = $this->getRecurringEventsCount();
+            $data['OneTimeEventsCount'] = $this->getOneTimeEventsCount();
+            $data['AvailableCategories'] = $this->getAvailableCategoriesForTemplate($request);
+        }
+
+        return $data;
     }
 
     /**

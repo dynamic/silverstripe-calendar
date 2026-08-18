@@ -14,9 +14,12 @@ use SilverStripe\Forms\CheckboxSetField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\HeaderField;
 use SilverStripe\Forms\NumericField;
+use SilverStripe\CMS\Model\SiteTree;
 use SilverStripe\Lumberjack\Model\Lumberjack;
+use Dynamic\Calendar\Model\EventInstance;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;
+use SilverStripe\ORM\SS_List;
 
 /**
  * Class Calendar
@@ -68,6 +71,19 @@ class Calendar extends \Page
      * @var int
      */
     private static int $default_recurring_window_years = 2;
+
+    /**
+     * When true, getEventsFeed() may return events from calendars other than
+     * this one. Default false: the feed is always scoped to this calendar
+     * unless a caller explicitly opts out via the $allCalendars argument.
+     *
+     * Before 2.2.0 any category filter silently widened the feed to every
+     * calendar on the site - both a content leak and a full-table scan.
+     *
+     * @config
+     * @var bool
+     */
+    private static bool $allow_cross_calendar_feed = false;
 
     /**
      * @var array
@@ -263,186 +279,256 @@ class Calendar extends \Page
      * Get events feed for consumption by ElementCalendar and other components
      * This method handles all the Carbon recursion logic and provides a clean API
      *
+     * Filtering, sorting and the LIMIT are pushed into SQL for non-recurring
+     * events; recurring events are bounded in SQL to the candidate set that can
+     * possibly occur inside the window before being expanded in PHP.
+     *
      * @param int|null $limit Maximum number of events to return
-     * @param ManyManyList|null $categories Categories to filter by
-     * @param Carbon|string|null $fromDate Start date for events (default: now)
-     * @param Carbon|string|null $toDate End date for events (default: 6 months from now)
+     * @param SS_List|null $categories Categories to filter by
+     * @param Carbon|string|null $fromDate Start date for events
+     * @param Carbon|string|null $toDate End date for events
+     * @param bool|null $allCalendars Include events from every calendar, not just
+     *                                this one. Defaults to the
+     *                                allow_cross_calendar_feed config value
+     *                                (false). Previously ANY category filter
+     *                                silently widened the feed to all calendars.
      * @return ArrayList
      */
-    public function getEventsFeed(?int $limit = null, $categories = null, $fromDate = null, $toDate = null): ArrayList
-    {
+    public function getEventsFeed(
+        ?int $limit = null,
+        $categories = null,
+        $fromDate = null,
+        $toDate = null,
+        ?bool $allCalendars = null
+    ): ArrayList {
         // Parse dates - date filtering is only applied if date parameters are provided
-        $fromDate = $fromDate ? Carbon::parse($fromDate) : null;
-        $toDate = $toDate ? Carbon::parse($toDate) : null;
-        $applyDateFilter = ($fromDate !== null || $toDate !== null);
+        $fromDate = $fromDate ? Carbon::parse($fromDate)->startOfDay() : null;
+        $toDate = $toDate ? Carbon::parse($toDate)->endOfDay() : null;
 
-        $allEvents = ArrayList::create();
+        $categoryIDs = ($categories && $categories->exists())
+            ? array_values(array_unique(array_map('intval', $categories->column('ID'))))
+            : [];
 
-        // If categories are provided, query all events across all calendars
-        // If no categories, use ParentID filtering for this calendar only
-        $queryAllEvents = ($categories && $categories->exists());
-
-        // Get regular (non-recurring) events
-        $regularEventsFilter = [
-            'Recursion' => 'NONE',
-        ];
-
-        // Only filter by ParentID if we're not doing category-based filtering across all calendars
-        if (!$queryAllEvents) {
-            $regularEventsFilter['ParentID'] = $this->ID;
+        if ($allCalendars === null) {
+            $allCalendars = (bool) $this->config()->get('allow_cross_calendar_feed');
         }
 
-        $regularEvents = EventPage::get()->filter($regularEventsFilter);
+        // ------------------------------------------------------------------
+        // Non-recurring events: filter, sort AND limit entirely in SQL.
+        // ------------------------------------------------------------------
+        $regularEvents = EventPage::get()
+            ->filter('Recursion', 'NONE')
+            ->exclude('StartDate', null);
 
-        // Only apply date filtering if dates were explicitly provided
-        if ($applyDateFilter) {
-            $whereClause = [];
-            if ($fromDate) {
-                $whereClause['StartDate >= ?'] = $fromDate->format('Y-m-d');
-            }
-            if ($toDate) {
-                $whereClause['StartDate <= ?'] = $toDate->format('Y-m-d');
-            }
-            if (!empty($whereClause)) {
-                $regularEvents = $regularEvents->where($whereClause);
-            }
+        if (!$allCalendars) {
+            $regularEvents = $regularEvents->filter('ParentID', $this->ID);
         }
 
-        foreach ($regularEvents as $event) {
-            $allEvents->push($event);
+        if ($categoryIDs) {
+            // DataQuery is distinct-by-default, so the many_many join cannot
+            // duplicate rows.
+            $regularEvents = $regularEvents->filter('Categories.ID', $categoryIDs);
         }
 
-        // Get recurring events and their virtual instances
-        $recurringEventsFilter = [];
-
-        // Only filter by ParentID if we're not querying all events for category filtering
-        if (!$queryAllEvents) {
-            $recurringEventsFilter['ParentID'] = $this->ID;
+        if ($fromDate) {
+            $regularEvents = $regularEvents->filter(
+                'StartDate:GreaterThanOrEqual',
+                $fromDate->format('Y-m-d')
+            );
         }
 
-        $recurringEvents = EventPage::get()
-            ->filter($recurringEventsFilter)
-            ->exclude('Recursion', 'NONE');
+        if ($toDate) {
+            $regularEvents = $regularEvents->filter(
+                'StartDate:LessThanOrEqual',
+                $toDate->format('Y-m-d')
+            );
+        }
 
-        // Retrieve the recurring window years config value once before the loop for performance
+        // This ORDER BY must stay order-isomorphic to eventFeedSortKey()
+        // restricted to EventPage rows - the LIMIT over-fetch below depends
+        // on it.
+        $regularEvents = $regularEvents->sort(['StartDate' => 'ASC', 'ID' => 'ASC']);
+
+        if ($limit && $limit > 0) {
+            // Over-fetch bound: any regular event among the first $limit of the
+            // merged feed has at most $limit - 1 predecessors overall, so at
+            // most $limit - 1 predecessors among regular events - i.e. it is
+            // within SQL's first $limit rows. Fetching more is waste; fewer is
+            // unsound.
+            $regularEvents = $regularEvents->limit($limit);
+        }
+
+        // ------------------------------------------------------------------
+        // Recurring events: bound the candidate set in SQL so only events that
+        // can possibly occur inside the window are loaded and expanded.
+        // ------------------------------------------------------------------
         $windowYears = $this->config()->get('default_recurring_window_years')
             ?? self::config()->get('default_recurring_window_years');
+        $windowStart = $fromDate ? $fromDate->copy() : Carbon::now()->startOfYear();
+        $windowEnd = $toDate ? $toDate->copy() : Carbon::now()->addYears($windowYears)->endOfYear();
+
+        $recurringEvents = EventPage::get()
+            ->filter('Recursion', ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'])
+            ->exclude('StartDate', null)
+            ->filter('StartDate:LessThanOrEqual', $windowEnd->format('Y-m-d'))
+            ->filterAny([
+                'RecursionEndDate' => null,
+                'RecursionEndDate:GreaterThanOrEqual' => $windowStart->format('Y-m-d'),
+            ]);
+
+        if (!$allCalendars) {
+            $recurringEvents = $recurringEvents->filter('ParentID', $this->ID);
+        }
+
+        if ($categoryIDs) {
+            $recurringEvents = $recurringEvents->filter('Categories.ID', $categoryIDs);
+        }
+
+        $recurringEvents = $recurringEvents->toArray();
+        $regularEvents = $regularEvents->toArray();
+
+        // ------------------------------------------------------------------
+        // Prime each event's Parent component: link generation walks Parent(),
+        // and DataObject::getComponent() memoises per instance only - without
+        // this, every distinct event in the response re-fetches its calendar
+        // (one SiteTree query per event).
+        // ------------------------------------------------------------------
+        $this->primeParentComponents(array_merge($regularEvents, $recurringEvents), $allCalendars);
+
+        // ------------------------------------------------------------------
+        // ONE query for every exception of every selected recurring event.
+        // ------------------------------------------------------------------
+        $exceptionsByEvent = [];
+        $recurringIDs = array_map(static fn ($event) => (int) $event->ID, $recurringEvents);
+
+        if ($recurringIDs) {
+            $exceptionRows = EventException::get()->filter('OriginalEventID', $recurringIDs);
+
+            foreach ($exceptionRows as $exception) {
+                $exceptionsByEvent[(int) $exception->OriginalEventID][(string) $exception->InstanceDate]
+                    = $exception;
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Expand occurrences, feeding the prefetched exception map down so the
+        // generator issues no queries of its own.
+        // ------------------------------------------------------------------
+        $occurrences = [];
 
         foreach ($recurringEvents as $event) {
-            // For recurring events, we need date ranges for occurrence generation
-            // If no dates provided, use configurable default range for recurring events
-            $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
-            $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
+            $exceptionsByDate = $exceptionsByEvent[(int) $event->ID] ?? [];
 
-            // Get occurrences within the date range using Carbon recursion with caching
-            $occurrences = $event->getCachedOccurrences($occurrenceFromDate, $occurrenceToDate);
-
-            // Get event exceptions for this event
-            $exceptions = $event->EventExceptions();
-            $exceptionsByDate = [];
-
-            foreach ($exceptions as $exception) {
-                $exceptionsByDate[$exception->InstanceDate] = $exception;
-            }
-
-            foreach ($occurrences as $occurrence) {
+            foreach ($event->getCachedOccurrences($windowStart, $windowEnd, null, $exceptionsByDate) as $occurrence) {
                 $instanceDate = $occurrence->getInstanceDate()->format('Y-m-d');
+                $exception = $exceptionsByDate[$instanceDate] ?? null;
 
-                // Check if this instance has an exception
-                if (isset($exceptionsByDate[$instanceDate])) {
-                    $exception = $exceptionsByDate[$instanceDate];
-
-                    // Skip deleted instances
-                    if ($exception->isDeleted()) {
-                        continue;
-                    }
-
-                    // Apply modifications for modified instances
-                    if ($exception->isModified()) {
-                        // Apply any modifications from the exception
-                        $modifications = $exception->getOverrides();
-                        foreach ($modifications as $property => $value) {
-                            if ($value !== null && $value !== '') {
-                                $occurrence->$property = $value;
-                            }
-                        }
-                        // Set a flag so we know this instance is modified
-                        $occurrence->IsModified = true;
-                        $occurrence->Exception = $exception;
-                    }
-                }
-
-                $allEvents->push($occurrence);
-            }
-        }
-
-        // Filter by categories if specified
-        if ($categories && $categories->exists()) {
-            $categoryIDs = $categories->column('ID');
-            $filteredEvents = ArrayList::create();
-
-            foreach ($allEvents as $event) {
-                // For virtual instances, check original event categories
-                if ($event->hasMethod('getOriginalEvent')) {
-                    $eventCategories = $event->getOriginalEvent()->Categories();
-                } else {
-                    $eventCategories = $event->Categories();
-                }
-
-                // Check if event has any of the selected categories
-                foreach ($eventCategories as $category) {
-                    if (in_array($category->ID, $categoryIDs)) {
-                        $filteredEvents->push($event);
-                        break; // Only add once even if multiple categories match
-                    }
-                }
-            }
-            $allEvents = $filteredEvents;
-        }
-
-        // Filter out events with invalid dates or dates outside the requested range
-        $dateFilteredEvents = ArrayList::create();
-        foreach ($allEvents as $event) {
-            // Skip events with null/empty StartDate
-            if (!$event->StartDate || $event->StartDate === '') {
-                continue;
-            }
-
-            // If date filtering was requested, ensure event is within range
-            if ($applyDateFilter) {
-                try {
-                    $eventDate = Carbon::parse($event->StartDate);
-
-                    // Skip events before the requested start date (compare dates only, not times)
-                    if ($fromDate && $eventDate->startOfDay()->lt($fromDate->copy()->startOfDay())) {
-                        continue;
-                    }
-
-                    // Skip events after the requested end date (compare dates only, not times)
-                    if ($toDate && $eventDate->startOfDay()->gt($toDate->copy()->startOfDay())) {
-                        continue;
-                    }
-                } catch (\Exception $e) {
-                    // Skip events with unparseable dates
+                // A stale instance-cache entry can still contain an occurrence
+                // whose exception was created after the entry was written.
+                if ($exception && $exception->isDeleted()) {
                     continue;
                 }
+
+                if ($exception && $exception->isModified()) {
+                    // EventInstance::__get() resolves field overrides from the
+                    // exception itself; only the flags need setting here.
+                    $occurrence->IsModified = true;
+                    $occurrence->Exception = $exception;
+
+                    // A modification can move an occurrence outside the window.
+                    if ($exception->hasOverride('StartDate')) {
+                        $moved = Carbon::parse((string) $occurrence->StartDate);
+                        if ($moved->lt($windowStart) || $moved->gt($windowEnd)) {
+                            continue;
+                        }
+                    }
+                }
+
+                $occurrences[] = $occurrence;
             }
-
-            $dateFilteredEvents->push($event);
         }
-        $allEvents = $dateFilteredEvents;
 
-        // Sort events by start date
-        $allEvents = $allEvents->sort('StartDate', 'ASC');
+        // ------------------------------------------------------------------
+        // Merge, sort with a total order, then apply the final limit.
+        // ------------------------------------------------------------------
+        $merged = array_merge($regularEvents, $occurrences);
 
-        // Apply limit if specified
+        usort($merged, fn ($a, $b) => $this->eventFeedSortKey($a) <=> $this->eventFeedSortKey($b));
+
         if ($limit && $limit > 0) {
-            $allEvents = $allEvents->limit($limit);
+            $merged = array_slice($merged, 0, $limit);
         }
+
+        $allEvents = ArrayList::create($merged);
 
         $this->extend('updateEventsFeed', $allEvents);
 
         return $allEvents;
+    }
+
+    /**
+     * Prime the Parent component on a set of events so later Link() calls do
+     * not each re-query the same calendar page.
+     *
+     * @param EventPage[] $events
+     * @param bool $allCalendars
+     */
+    protected function primeParentComponents(array $events, bool $allCalendars): void
+    {
+        if (!$events) {
+            return;
+        }
+
+        if (!$allCalendars) {
+            // Single-calendar scope: every selected event's parent is $this.
+            foreach ($events as $event) {
+                if ((int) $event->ParentID === (int) $this->ID) {
+                    $event->setComponent('Parent', $this);
+                }
+            }
+
+            return;
+        }
+
+        $parentIDs = array_values(array_unique(array_map(
+            static fn ($event) => (int) $event->ParentID,
+            $events
+        )));
+
+        $parents = [];
+        foreach (SiteTree::get()->byIDs($parentIDs) as $parent) {
+            $parents[(int) $parent->ID] = $parent;
+        }
+
+        foreach ($events as $event) {
+            if (isset($parents[(int) $event->ParentID])) {
+                $event->setComponent('Parent', $parents[(int) $event->ParentID]);
+            }
+        }
+    }
+
+    /**
+     * Total order over the merged feed.
+     *
+     * Must agree with the SQL ORDER BY used for the non-recurring branch when
+     * restricted to EventPage rows, otherwise the SQL LIMIT over-fetch in
+     * getEventsFeed() is unsound. Arrays compare element-wise, which avoids
+     * string-key padding pitfalls.
+     *
+     * @param EventPage|EventInstance $event
+     * @return array
+     */
+    protected function eventFeedSortKey($event): array
+    {
+        if ($event instanceof EventInstance) {
+            return [
+                (string) $event->getInstanceDate()->format('Y-m-d'),
+                1,
+                (int) $event->getOriginalEvent()->ID,
+            ];
+        }
+
+        return [(string) $event->StartDate, 0, (int) $event->ID];
     }
 
     /**

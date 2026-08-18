@@ -178,6 +178,27 @@ class EventPage extends \Page
     private static string $table_name = 'EventPage';
 
     /**
+     * StartDate already gets a single-column index automatically (it is the
+     * $default_sort column) and ParentID is indexed by core. These serve the
+     * feed's two hot predicates. NOTE: the composite must NOT be keyed
+     * 'StartDate' - custom indexes named after a sort column silently replace
+     * the auto-generated sort index instead of adding to it.
+     *
+     * @var array
+     */
+    private static array $indexes = [
+        // Recursion = 'NONE' AND StartDate BETWEEN ? AND ? ORDER BY StartDate
+        // (equality then range -> index-ordered scan, no filesort), and the
+        // recurring branch's Recursion IN (...) AND StartDate <= ? seeks.
+        'RecursionStartDate' => [
+            'type' => 'index',
+            'columns' => ['Recursion', 'StartDate'],
+        ],
+        // Recurring branch tail: RecursionEndDate IS NULL OR >= ?
+        'RecursionEndDate' => true,
+    ];
+
+    /**
      * @var string
      */
     private static string $default_sort = 'StartDate';

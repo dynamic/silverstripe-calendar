@@ -20,6 +20,7 @@ use Dynamic\Calendar\Model\EventInstance;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;
 use SilverStripe\ORM\SS_List;
+use SilverStripe\Versioned\Versioned;
 
 /**
  * Class Calendar
@@ -464,6 +465,42 @@ class Calendar extends \Page
         $this->extend('updateEventsFeed', $allEvents);
 
         return $allEvents;
+    }
+
+    /**
+     * Categories actually used by this calendar's events, as one DISTINCT query.
+     *
+     * Replaces two independent copies of a triple-join that fetched one row per
+     * event x category and de-duplicated ~25 IDs out of thousands in PHP
+     * (CalendarController::getAvailableCategoriesForTemplate() and
+     * CalendarFilterForm::getAvailableCategories()).
+     *
+     * @return DataList<Category>
+     */
+    public function getUsedCategories(): DataList
+    {
+        $schema = EventPage::getSchema();
+        $categoryTable = $schema->tableName(Category::class);
+        $joinTable = $schema->tableName(EventPage::class) . '_Categories';
+
+        // ParentID lives on the SiteTree table, which is stage-suffixed.
+        $siteTreeTable = $schema->tableName(SiteTree::class);
+        if (Versioned::get_stage() === Versioned::LIVE) {
+            $siteTreeTable .= '_Live';
+        }
+
+        // DataList is distinct-by-default, so this is SELECT DISTINCT Category.*
+        return Category::get()
+            ->innerJoin(
+                $joinTable,
+                "\"{$categoryTable}\".\"ID\" = \"{$joinTable}\".\"CategoryID\""
+            )
+            ->innerJoin(
+                $siteTreeTable,
+                "\"{$siteTreeTable}\".\"ID\" = \"{$joinTable}\".\"EventPageID\""
+                . " AND \"{$siteTreeTable}\".\"ParentID\" = " . (int) $this->ID
+            )
+            ->sort('Title', 'ASC');
     }
 
     /**

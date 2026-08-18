@@ -309,9 +309,10 @@ class EventPage extends \Page
         $summary = DBField::create_field(DBBoolean::class, $hasRecurrence)->Nice();
 
         if ($hasRecurrence) {
-            // Count virtual instances in a reasonable timeframe
-            $count = min($this->getFullRecursionCount(), 100); // Cap display count
-            $summary .= " ({$count})";
+            // Pure string formatting - this renders once per GridField ROW, and
+            // the previous per-row occurrence count ran the full recursion
+            // generator (up to 1,000 iterations each) just to print a number.
+            $summary .= ' (' . $this->getRecurrenceDescription() . ')';
         }
 
         return $summary;

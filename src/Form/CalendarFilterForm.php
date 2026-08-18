@@ -260,22 +260,9 @@ class CalendarFilterForm extends Form
      */
     protected function getAvailableCategories()
     {
-        // Get categories that are actually used by events in this calendar
-        // Use the same approach as CalendarController to avoid relation errors
-        $categoryIDs = EventPage::get()
-            ->filter(['ParentID' => $this->calendar->ID])
-            ->leftJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"')
-            ->leftJoin('Category', '"EventPage_Categories"."CategoryID" = "Category"."ID"')
-            ->column('Category.ID');
-
-        // Remove duplicates and null values
-        $categoryIDs = array_unique(array_filter($categoryIDs));
-
-        if (empty($categoryIDs)) {
-            return Category::get()->filter('ID', 0); // Return empty DataList
-        }
-
-        return Category::get()->byIDs($categoryIDs)->sort('Title ASC');
+        // One DISTINCT query via the calendar; previously this fetched one row
+        // per event x category and de-duplicated in PHP.
+        return $this->calendar->getUsedCategories();
     }
 
     /**

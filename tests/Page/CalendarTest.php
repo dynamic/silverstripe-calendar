@@ -212,10 +212,13 @@ class CalendarTest extends SapphireTest
             $this->assertEquals($calendar->ID, $eventPage->ParentID);
         }
 
-        // Test that the DataList includes optimization joins
+        // The old "optimization" leftJoined the category tables without
+        // selecting or eager-loading anything - pure row fan-out the database
+        // then had to de-duplicate, with the per-row category N+1 untouched.
+        // Categories are now eager-loaded instead, so the base SQL must NOT
+        // fan out over the join table.
         $sql = $eventPages->sql();
-        $this->assertStringContainsString('EventPage_Categories', $sql);
-        $this->assertStringContainsString('Category', $sql);
+        $this->assertStringNotContainsString('EventPage_Categories', $sql);
     }
 
     /**
@@ -226,15 +229,23 @@ class CalendarTest extends SapphireTest
         $calendar = $this->objFromFixture(Calendar::class, 'one');
         $eventPages = $calendar->getLumberjackPagesForGridfield();
 
-        // Get the SQL query to verify joins are included
         $sql = $eventPages->sql();
-
-        // Check that Category joins are included for optimization
-        $this->assertStringContainsString('EventPage_Categories', $sql);
-        $this->assertStringContainsString('Category', $sql);
 
         // Check that proper sorting is applied
         $this->assertStringContainsString('ORDER BY', $sql);
         $this->assertStringContainsString('StartDate', $sql);
+
+        // Categories must come back without one query per row: eager loading
+        // (framework 5.1+) batches the relation.
+        if (method_exists($eventPages, 'eagerLoad')) {
+            foreach ($eventPages as $eventPage) {
+                // EagerLoadedList (not ManyManyList) proves the batch path.
+                $this->assertInstanceOf(
+                    'SilverStripe\\ORM\\EagerLoadedList',
+                    $eventPage->Categories()
+                );
+                break;
+            }
+        }
     }
 }

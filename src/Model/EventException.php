@@ -358,29 +358,33 @@ class EventException extends DataObject implements PermissionProvider
     {
         parent::onAfterWrite();
 
-        // Clear parent event's instance cache
-        if ($this->OriginalEvent()->exists()) {
-            EventInstanceCache::clearEventCache($this->OriginalEvent());
-        }
-
-        // Clear JSON cache
-        $this->clearCalendarJSONCache();
+        $this->invalidateForOriginalEvent();
     }
 
     /**
-     * Clear caches when exception is deleted
+     * Invalidate cached feeds when exception is deleted
      */
     protected function onAfterDelete()
     {
         parent::onAfterDelete();
 
-        // Clear parent event's instance cache
-        if ($this->OriginalEvent()->exists()) {
-            EventInstanceCache::clearEventCache($this->OriginalEvent());
-        }
+        $this->invalidateForOriginalEvent();
+    }
 
-        // Clear JSON cache
-        $this->clearCalendarJSONCache();
+    /**
+     * Bump the owning calendar's feed version (falling back to all calendars
+     * when the parent event is gone) and reset the event's exception memo.
+     */
+    protected function invalidateForOriginalEvent(): void
+    {
+        $event = $this->OriginalEvent();
+
+        if ($event && $event->exists()) {
+            $event->clearExceptionMap();
+            $this->bumpCalendarCacheVersion((int) $event->ParentID);
+        } else {
+            $this->bumpCalendarCacheVersion(null);
+        }
     }
 
     /**

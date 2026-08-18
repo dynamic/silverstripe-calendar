@@ -4,45 +4,19 @@ After:
   - '#calendar-config'
 ---
 
-# Carbon-based recursion system configuration
+# Carbon-based recursion system configuration.
+#
+# 2.3.0: pruned to the keys code actually reads. The removed keys
+# (recursion_system, cache_occurrences, max_occurrences_per_request,
+# enable_advanced_patterns, timezone_support, cache_instances,
+# use_instance_urls, default_date_range, max_virtual_instances,
+# auto_cleanup_days, enable_bulk_operations) were never consumed anywhere
+# and made the configuration surface look larger than it is (issue #132/#136).
 Dynamic\Calendar\Page\EventPage:
-  # Enable Carbon recursion system (vs legacy RRule)
-  recursion_system: 'carbon'
-
-  # Enable recursion functionality
+  # Enable recursion functionality (read by EventPage::eventRecurs() and CMS fields)
   recursion: true
 
-  # Performance settings
-  cache_occurrences: true
-  max_occurrences_per_request: 1000
-
-  # Advanced pattern support
-  enable_advanced_patterns: true
-
-  # Timezone support
-  timezone_support: true
-
-# Configuration for virtual instances
-Dynamic\Calendar\Model\EventInstance:
-  # Cache virtual instances for performance
-  cache_instances: true
-
-  # Instance URL handling
-  use_instance_urls: true
-
-# Calendar controller configuration
+# Events per page for the paginated index() list (read when
+# index_provides_event_list is enabled)
 Dynamic\Calendar\Controller\CalendarController:
-  # Default date range for events (in days)
-  default_date_range: 365
-
-  # Performance settings
   events_per_page: 12
-  max_virtual_instances: 500
-
-# Event exception handling
-Dynamic\Calendar\Model\EventException:
-  # Automatically clean up old exceptions
-  auto_cleanup_days: 365
-
-  # Allow bulk operations
-  enable_bulk_operations: true

@@ -1,31 +1,44 @@
 ---
 Name: calendar-enhanced-caching
 After:
-  - '#carbon-recursion'
+  - '#corecache'
 ---
 
-# Enhanced caching configuration for improved performance
-SilverStripe\Core\Cache\CacheFactory:
-  CalendarEventInstances:
-    factory: 'SilverStripe\Core\Cache\DefaultCacheFactory'
-    options:
-      namespace: 'calendar_instances'
-      defaultLifetime: 3600  # 1 hour
+# Named cache pools for the events JSON feed. Registered through the Injector -
+# the framework's canonical pattern (see silverstripe/framework _config/cache.yml).
+#
+# The previous shape of this file applied config to SilverStripe\Core\Cache\CacheFactory,
+# which is an interface and not Configurable, so nothing read it: both calendar
+# caches silently collapsed into the namespace-less TEMP_PATH/@/ pool, where a
+# clear() wiped every other namespace-less cache on the site (issue #132).
+SilverStripe\Core\Injector\Injector:
+  # Response payloads: the default factory's fastest available adapter chain.
+  Psr\SimpleCache\CacheInterface.calendarJSON:
+    factory: SilverStripe\Core\Cache\CacheFactory
+    constructor:
+      namespace: 'calendarJSON'
+      defaultLifetime: 1800
 
-  # Calendar JSON feed cache (used by CalendarController)
-  CalendarJSON:
-    factory: 'SilverStripe\Core\Cache\DefaultCacheFactory'
-    options:
-      namespace: 'calendar_json'
-      defaultLifetime: 1800  # 30 minutes (configurable per project)
+  # Version stamps are pinned to a plain FilesystemAdapter, NOT the default
+  # factory: DefaultCacheFactory picks its adapter per SAPI (APCu/PhpFiles on
+  # web workers, Filesystem under CLI), and both the APCu layer and PhpFiles'
+  # opcache backing are invisible across tiers - a stamp bumped from CLI or a
+  # queued job would never reach web workers, so cached feeds would survive
+  # their own invalidation. A shared on-disk adapter is read coherently by
+  # every tier; the (larger) response payloads stay in the fast default pool
+  # above, where entries under an old stamp simply become unreachable.
+  Dynamic\Calendar\Cache\StampCacheFactory:
+    class: SilverStripe\Core\Cache\FilesystemCacheFactory
+    constructor:
+      directory: '`TEMP_PATH`'
+  Psr\SimpleCache\CacheInterface.calendarJSONVersions:
+    factory: Dynamic\Calendar\Cache\StampCacheFactory
+    constructor:
+      namespace: 'calendarJSONVersions'
 
-# Configuration for EventPage caching behavior
+# Fields whose change invalidates recurrence-derived data (read by
+# EventPage::recursionChanged()).
 Dynamic\Calendar\Page\EventPage:
-  # Performance settings for virtual instances
-  cache_occurrences: true
-  max_occurrences_per_request: 1000
-
-  # Fields that trigger cache invalidation when changed
   recursion_changed:
     - 'StartDate'
     - 'StartTime'
@@ -35,23 +48,3 @@ Dynamic\Calendar\Page\EventPage:
     - 'Interval'
     - 'RecursionEndDate'
     - 'AllDay'
-
-# Enhanced Carbon recursion configuration
-Dynamic\Calendar\Model\EventInstance:
-  # Enable caching for virtual instances
-  cache_enabled: true
-
-  # Default cache TTL (in seconds)
-  default_cache_ttl: 3600
-
-# Calendar controller optimization
-Dynamic\Calendar\Controller\CalendarController:
-  # Use cached occurrences by default
-  use_cached_occurrences: true
-
-  # Default date range for events (in days)
-  default_date_range: 365
-
-  # Performance settings
-  events_per_page: 12
-  max_virtual_instances: 500

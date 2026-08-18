@@ -569,13 +569,12 @@ class Calendar extends \Page
     }
 
     /**
-     * Clear caches when calendar settings are modified
+     * Invalidate cached feeds when calendar settings are modified
      */
     public function onAfterWrite(): void
     {
         parent::onAfterWrite();
 
-        // Clear JSON cache when calendar settings change
-        $this->clearCalendarJSONCache();
+        $this->bumpCalendarCacheVersion((int) $this->ID);
     }
 }

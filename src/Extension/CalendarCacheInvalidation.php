@@ -2,39 +2,42 @@
 
 namespace Dynamic\Calendar\Extension;
 
-use SilverStripe\Core\Cache\CacheFactory;
-use SilverStripe\Core\Injector\Injector;
+use Dynamic\Calendar\Cache\CalendarCacheVersion;
 
 /**
  * Calendar Cache Invalidation Trait
  *
- * Provides cache invalidation functionality for calendar-related models.
- * When applied to models, it clears the CalendarController JSON cache
- * to ensure fresh data is served after changes.
+ * Invalidates cached JSON feeds by bumping the version stamps that
+ * CalendarController folds into its cache keys. One or two set() calls per
+ * bump - the previous implementation called $cache->clear() on a
+ * namespace-less pool, which unlinked every file in TEMP_PATH/@/ (including
+ * caches belonging to the framework and other modules) up to several times
+ * per event save.
  *
  * @package Dynamic\Calendar\Extension
  */
 trait CalendarCacheInvalidation
 {
     /**
-     * Clear CalendarController JSON cache
-     *
-     * This method clears the entire CalendarJSON cache namespace.
-     * We create the cache with the exact same parameters as CalendarController
-     * to ensure we're clearing the correct cache instance.
-     *
-     * @return void
+     * Invalidate the cached feeds containing this record's calendar. Pass the
+     * calendar (ParentID) when known; without it, every calendar's feeds are
+     * invalidated - correct but broader than necessary.
+     */
+    protected function bumpCalendarCacheVersion(?int $calendarID = null): void
+    {
+        if ($calendarID) {
+            CalendarCacheVersion::bumpCalendar($calendarID);
+        } else {
+            CalendarCacheVersion::bumpAllCalendars();
+        }
+    }
+
+    /**
+     * @deprecated 2.3.0 Use bumpCalendarCacheVersion() - kept so subclasses
+     * calling the old name keep working.
      */
     protected function clearCalendarJSONCache(): void
     {
-        // Get the cache factory and create cache with same parameters as CalendarController
-        $cacheFactory = Injector::inst()->get(CacheFactory::class);
-        $cache = $cacheFactory->create(
-            'CalendarJSON',
-            ['defaultLifetime' => 1800]
-        );
-
-        // Clear all items in the cache namespace
-        $cache->clear();
+        CalendarCacheVersion::bumpAllCalendars();
     }
 }

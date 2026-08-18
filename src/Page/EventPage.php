@@ -793,30 +793,36 @@ class EventPage extends \Page
     {
         parent::onAfterWrite();
 
-        // Clear caches if recursion-related fields changed
+        // Recurrence-shape changes invalidate the per-request exception memo
         if ($this->recursionChanged()) {
-            \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
+            $this->clearExceptionMap();
         }
 
-        // Clear JSON cache when event is modified
-        $this->clearCalendarJSONCache();
+        $this->bumpCalendarCacheVersion((int) $this->ParentID);
+
+        // Moving an event between calendars must invalidate the old
+        // calendar's cached feeds as well as the new one's.
+        $changed = $this->getChangedFields(true, self::CHANGE_VALUE);
+        if (isset($changed['ParentID']['before']) && $changed['ParentID']['before']) {
+            $before = (int) $changed['ParentID']['before'];
+            if ($before !== (int) $this->ParentID) {
+                $this->bumpCalendarCacheVersion($before);
+            }
+        }
     }
 
     /**
-     * Clear caches when event is deleted
+     * Invalidate cached feeds when an event is deleted
      */
     public function onAfterDelete(): void
     {
         parent::onAfterDelete();
 
-        \Dynamic\Calendar\Model\EventInstanceCache::clearEventCache($this);
-
-        // Clear JSON cache when event is deleted
-        $this->clearCalendarJSONCache();
+        $this->bumpCalendarCacheVersion((int) $this->ParentID);
     }
 
     /**
-     * Clear caches when a category is added to this event
+     * Invalidate cached feeds when a category is added to this event
      * This is triggered when the many-to-many relationship changes
      *
      * @param DataObject $category
@@ -824,14 +830,13 @@ class EventPage extends \Page
      */
     public function onAfterLink(DataObject $category, string $relationName): void
     {
-        // Clear JSON cache when categories are modified
         if ($relationName === 'Categories') {
-            $this->clearCalendarJSONCache();
+            $this->bumpCalendarCacheVersion((int) $this->ParentID);
         }
     }
 
     /**
-     * Clear caches when a category is removed from this event
+     * Invalidate cached feeds when a category is removed from this event
      * This is triggered when the many-to-many relationship changes
      *
      * @param DataObject $category
@@ -839,9 +844,8 @@ class EventPage extends \Page
      */
     public function onAfterUnlink(DataObject $category, string $relationName): void
     {
-        // Clear JSON cache when categories are modified
         if ($relationName === 'Categories') {
-            $this->clearCalendarJSONCache();
+            $this->bumpCalendarCacheVersion((int) $this->ParentID);
         }
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Model;
 
+use Dynamic\Calendar\Cache\CalendarCacheVersion;
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
@@ -327,6 +328,26 @@ class Category extends DataObject implements PermissionProvider
             $this->URLSegment = preg_replace('/-[0-9]+$/', null, $this->URLSegment) . '-' . $count;
             $count++;
         }
+    }
+
+    /**
+     * Category titles and colours are baked into cached feed responses, so a
+     * category change must invalidate every calendar's cached JSON. Before
+     * 2.3.0 this hook did not exist: a rename or recolour served stale JSON
+     * until an unrelated event save happened to wipe the cache.
+     */
+    public function onAfterWrite(): void
+    {
+        parent::onAfterWrite();
+
+        CalendarCacheVersion::bumpTaxonomy();
+    }
+
+    public function onAfterDelete(): void
+    {
+        parent::onAfterDelete();
+
+        CalendarCacheVersion::bumpTaxonomy();
     }
 
     /**

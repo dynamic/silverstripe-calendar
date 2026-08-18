@@ -7,6 +7,7 @@ use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
+use Dynamic\Calendar\Cache\CalendarCacheVersion;
 use Dynamic\Calendar\Form\CalendarFilterForm;
 use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
@@ -16,7 +17,6 @@ use SilverStripe\ORM\DB;
 use SilverStripe\ORM\PaginatedList;
 use SilverStripe\View\ArrayData;
 use SilverStripe\Core\Injector\Injector;
-use SilverStripe\Core\Cache\CacheFactory;
 use Psr\SimpleCache\CacheInterface;
 
 /**
@@ -796,9 +796,16 @@ class CalendarController extends \PageController
             $cats = 'no-cats';
         }
 
+        // Whether this response can contain other calendars' events decides
+        // which content stamp governs it.
+        $crossCalendar = (bool) $this->calendar->config()->get('allow_cross_calendar_feed');
+
         $parts = [
             'calendar_json',
             $this->calendar->ID,
+            // Generational invalidation: writes bump these stamps instead of
+            // wiping the pool, so entries die by becoming unreachable.
+            CalendarCacheVersion::keyFragment($crossCalendar ? null : (int) $this->calendar->ID),
             $from ? $from->format('Ymd') : 'no-start',
             $to ? $to->format('Ymd') : 'no-end',
             $cats
@@ -814,9 +821,10 @@ class CalendarController extends \PageController
      */
     private function getEventsCache(): CacheInterface
     {
-        return Injector::inst()->get(CacheFactory::class)->create(
-            'CalendarJSON',
-            ['defaultLifetime' => $this->config()->get('json_cache_ttl')]
-        );
+        // The named, namespaced pool registered in _config/enhanced-caching.yml.
+        // Previously this went through CacheFactory::create() with no namespace
+        // argument, landing in the shared TEMP_PATH/@/ pool (issue #132). The
+        // TTL is still applied explicitly at set() time from json_cache_ttl.
+        return Injector::inst()->get(CacheInterface::class . '.calendarJSON');
     }
 }

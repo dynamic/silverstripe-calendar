@@ -337,11 +337,8 @@ class Calendar extends \Page
             ->filter('Recursion', 'NONE')
             ->exclude('StartDate', null);
 
-        if ($eventType === 'recurring') {
-            // Empty result set with a well-defined shape; no query is issued
-            // for an unfetched DataList.
-            $regularEvents = $regularEvents->filter('ID', 0);
-        }
+        // eventType === 'recurring' skips this branch entirely at the
+        // toArray() below - no placeholder query.
 
         if (!$allCalendars) {
             $regularEvents = $regularEvents->filter('ParentID', $this->ID);
@@ -414,9 +411,8 @@ class Calendar extends \Page
                 'RecursionEndDate:GreaterThanOrEqual' => $windowStart->format('Y-m-d'),
             ]);
 
-        if ($eventType === 'one-time') {
-            $recurringEvents = $recurringEvents->filter('ID', 0);
-        }
+        // eventType === 'one-time' skips this branch entirely at the
+        // toArray() below.
 
         if (!$allCalendars) {
             $recurringEvents = $recurringEvents->filter('ParentID', $this->ID);
@@ -426,8 +422,8 @@ class Calendar extends \Page
             $recurringEvents = $recurringEvents->filter('Categories.ID', $categoryIDs);
         }
 
-        $recurringEvents = $recurringEvents->toArray();
-        $regularEvents = $regularEvents->toArray();
+        $recurringEvents = $eventType === 'one-time' ? [] : $recurringEvents->toArray();
+        $regularEvents = $eventType === 'recurring' ? [] : $regularEvents->toArray();
 
         // ------------------------------------------------------------------
         // Prime each event's Parent component: link generation walks Parent(),

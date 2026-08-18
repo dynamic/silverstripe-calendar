@@ -170,4 +170,76 @@ class CalendarFilterParamsTest extends SapphireTest
             array_map($key, $limited->toArray())
         );
     }
+
+    public function testCombinedFiltersApplyTogether(): void
+    {
+        $primary = $this->objFromFixture(Calendar::class, 'primary');
+
+        // eventType narrows to recurring; search then narrows within that
+        // branch. 'Mine Recurring' matches both; 'Mine' matches search only.
+        $events = $this->fetchEvents($primary, [
+            'eventType' => 'recurring',
+            'search' => 'Mine',
+        ]);
+        $titles = $this->titles($events);
+
+        $this->assertContains('Mine Recurring', $titles);
+        $this->assertNotContains('Mine', $titles, 'eventType=recurring must exclude one-time events even when search matches');
+    }
+
+    public function testGarbageEventTypeIsIgnored(): void
+    {
+        $primary = $this->objFromFixture(Calendar::class, 'primary');
+
+        $unfiltered = $this->titles($this->fetchEvents($primary));
+        $garbage = $this->titles($this->fetchEvents($primary, ['eventType' => 'DROP TABLE']));
+        $arrayParam = $this->titles($this->fetchEvents($primary, ['eventType' => ['recurring']]));
+
+        $this->assertSame($unfiltered, $garbage, 'Unrecognized eventType must behave as no filter');
+        $this->assertSame($unfiltered, $arrayParam, 'Array-typed eventType must behave as no filter');
+    }
+
+    public function testArrayTypedParamsDoNotError(): void
+    {
+        $primary = $this->objFromFixture(Calendar::class, 'primary');
+
+        // ?search[]=x previously hit a string cast; must not warn or filter.
+        $events = $this->fetchEvents($primary, ['search' => ['x'], 'allDay' => ['1']]);
+
+        $this->assertSame($this->titles($this->fetchEvents($primary)), $this->titles($events));
+    }
+
+    public function testSearchIsBounded(): void
+    {
+        $primary = $this->objFromFixture(Calendar::class, 'primary');
+
+        // Only the first 64 chars participate: a 64-char prefix of 'Mine'
+        // padded out still matches nothing extra, and two strings identical
+        // in their first 64 chars behave identically (cache-key safety).
+        $long = str_repeat('z', 100);
+        $eventsA = $this->fetchEvents($primary, ['search' => $long]);
+        $eventsB = $this->fetchEvents($primary, ['search' => substr($long, 0, 64) . 'different-tail']);
+
+        $this->assertSame($this->titles($eventsA), $this->titles($eventsB));
+    }
+
+    public function testIcalHonoursFilters(): void
+    {
+        $primary = $this->objFromFixture(Calendar::class, 'primary');
+        $controller = CalendarController::create($primary);
+
+        $request = new HTTPRequest('GET', 'ical', [
+            'from' => '2025-06-01',
+            'to' => '2025-07-31',
+            'eventType' => 'one-time',
+        ]);
+        $body = $controller->ical($request)->getBody();
+
+        $this->assertStringContainsString('Mine', $body);
+        $this->assertStringNotContainsString(
+            'Mine Recurring',
+            $body,
+            'ical() must honour the same filters as the JSON feed'
+        );
+    }
 }

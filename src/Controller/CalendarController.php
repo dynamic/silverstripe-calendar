@@ -435,17 +435,31 @@ class CalendarController extends \PageController
      *
      * @return array{search: string, eventType: string, allDay: string|null}
      */
+    /**
+     * Longest search string accepted. The value feeds both the SQL predicate
+     * and the cache key, so it must be bounded - an unbounded visitor-supplied
+     * value would hand visitors control of cache-pool growth (same hazard
+     * parseRequestDate() guards for dates).
+     */
+    private const SEARCH_MAX_LENGTH = 64;
+
     protected function getFilterParams(HTTPRequest $request): array
     {
-        $search = trim((string) $request->getVar('search'));
+        // Array-typed params (?search[]=x) must not reach the string casts.
+        $rawSearch = $request->getVar('search');
+        $search = is_string($rawSearch)
+            ? mb_substr(trim($rawSearch), 0, self::SEARCH_MAX_LENGTH)
+            : '';
 
-        $eventType = (string) $request->getVar('eventType');
-        if (!in_array($eventType, ['one-time', 'recurring'], true)) {
-            $eventType = '';
-        }
+        $rawType = $request->getVar('eventType');
+        $eventType = is_string($rawType) && in_array($rawType, ['one-time', 'recurring'], true)
+            ? $rawType
+            : '';
 
         $allDay = $request->getVar('allDay');
-        $allDay = ($allDay === null || $allDay === '') ? null : (string) (int) (bool) $allDay;
+        $allDay = ($allDay === null || $allDay === '' || !is_scalar($allDay))
+            ? null
+            : (string) (int) (bool) $allDay;
 
         return [
             'search' => $search,
@@ -871,7 +885,7 @@ class CalendarController extends \PageController
         $filters = $this->getFilterParams($request);
         $filterPart = ($filters['search'] === '' && $filters['eventType'] === '' && $filters['allDay'] === null)
             ? 'no-filters'
-            : md5($filters['search'] . '|' . $filters['eventType'] . '|' . ($filters['allDay'] ?? ''));
+            : md5(mb_strtolower($filters['search']) . '|' . $filters['eventType'] . '|' . ($filters['allDay'] ?? ''));
 
         $parts = [
             'calendar_json',

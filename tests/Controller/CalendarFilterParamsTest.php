@@ -184,7 +184,11 @@ class CalendarFilterParamsTest extends SapphireTest
         $titles = $this->titles($events);
 
         $this->assertContains('Mine Recurring', $titles);
-        $this->assertNotContains('Mine', $titles, 'eventType=recurring must exclude one-time events even when search matches');
+        $this->assertNotContains(
+            'Mine',
+            $titles,
+            'eventType=recurring must exclude one-time events even when search matches'
+        );
     }
 
     public function testGarbageEventTypeIsIgnored(): void

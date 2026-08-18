@@ -2,8 +2,6 @@
 
 namespace Dynamic\Calendar\Traits;
 
-use Dynamic\Calendar\Model\Category;
-use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\ORM\DataList;
 
 /**
@@ -23,15 +21,16 @@ trait EventPageOptimizations
      */
     protected function addEventPageOptimizations(DataList $list): DataList
     {
-        $schema = EventPage::getSchema();
+        // The previous implementation added two leftJoins that selected no
+        // columns and eager-loaded nothing: pure row fan-out plus a DISTINCT
+        // for the database to de-duplicate, with the category N+1 untouched.
+        // eagerLoad() (framework 5.1+) actually populates Categories() so
+        // per-row summary fields stop issuing their own queries. Guarded so
+        // the module keeps installing on framework 5.0.
+        if (method_exists($list, 'eagerLoad')) {
+            return $list->eagerLoad('Categories');
+        }
 
-        // Get dynamic table names to avoid hardcoded references
-        $eventPageTable = $schema->tableName(EventPage::class);
-        $categoryTable = $schema->tableName(Category::class);
-        $joinTable = $eventPageTable . '_Categories';
-
-        return $list
-            ->leftJoin($joinTable, "\"{$joinTable}\".\"EventPageID\" = \"{$eventPageTable}\".\"ID\"")
-            ->leftJoin($categoryTable, "\"{$categoryTable}\".\"ID\" = \"{$joinTable}\".\"CategoryID\"");
+        return $list;
     }
 }

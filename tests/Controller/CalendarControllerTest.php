@@ -7,6 +7,7 @@ use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\FunctionalTest;
 use SilverStripe\ORM\ArrayList;
 
@@ -65,15 +66,32 @@ class CalendarControllerTest extends FunctionalTest
         $request = new HTTPRequest('GET', '/');
         $result = $this->controller->index($request);
 
+        // Default (lean) shape: Calendar.ss renders none of the event data -
+        // FullCalendar loads it from /events - so index() no longer
+        // materialises the full feed just to discard it.
         $this->assertIsArray($result);
         $this->assertArrayHasKey('Calendar', $result);
-        $this->assertArrayHasKey('Events', $result);
         $this->assertArrayHasKey('CurrentFromDate', $result);
         $this->assertArrayHasKey('CurrentToDate', $result);
-        $this->assertArrayHasKey('RecurringEventsCount', $result);
-        $this->assertArrayHasKey('OneTimeEventsCount', $result);
+        $this->assertArrayNotHasKey('Events', $result);
+        $this->assertArrayNotHasKey('RecurringEventsCount', $result);
+        $this->assertArrayNotHasKey('OneTimeEventsCount', $result);
 
         $this->assertEquals($this->calendar->ID, $result['Calendar']->ID);
+    }
+
+    public function testIndexActionProvidesEventListWhenOptedIn()
+    {
+        Config::modify()->set(CalendarController::class, 'index_provides_event_list', true);
+
+        $request = new HTTPRequest('GET', '/');
+        $result = $this->controller->index($request);
+
+        // Legacy shape for project templates that render $Events etc.
+        $this->assertArrayHasKey('Events', $result);
+        $this->assertArrayHasKey('RecurringEventsCount', $result);
+        $this->assertArrayHasKey('OneTimeEventsCount', $result);
+        $this->assertArrayHasKey('AvailableCategories', $result);
         $this->assertInstanceOf('SilverStripe\ORM\PaginatedList', $result['Events']);
     }
 
@@ -149,6 +167,8 @@ class CalendarControllerTest extends FunctionalTest
      */
     public function testIndexActionWithNoEvents()
     {
+        Config::modify()->set(CalendarController::class, 'index_provides_event_list', true);
+
         $request = new HTTPRequest('GET', '/');
         $result = $this->controller->index($request);
 

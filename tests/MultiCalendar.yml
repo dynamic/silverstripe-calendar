@@ -1,0 +1,46 @@
+Dynamic\Calendar\Model\Category:
+  shared:
+    Title: 'Shared Category'
+    URLSegment: 'shared-category'
+
+Dynamic\Calendar\Page\Calendar:
+  primary:
+    Title: 'Primary Calendar'
+    URLSegment: 'primary-calendar'
+  other:
+    Title: 'Other Calendar'
+    URLSegment: 'other-calendar'
+
+Dynamic\Calendar\Page\EventPage:
+  mine:
+    Title: 'Mine'
+    URLSegment: 'mine'
+    StartDate: '2025-06-18'
+    Recursion: 'NONE'
+    Parent: =>Dynamic\Calendar\Page\Calendar.primary
+    Categories: =>Dynamic\Calendar\Model\Category.shared
+  theirs:
+    Title: 'Theirs'
+    URLSegment: 'theirs'
+    StartDate: '2025-06-19'
+    Recursion: 'NONE'
+    Parent: =>Dynamic\Calendar\Page\Calendar.other
+    Categories: =>Dynamic\Calendar\Model\Category.shared
+  mineRecurring:
+    Title: 'Mine Recurring'
+    URLSegment: 'mine-recurring'
+    StartDate: '2025-06-18'
+    Recursion: 'WEEKLY'
+    Interval: 1
+    RecursionEndDate: '2025-07-30'
+    Parent: =>Dynamic\Calendar\Page\Calendar.primary
+    Categories: =>Dynamic\Calendar\Model\Category.shared
+  theirsRecurring:
+    Title: 'Theirs Recurring'
+    URLSegment: 'theirs-recurring'
+    StartDate: '2025-06-18'
+    Recursion: 'WEEKLY'
+    Interval: 1
+    RecursionEndDate: '2025-07-30'
+    Parent: =>Dynamic\Calendar\Page\Calendar.other
+    Categories: =>Dynamic\Calendar\Model\Category.shared

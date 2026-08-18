@@ -8,8 +8,11 @@ use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Form\CalendarFilterForm;
+use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\ArrayList;
+use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\DB;
 use SilverStripe\ORM\PaginatedList;
 use SilverStripe\View\ArrayData;
 use SilverStripe\Core\Injector\Injector;
@@ -56,6 +59,19 @@ class CalendarController extends \PageController
      * @var int
      */
     private static int $json_cache_ttl = 1800;
+
+    /**
+     * Whether index() should build the full event list, pagination and counts.
+     *
+     * The module's own Calendar.ss uses none of them (FullCalendar fetches
+     * events from the /events endpoint), so this defaults to false. Enable it
+     * if a project template renders $Events, $RecurringEventsCount,
+     * $OneTimeEventsCount or $AvailableCategories.
+     *
+     * @config
+     * @var bool
+     */
+    private static bool $index_provides_event_list = false;
 
     /**
      * @var int
@@ -161,6 +177,12 @@ class CalendarController extends \PageController
 
         // Check if this is an AJAX request for JSON data
         if ($this->isAjaxRequest($request)) {
+            // Prefetch the category map (two queries for the whole response)
+            // and resolve each parent EventPage's absolute link once - the
+            // loop previously issued ~2 queries per row via Categories() and
+            // AbsoluteLink()'s Parent() walk.
+            $categoriesByEvent = $this->prefetchEventCategories($events);
+
             // Transform events for FullCalendar format
             $eventsData = [];
             foreach ($events as $event) {
@@ -192,20 +214,15 @@ class CalendarController extends \PageController
                 // Add category information with colors
                 $categoryColor = null;
 
-                // Handle both EventPage and EventInstance objects
-                $categories = null;
-                if ($event instanceof EventInstance) {
-                    // For EventInstance, get categories from the original event
-                    if ($event->originalEvent && $event->originalEvent->exists()) {
-                        $categories = $event->originalEvent->Categories();
-                    }
-                } else {
-                    // For regular EventPage objects
-                    $categories = $event->Categories();
-                }
+                // Handle both EventPage and EventInstance objects - instances
+                // resolve through their original event's ID.
+                $ownerID = $event instanceof EventInstance
+                    ? (int) $event->getOriginalEvent()->ID
+                    : (int) $event->ID;
+                $eventCategories = $categoriesByEvent[$ownerID] ?? [];
 
-                if ($categories && $categories->exists()) {
-                    foreach ($categories as $category) {
+                if ($eventCategories) {
+                    foreach ($eventCategories as $category) {
                         $eventData['extendedProps']['categories'][] = [
                             'ID' => $category->ID,
                             'Title' => $category->Title,
@@ -249,6 +266,70 @@ class CalendarController extends \PageController
     }
 
     /**
+     * Prefetch every event's categories in two queries.
+     *
+     * The JSON transform previously called Categories() per row - one
+     * many-many query per event, repeated for every occurrence of the same
+     * recurring event. This resolves the join table once and hydrates each
+     * Category once, keyed by owning EventPage ID.
+     *
+     * @param iterable $events Mixed EventPage|EventInstance list
+     * @return array<int,array<int,Category>>
+     */
+    protected function prefetchEventCategories(iterable $events): array
+    {
+        $eventIDs = [];
+        foreach ($events as $event) {
+            $eventIDs[] = $event instanceof EventInstance
+                ? (int) $event->getOriginalEvent()->ID
+                : (int) $event->ID;
+        }
+        $eventIDs = array_values(array_unique(array_filter($eventIDs)));
+
+        if (!$eventIDs) {
+            return [];
+        }
+
+        $joinTable = DataObject::getSchema()->tableName(EventPage::class) . '_Categories';
+        $placeholders = implode(',', array_fill(0, count($eventIDs), '?'));
+
+        $rows = DB::prepared_query(
+            "SELECT \"EventPageID\", \"CategoryID\" FROM \"{$joinTable}\""
+            . " WHERE \"EventPageID\" IN ({$placeholders})"
+            . ' ORDER BY "SortOrder" ASC',
+            $eventIDs
+        );
+
+        $categoryIDsByEvent = [];
+        $allCategoryIDs = [];
+
+        foreach ($rows as $row) {
+            $categoryIDsByEvent[(int) $row['EventPageID']][] = (int) $row['CategoryID'];
+            $allCategoryIDs[(int) $row['CategoryID']] = true;
+        }
+
+        if (!$allCategoryIDs) {
+            return [];
+        }
+
+        $categoriesByID = [];
+        foreach (Category::get()->byIDs(array_keys($allCategoryIDs)) as $category) {
+            $categoriesByID[(int) $category->ID] = $category;
+        }
+
+        $map = [];
+        foreach ($categoryIDsByEvent as $eventID => $categoryIDs) {
+            foreach ($categoryIDs as $categoryID) {
+                if (isset($categoriesByID[$categoryID])) {
+                    $map[$eventID][] = $categoriesByID[$categoryID];
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * Get the calendar filter form
      *
      * @return CalendarFilterForm
@@ -269,34 +350,45 @@ class CalendarController extends \PageController
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
-        // Get category filter
-        $categoryIDs = $request->getVar('categories');
-        $categories = null;
-
-        if ($categoryIDs) {
-            if (!is_array($categoryIDs)) {
-                $categoryIDs = [$categoryIDs];
-            }
-            $categories = Category::get()->byIDs($categoryIDs);
-        }
-
-        // Use the Calendar page's getEventsFeed method with category filtering
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
-
-        // Create paginated list
-        $paginatedEvents = PaginatedList::create($events, $request);
-        $paginatedEvents->setPageLength($this->config()->get('events_per_page'));
-
-        return [
+        $data = [
             'Calendar' => $this->calendar,
-            'Events' => $paginatedEvents,
             'CurrentFromDate' => $fromDate ? $fromDate->format('Y-m-d') : null,
             'CurrentToDate' => $toDate ? $toDate->format('Y-m-d') : null,
-            'RecurringEventsCount' => $this->getRecurringEventsCount(),
-            'OneTimeEventsCount' => $this->getOneTimeEventsCount(),
-            'AvailableCategories' => $this->getAvailableCategoriesForTemplate($request),
             'ShowCategoryFilter' => $this->calendar->ShowCategoryFilter,
         ];
+
+        // The module's own Calendar.ss renders none of the event data -
+        // FullCalendar loads everything through the /events AJAX endpoint - so
+        // by default the initial page load no longer materialises the full
+        // feed just to discard it. Projects whose templates render $Events,
+        // $RecurringEventsCount, $OneTimeEventsCount or $AvailableCategories
+        // can restore them with one line of YAML:
+        //
+        //   Dynamic\Calendar\Controller\CalendarController:
+        //     index_provides_event_list: true
+        if ($this->config()->get('index_provides_event_list')) {
+            $categoryIDs = $request->getVar('categories');
+            $categories = null;
+
+            if ($categoryIDs) {
+                if (!is_array($categoryIDs)) {
+                    $categoryIDs = [$categoryIDs];
+                }
+                $categories = Category::get()->byIDs($categoryIDs);
+            }
+
+            $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+
+            $paginatedEvents = PaginatedList::create($events, $request);
+            $paginatedEvents->setPageLength($this->config()->get('events_per_page'));
+
+            $data['Events'] = $paginatedEvents;
+            $data['RecurringEventsCount'] = $this->getRecurringEventsCount();
+            $data['OneTimeEventsCount'] = $this->getOneTimeEventsCount();
+            $data['AvailableCategories'] = $this->getAvailableCategoriesForTemplate($request);
+        }
+
+        return $data;
     }
 
     /**
@@ -308,14 +400,7 @@ class CalendarController extends \PageController
     protected function getFromDate(HTTPRequest $request): ?Carbon
     {
         // Support both 'from' (legacy) and 'start' (FullCalendar) parameter names
-        $from = $request->getVar('from') ?? $request->getVar('start');
-
-        if ($from && Carbon::hasFormat($from, 'Y-m-d')) {
-            return Carbon::createFromFormat('Y-m-d', $from);
-        }
-
-        // Return null when no date filter is applied - this will show all events
-        return null;
+        return $this->parseRequestDate($request->getVar('from') ?? $request->getVar('start'));
     }
 
     /**
@@ -327,14 +412,54 @@ class CalendarController extends \PageController
     protected function getToDate(HTTPRequest $request): ?Carbon
     {
         // Support both 'to' (legacy) and 'end' (FullCalendar) parameter names
-        $to = $request->getVar('to') ?? $request->getVar('end');
+        return $this->parseRequestDate($request->getVar('to') ?? $request->getVar('end'));
+    }
 
-        if ($to && Carbon::hasFormat($to, 'Y-m-d')) {
-            return Carbon::createFromFormat('Y-m-d', $to);
+    /**
+     * Parse a date request parameter into a Carbon instance.
+     *
+     * FullCalendar sends info.startStr / info.endStr, which are plain Y-m-d in
+     * dayGridMonth but full ISO-8601 with a UTC offset in timeGrid and list
+     * views (e.g. 2026-08-01T00:00:00-05:00). The old Carbon::hasFormat(...,
+     * 'Y-m-d') gate rejected the latter and returned null - which disabled
+     * date filtering entirely and expanded the whole event corpus on every
+     * week/day/list request.
+     *
+     * Deliberately restricted to ISO-like shapes: bare Carbon::parse() also
+     * accepts relative strings ("yesterday", "+1 week"), which would hand
+     * visitors control of the cache key.
+     *
+     * @param mixed $value
+     * @return Carbon|null
+     */
+    protected function parseRequestDate($value): ?Carbon
+    {
+        if (!$value || !is_string($value) || strlen($value) > 40) {
+            return null;
         }
 
-        // Return null when no date filter is applied
-        return null;
+        // Fast path: '!' zeroes unspecified fields instead of inheriting the
+        // current wall-clock time.
+        if (Carbon::hasFormat($value, 'Y-m-d')) {
+            return Carbon::createFromFormat('!Y-m-d', $value);
+        }
+
+        if (
+            !preg_match(
+                '/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/',
+                $value
+            )
+        ) {
+            return null;
+        }
+
+        try {
+            // The string carries its own offset, so format('Y-m-d') yields the
+            // browser-local calendar date the grid is drawing.
+            return Carbon::parse($value)->startOfDay();
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**
@@ -396,38 +521,35 @@ class CalendarController extends \PageController
      */
     protected function getAvailableCategoriesForTemplate(HTTPRequest $request): ArrayList
     {
-        $selectedCategoryIDs = $request->getVar('categories') ?: [];
-        if (!is_array($selectedCategoryIDs)) {
-            $selectedCategoryIDs = [$selectedCategoryIDs];
-        }
+        $selectedIDs = $this->getSelectedCategoryIDs($request);
 
-        // Get categories that are actually used by events in this calendar
-        // Use efficient join query to avoid N+1 problem
-        $categoryIDs = EventPage::get()
-            ->filter(['ParentID' => $this->calendar->ID])
-            ->leftJoin('EventPage_Categories', '"EventPage"."ID" = "EventPage_Categories"."EventPageID"')
-            ->leftJoin('Category', '"EventPage_Categories"."CategoryID" = "Category"."ID"')
-            ->column('Category.ID');
-
-        // Remove duplicates and null values
-        $categoryIDs = array_unique(array_filter($categoryIDs));
-
-        // Get the category objects
         $availableCategories = ArrayList::create();
-        if (!empty($categoryIDs)) {
-            $categories = Category::get()->byIDs($categoryIDs)->sort('Title ASC');
-
-            foreach ($categories as $category) {
-                $categoryData = ArrayData::create([
-                    'ID' => $category->ID,
-                    'Title' => $category->Title,
-                    'IsSelected' => in_array($category->ID, $selectedCategoryIDs),
-                ]);
-                $availableCategories->push($categoryData);
-            }
+        foreach ($this->calendar->getUsedCategories() as $category) {
+            $availableCategories->push(ArrayData::create([
+                'ID' => $category->ID,
+                'Title' => $category->Title,
+                'Selected' => in_array($category->ID, $selectedIDs),
+            ]));
         }
 
         return $availableCategories;
+    }
+
+    /**
+     * Selected category IDs from the request, normalised to ints.
+     *
+     * @param HTTPRequest $request
+     * @return array<int>
+     */
+    protected function getSelectedCategoryIDs(HTTPRequest $request): array
+    {
+        $ids = $request->getVar('categories');
+
+        if (!$ids) {
+            return [];
+        }
+
+        return array_map('intval', is_array($ids) ? $ids : [$ids]);
     }
 
     /**
@@ -560,7 +682,12 @@ class CalendarController extends \PageController
                 // For recurring event instances, include the instance date in the ID
                 $uniqueId .= '-' . $event->getInstanceDate()->format('Ymd');
             }
-            $ics[] = 'UID:' . $uniqueId . '@' . $_SERVER['HTTP_HOST'] ?? 'calendar.local';
+            // Previously read $_SERVER['HTTP_HOST'] with a dead null-coalesce
+            // ('.' binds tighter than '??'), so in any CLI/queued-job/test
+            // context the undefined-index error made transformEventToICS()
+            // return null - silently emptying the entire ICS feed.
+            $host = parse_url(Director::absoluteBaseURL(), PHP_URL_HOST) ?: 'calendar.local';
+            $ics[] = 'UID:' . $uniqueId . '@' . $host;
 
             // Add timestamp
             $ics[] = 'DTSTAMP:' . gmdate('Ymd\THis\Z');
@@ -652,20 +779,28 @@ class CalendarController extends \PageController
      */
     private function generateEventsCacheKey(HTTPRequest $request): string
     {
-        // Symfony cache keys cannot contain: {}()/\@:
-        // Hash timestamps to avoid special characters
-        // Support both start/end (FullCalendar) and from/to parameter names
-        $startParam = $request->getVar('start') ?? $request->getVar('from');
-        $start = $startParam ? md5($startParam) : 'no-start';
-        $endParam = $request->getVar('end') ?? $request->getVar('to');
-        $end = $endParam ? md5($endParam) : 'no-end';
-        $cats = $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats';
+        // Key on the PARSED dates, not the raw strings: 2026-08-17 and
+        // 2026-08-17T00:00:00-05:00 describe the same window and must share a
+        // cache entry, otherwise every calendar navigation is a fresh miss.
+        // (Symfony cache keys cannot contain: {}()/\@:)
+        $from = $this->getFromDate($request);
+        $to = $this->getToDate($request);
+
+        $cats = $request->getVar('categories');
+        if ($cats) {
+            $cats = is_array($cats) ? $cats : [$cats];
+            $cats = array_map('intval', $cats);
+            sort($cats);
+            $cats = md5(implode('-', $cats));
+        } else {
+            $cats = 'no-cats';
+        }
 
         $parts = [
             'calendar_json',
             $this->calendar->ID,
-            $start,
-            $end,
+            $from ? $from->format('Ymd') : 'no-start',
+            $to ? $to->format('Ymd') : 'no-end',
             $cats
         ];
 

@@ -7,7 +7,6 @@ use Carbon\CarbonInterval;
 use Carbon\CarbonPeriod;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Model\EventInstance;
-use Dynamic\Calendar\Model\EventInstanceCache;
 use Generator;
 use Psr\Log\LoggerInterface;
 use SilverStripe\Core\Injector\Injector;
@@ -41,56 +40,14 @@ trait CarbonRecursion
         ?int $limit = null,
         ?array $exceptions = null
     ): Generator {
-        // Normalise once so the cache key and the generated data always describe
-        // the same window - previously the key used defaults the generator ignored.
-        $startDate = $startDate ? Carbon::parse($startDate) : Carbon::now()->subMonth();
-        $endDate = $endDate ? Carbon::parse($endDate) : Carbon::now()->addYear();
-        $start = $startDate->format('Y-m-d');
-        $end = $endDate->format('Y-m-d');
-
-        // Try to get from cache first
-        $cached = EventInstanceCache::getCachedInstances($this, $start, $end);
-
-        if ($cached !== null) {
-            $count = 0;
-            foreach ($cached as $instanceData) {
-                // Passing $this avoids one EventPage::get()->byID() per cached
-                // instance; fromArray() can return null for stale data.
-                $instance = EventInstance::fromArray($instanceData, $this, $exceptions);
-
-                if ($instance === null) {
-                    continue;
-                }
-
-                yield $instance;
-
-                if ($limit && ++$count >= $limit) {
-                    break;
-                }
-            }
-            return;
-        }
-
-        // Generate fresh occurrences and cache them
-        $instances = [];
-        $count = 0;
-        $completed = true;
-
-        foreach ($this->getOccurrences($startDate, $endDate, $limit, $exceptions) as $instance) {
-            $instances[] = $instance->toArray();
-            yield $instance;
-
-            if ($limit && ++$count >= $limit) {
-                $completed = false;
-                break;
-            }
-        }
-
-        // Only cache complete result sets - a limit-truncated array under a key
-        // that does not include the limit would poison unlimited readers.
-        if ($completed) {
-            EventInstanceCache::setCachedInstances($this, $start, $end, $instances);
-        }
+        // The persistent occurrence cache was retired in 2.3.0: once
+        // generation was bounded by the requested window and exception
+        // lookups were batched (2.2.0), measurement showed a cache hit saved
+        // 3-18% while every miss cost roughly DOUBLE raw generation
+        // (serialise + write), and keys embedding the exact window plus
+        // LastEdited made misses the common case. The JSON response cache
+        // already covers exact-repeat requests one layer up.
+        yield from $this->getOccurrences($startDate, $endDate, $limit, $exceptions);
     }
 
     /**

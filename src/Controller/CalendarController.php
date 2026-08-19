@@ -185,7 +185,14 @@ class CalendarController extends \PageController
             }
         }
 
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+        $events = $this->calendar->getEventsFeed(
+            null,
+            $categories,
+            $fromDate,
+            $toDate,
+            null,
+            $this->getFilterParams($request)
+        );
 
         // Check if this is an AJAX request for JSON data
         if ($this->isAjaxRequest($request)) {
@@ -391,7 +398,14 @@ class CalendarController extends \PageController
                 $categories = Category::get()->byIDs($categoryIDs);
             }
 
-            $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+            $events = $this->calendar->getEventsFeed(
+                null,
+                $categories,
+                $fromDate,
+                $toDate,
+                null,
+                $this->getFilterParams($request)
+            );
 
             $paginatedEvents = PaginatedList::create($events, $request);
             $paginatedEvents->setPageLength($this->config()->get('events_per_page'));
@@ -410,6 +424,56 @@ class CalendarController extends \PageController
      *
      * @param HTTPRequest $request
      * @return Carbon|null
+     */
+    /**
+     * Longest search string accepted. The value feeds both the SQL predicate
+     * and the cache key, so it must be bounded - an unbounded visitor-supplied
+     * value would hand visitors control of cache-pool growth (same hazard
+     * parseRequestDate() guards for dates).
+     */
+    private const SEARCH_MAX_LENGTH = 64;
+
+    /**
+     * Extract the optional feed filters from the request.
+     *
+     * These params were sent by CalendarFilterForm and appended to the
+     * events XHR by CalendarView.js all along - the controller just never
+     * read them (issue #133). allDay uses a strict allowlist: '0' (Timed
+     * Events) is a real filter value that if($var) would drop, and anything
+     * outside '0'/'1' means "no filter".
+     *
+     * @return array{search: string, eventType: string, allDay: string|null}
+     */
+    protected function getFilterParams(HTTPRequest $request): array
+    {
+        // Array-typed params (?search[]=x) must not reach the string casts.
+        $rawSearch = $request->getVar('search');
+        $search = is_string($rawSearch)
+            ? mb_substr(trim($rawSearch), 0, self::SEARCH_MAX_LENGTH)
+            : '';
+
+        $rawType = $request->getVar('eventType');
+        $eventType = is_string($rawType) && in_array($rawType, ['one-time', 'recurring'], true)
+            ? $rawType
+            : '';
+
+        // Allowlisted like eventType: the form submits exactly '0' or '1',
+        // and anything else ('banana', 'false', '0.0') must mean "no filter"
+        // rather than silently coercing to an all-day-only filter.
+        $allDay = $request->getVar('allDay');
+        $allDay = (is_string($allDay) && in_array($allDay, ['0', '1'], true))
+            ? $allDay
+            : null;
+
+        return [
+            'search' => $search,
+            'eventType' => $eventType,
+            'allDay' => $allDay,
+        ];
+    }
+
+    /**
+     * Get from date from request or null if no filter applied
      */
     protected function getFromDate(HTTPRequest $request): ?Carbon
     {
@@ -632,7 +696,14 @@ class CalendarController extends \PageController
         }
 
         // Use the existing Calendar page's getEventsFeed method
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+        $events = $this->calendar->getEventsFeed(
+            null,
+            $categories,
+            $fromDate,
+            $toDate,
+            null,
+            $this->getFilterParams($request)
+        );
 
         // Generate ICS content manually for now
         $icsContent = $this->generateICSContent($events);
@@ -814,6 +885,15 @@ class CalendarController extends \PageController
         // which content stamp governs it.
         $crossCalendar = (bool) $this->calendar->config()->get('allow_cross_calendar_feed');
 
+        // The filters change the response body, so they must be part of the
+        // key - a shared entry would serve filtered results to unfiltered
+        // requests and vice versa. Hashed: search is free text and Symfony
+        // cache keys forbid several characters.
+        $filters = $this->getFilterParams($request);
+        $filterPart = ($filters['search'] === '' && $filters['eventType'] === '' && $filters['allDay'] === null)
+            ? 'no-filters'
+            : md5(mb_strtolower($filters['search']) . '|' . $filters['eventType'] . '|' . ($filters['allDay'] ?? ''));
+
         $parts = [
             'calendar_json',
             $this->calendar->ID,
@@ -825,7 +905,8 @@ class CalendarController extends \PageController
             CalendarCacheVersion::relationFingerprint(),
             $from ? $from->format('Ymd') : 'no-start',
             $to ? $to->format('Ymd') : 'no-end',
-            $cats
+            $cats,
+            $filterPart
         ];
 
         return implode('_', $parts);

@@ -106,7 +106,10 @@ export class CalendarView {
     // Add any active filters
     const activeFilters = this.getActiveFilters();
     Object.entries(activeFilters).forEach(([key, value]) => {
-      if (value && key !== 'action_doFilter') {
+      // Strict emptiness check: allDay=0 ("Timed Events") is a real filter
+      // value that a truthiness test silently dropped. SecurityID is a CSRF
+      // token with no place on a cacheable GET feed URL.
+      if (value !== '' && key !== 'action_doFilter' && key !== 'SecurityID') {
         params.append(key, value);
       }
     });

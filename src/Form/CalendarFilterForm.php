@@ -13,7 +13,6 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
-use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\OptionsetField;
 use SilverStripe\Forms\TextField;
@@ -192,42 +191,34 @@ class CalendarFilterForm extends Form
             ->addExtraClass('col-md-2 mb-3'));
 
         // Advanced filters - with simple toggle
-        if ($this->calendar->ShowEventTypeFilter || $this->calendar->ShowAllDayFilter) {
-            $showAdvanced = $request->getVar('advanced') ||
-                           $request->getVar('eventType') ||
-                           $request->getVar('allDay');
+        // These fields were previously wrapped in a $showAdvanced gate that
+        // was only true when advanced/eventType/allDay were ALREADY in the
+        // querystring, and the toggle button the comments promised was never
+        // built - so the fields could never be submitted from the rendered
+        // form. The ShowEventTypeFilter / ShowAllDayFilter CMS flags are the
+        // real visibility controls; use them directly.
+        if ($this->calendar->ShowEventTypeFilter) {
+            $fields->push(DropdownField::create('eventType', 'Type')
+                ->setSource([
+                    '' => 'All Events',
+                    'one-time' => 'One-Time Events',
+                    'recurring' => 'Recurring Events'
+                ])
+                ->setValue($request->getVar('eventType'))
+                ->setAttribute('class', 'form-control')
+                ->addExtraClass('col-md-6 d-inline-block mt-2'));
+        }
 
-            // Always show the toggle button
-            $fields->push(HiddenField::create('advanced', 'advanced')
-                ->setValue($showAdvanced ? '1' : '0'));
-
-            if ($showAdvanced) {
-                // Event type filter
-                if ($this->calendar->ShowEventTypeFilter) {
-                    $fields->push(DropdownField::create('eventType', 'Type')
-                        ->setSource([
-                            '' => 'All Events',
-                            'one-time' => 'One-Time Events',
-                            'recurring' => 'Recurring Events'
-                        ])
-                        ->setValue($request->getVar('eventType'))
-                        ->setAttribute('class', 'form-control')
-                        ->addExtraClass('col-md-6 d-inline-block mt-2'));
-                }
-
-                // All-day filter
-                if ($this->calendar->ShowAllDayFilter) {
-                    $fields->push(DropdownField::create('allDay', 'Duration')
-                        ->setSource([
-                            '' => 'All Events',
-                            '1' => 'All-Day Events',
-                            '0' => 'Timed Events'
-                        ])
-                        ->setValue($request->getVar('allDay'))
-                        ->setAttribute('class', 'form-control')
-                        ->addExtraClass('col-md-6 d-inline-block mt-2'));
-                }
-            }
+        if ($this->calendar->ShowAllDayFilter) {
+            $fields->push(DropdownField::create('allDay', 'Duration')
+                ->setSource([
+                    '' => 'All Events',
+                    '1' => 'All-Day Events',
+                    '0' => 'Timed Events'
+                ])
+                ->setValue($request->getVar('allDay'))
+                ->setAttribute('class', 'form-control')
+                ->addExtraClass('col-md-6 d-inline-block mt-2'));
         }
 
         return $fields;
@@ -310,7 +301,9 @@ class CalendarFilterForm extends Form
 
         foreach ($filterVars as $var) {
             $value = $request->getVar($var);
-            if ($value && $value !== '') {
+            // Strict check: allDay=0 ("Timed Events") is a real filter that a
+            // truthiness test silently dropped.
+            if ($value !== null && $value !== '' && $value !== []) {
                 return true;
             }
         }
@@ -392,8 +385,9 @@ class CalendarFilterForm extends Form
             $summary['eventType'] = $eventType;
         }
 
-        // All-day filter
-        if ($allDay = $request->getVar('allDay')) {
+        // All-day filter - strict check so '0' (Timed Events) registers
+        $allDay = $request->getVar('allDay');
+        if ($allDay !== null && $allDay !== '') {
             $summary['allDay'] = $allDay === '1' ? 'All-Day Events' : 'Timed Events';
         }
 

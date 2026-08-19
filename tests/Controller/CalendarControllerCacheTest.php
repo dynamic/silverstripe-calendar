@@ -530,4 +530,67 @@ class CalendarControllerCacheTest extends FunctionalTest
         $response = $this->controller->events($this->createAjaxRequest());
         $this->assertEquals('HIT', $response->getHeader('X-Calendar-Cache'));
     }
+
+    public function testScopedFeedCachesImmediatelyAfterFlush()
+    {
+        // Regression: flush() seeded only the 'any' and 'taxonomy' stamps.
+        // With get() no longer persisting on a miss, the per-calendar scope
+        // (the DEFAULT config: allow_cross_calendar_feed = false) returned a
+        // fresh random stamp per request - so scoped feeds never cached
+        // between a deploy and that calendar's next edit (MISS, MISS, MISS).
+        $event = EventPage::create([
+            'Title' => 'Post Flush Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        CalendarCacheVersion::flush();
+
+        $first = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('MISS', $first->getHeader('X-Calendar-Cache'));
+
+        $second = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals(
+            'HIT',
+            $second->getHeader('X-Calendar-Cache'),
+            'A scoped (default-config) feed must cache on the second request after a flush'
+        );
+    }
+
+    public function testDefaultCategoriesMutationWithoutWriteInvalidatesCache()
+    {
+        // Calendar_DefaultCategories feeds the fallback in events(); a pure
+        // relation mutation fires no hooks, so the fingerprint must cover it.
+        $category = Category::create(['Title' => 'Default Cat ' . uniqid()]);
+        $category->write();
+
+        $event = EventPage::create([
+            'Title' => 'Default Cat Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->Categories()->add($category);
+        $event->publishRecursive();
+
+        $warm = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('MISS', $warm->getHeader('X-Calendar-Cache'));
+        $hit = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals('HIT', $hit->getHeader('X-Calendar-Cache'));
+
+        // No trailing write() - only the fingerprint can see this, and it
+        // changes which events the DefaultCategories fallback selects.
+        $this->calendar->DefaultCategories()->add($category);
+
+        $afterMutation = $this->controller->events($this->createAjaxRequest());
+        $this->assertEquals(
+            'MISS',
+            $afterMutation->getHeader('X-Calendar-Cache'),
+            'A DefaultCategories mutation without write() must invalidate the feed'
+        );
+    }
 }

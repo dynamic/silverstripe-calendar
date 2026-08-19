@@ -147,9 +147,13 @@ class CalendarController extends \PageController
         $cacheable = $this->isAjaxRequest($request)
             && Versioned::get_stage() === Versioned::LIVE;
 
-        // Check cache for JSON responses first
+        // Check cache for JSON responses first. The key is computed once and
+        // reused by the write path below - it embeds version stamps and the
+        // relation fingerprint, and nothing in between can legitimately
+        // change them mid-request.
+        $cacheKey = $cacheable ? $this->generateEventsCacheKey($request) : null;
+
         if ($cacheable) {
-            $cacheKey = $this->generateEventsCacheKey($request);
             $cache = $this->getEventsCache();
             $cachedJson = $cache->get($cacheKey);
 
@@ -257,8 +261,7 @@ class CalendarController extends \PageController
             $json = json_encode($eventsData);
 
             // Cache the JSON response - Live stage only (see $cacheable above)
-            if ($writeToCache) {
-                $cacheKey = $this->generateEventsCacheKey($request);
+            if ($writeToCache && $cacheKey !== null) {
                 $cache = $this->getEventsCache();
                 $cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'));
             }

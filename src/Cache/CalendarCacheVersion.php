@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Cache;
 
+use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Psr\SimpleCache\CacheInterface;
 use SilverStripe\Core\Flushable;
@@ -34,9 +35,10 @@ use SilverStripe\ORM\DB;
  *                   (Previously a Category edit invalidated nothing - stale
  *                   colours were served until an unrelated event save.)
  *
- * A missing stamp is seeded with the current microtime - never a constant -
- * so an evicted stamp produces a harmless fresh miss rather than resurrecting
- * stale entries.
+ * A missing stamp reads as a stable sentinel and is only made durable by
+ * bump() (or flush() seeding): the read path never writes, so a reader can
+ * never overwrite a concurrent writer's fresh bump (TOCTOU), and scoped
+ * feeds still cache between a deploy and the calendar's next edit.
  */
 class CalendarCacheVersion implements Flushable
 {
@@ -119,27 +121,38 @@ class CalendarCacheVersion implements Flushable
     }
 
     /**
-     * A fingerprint of the EventPage<->Category join table, folded into every
-     * feed cache key. ManyManyList::add()/remove() fire no extension hooks
+     * A fingerprint of the category join tables, folded into every feed cache
+     * key. ManyManyList::add()/remove() fire no extension hooks
      * (onAfterLink/onAfterUnlink never existed in the framework), so a pure
      * relation mutation with no accompanying write() cannot bump a stamp -
-     * instead the key itself observes the relation state.
+     * instead the key itself observes the relation state. Covers both
+     * EventPage<->Category and Calendar<->DefaultCategories (the latter feeds
+     * the DefaultCategories fallback in events()).
      *
      * (COUNT, MAX(ID)) is change-sensitive: IDs auto-increment, so any add
-     * raises MAX; any removal changes COUNT or removes the MAX row. One
-     * PK-indexed query per feed request, memoized.
+     * raises MAX; any removal changes COUNT or removes the MAX row.
+     * Deliberately not memoized - the point is observing state that hooks
+     * cannot see. Cost: one aggregate scan of each (small) join table per
+     * key computation.
      */
     public static function relationFingerprint(): string
     {
-        // Deliberately not memoized: the whole point is observing relation
-        // state the hooks cannot see, and the cost is one PK-indexed
-        // aggregate per key computation.
-        $table = DataObject::getSchema()->tableName(EventPage::class) . '_Categories';
-        $row = DB::query(
-            "SELECT COUNT(*) AS c, COALESCE(MAX(\"ID\"), 0) AS m FROM \"{$table}\""
-        )->record();
+        $schema = DataObject::getSchema();
+        $parts = [];
 
-        return "r{$row['c']}x{$row['m']}";
+        $tables = [
+            $schema->tableName(EventPage::class) . '_Categories',
+            $schema->tableName(Calendar::class) . '_DefaultCategories',
+        ];
+
+        foreach ($tables as $table) {
+            $row = DB::query(
+                "SELECT COUNT(*) AS c, COALESCE(MAX(\"ID\"), 0) AS m FROM \"{$table}\""
+            )->record();
+            $parts[] = "{$row['c']}x{$row['m']}";
+        }
+
+        return 'r' . implode('r', $parts);
     }
 
     private static function get(string $scope): string
@@ -151,14 +164,17 @@ class CalendarCacheVersion implements Flushable
         $stamp = self::stampCache()->get("calendar_version_{$scope}");
 
         if (!$stamp) {
-            // Do NOT persist on the read path. A reader that misses right
-            // after a flush could otherwise overwrite a concurrent writer's
-            // fresh bump and then cache a stale response under that stamp for
-            // the full TTL (TOCTOU). Instead: memoize a throwaway stamp for
-            // this request (consistent keys within the request, entries land
-            // under a never-reused key = harmless orphans), and let flush()
-            // seeding or the next bump() establish the durable stamp.
-            $stamp = self::freshStamp();
+            // Do NOT persist on the read path: a reader missing right after a
+            // flush could overwrite a concurrent writer's fresh bump and pin a
+            // stale response under it for the full TTL (TOCTOU). And do NOT
+            // return a random per-request stamp either - per-calendar scopes
+            // are only seeded by their first bump(), so a random stamp here
+            // meant scoped feeds (the default config) never cached between a
+            // deploy and that calendar's next edit. A stable sentinel is safe:
+            // flush() clears the response pool itself, response TTL (minutes)
+            // is far below STAMP_TTL (a year), so sentinel-keyed entries
+            // cannot outlive a legitimate invalidation window.
+            $stamp = 'unseeded';
         }
 
         return self::$memo[$scope] = (string) $stamp;

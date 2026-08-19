@@ -356,8 +356,10 @@ class Calendar extends \Page
         // per instance).
         if ($search !== '') {
             $regularEvents = $regularEvents->filterAny([
-                'Title:PartialMatch' => $search,
-                'Content:PartialMatch' => $search,
+                // :nocase keeps the SQL branch consistent with the
+                // recurring branch's mb_stripos() under CS collations.
+                'Title:PartialMatch:nocase' => $search,
+                'Content:PartialMatch:nocase' => $search,
             ]);
         }
 

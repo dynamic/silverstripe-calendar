@@ -171,7 +171,10 @@ class CalendarModule {
         if (filterForm) {
             const formData = new FormData(filterForm);
             for (const [key, value] of formData.entries()) {
-                if (value && key !== 'action_doFilter') {
+                // Same contract as CalendarView.getActiveFilters(): '0' is a
+                // real filter value (allDay=Timed Events), and SecurityID has
+                // no business on a feed URL.
+                if (value !== '' && key !== 'action_doFilter' && key !== 'SecurityID') {
                     params.append(key, value);
                 }
             }

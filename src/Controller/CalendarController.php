@@ -426,16 +426,6 @@ class CalendarController extends \PageController
      * @return Carbon|null
      */
     /**
-     * Extract the optional feed filters from the request.
-     *
-     * These params were sent by CalendarFilterForm and appended to the
-     * events XHR by CalendarView.js all along - the controller just never
-     * read them (issue #133). Note allDay uses strict comparisons: '0'
-     * (Timed Events) is a real filter value that if($var) would drop.
-     *
-     * @return array{search: string, eventType: string, allDay: string|null}
-     */
-    /**
      * Longest search string accepted. The value feeds both the SQL predicate
      * and the cache key, so it must be bounded - an unbounded visitor-supplied
      * value would hand visitors control of cache-pool growth (same hazard
@@ -443,6 +433,17 @@ class CalendarController extends \PageController
      */
     private const SEARCH_MAX_LENGTH = 64;
 
+    /**
+     * Extract the optional feed filters from the request.
+     *
+     * These params were sent by CalendarFilterForm and appended to the
+     * events XHR by CalendarView.js all along - the controller just never
+     * read them (issue #133). allDay uses a strict allowlist: '0' (Timed
+     * Events) is a real filter value that if($var) would drop, and anything
+     * outside '0'/'1' means "no filter".
+     *
+     * @return array{search: string, eventType: string, allDay: string|null}
+     */
     protected function getFilterParams(HTTPRequest $request): array
     {
         // Array-typed params (?search[]=x) must not reach the string casts.
@@ -456,10 +457,13 @@ class CalendarController extends \PageController
             ? $rawType
             : '';
 
+        // Allowlisted like eventType: the form submits exactly '0' or '1',
+        // and anything else ('banana', 'false', '0.0') must mean "no filter"
+        // rather than silently coercing to an all-day-only filter.
         $allDay = $request->getVar('allDay');
-        $allDay = ($allDay === null || $allDay === '' || !is_scalar($allDay))
-            ? null
-            : (string) (int) (bool) $allDay;
+        $allDay = (is_string($allDay) && in_array($allDay, ['0', '1'], true))
+            ? $allDay
+            : null;
 
         return [
             'search' => $search,
@@ -468,6 +472,9 @@ class CalendarController extends \PageController
         ];
     }
 
+    /**
+     * Get from date from request or null if no filter applied
+     */
     protected function getFromDate(HTTPRequest $request): ?Carbon
     {
         // Support both 'from' (legacy) and 'start' (FullCalendar) parameter names

@@ -217,14 +217,48 @@ class CalendarFilterParamsTest extends SapphireTest
     {
         $primary = $this->objFromFixture(Calendar::class, 'primary');
 
-        // Only the first 64 chars participate: a 64-char prefix of 'Mine'
-        // padded out still matches nothing extra, and two strings identical
-        // in their first 64 chars behave identically (cache-key safety).
-        $long = str_repeat('z', 100);
-        $eventsA = $this->fetchEvents($primary, ['search' => $long]);
-        $eventsB = $this->fetchEvents($primary, ['search' => substr($long, 0, 64) . 'different-tail']);
+        // Differential test: an event whose title is exactly 64 chars, then a
+        // search of that title plus a garbage tail. WITH truncation the search
+        // becomes exactly the title and matches; WITHOUT truncation a 74-char
+        // needle cannot match a 64-char title, so the event disappears and
+        // this test fails. (The previous version compared two garbage strings
+        // that matched nothing either way - vacuous.)
+        $title64 = str_pad('Bounded Search Event', 64, 'x');
+        $this->assertSame(64, strlen($title64));
 
-        $this->assertSame($this->titles($eventsA), $this->titles($eventsB));
+        $event = EventPage::create([
+            'Title' => $title64,
+            'URLSegment' => 'bounded-search-event',
+            'ParentID' => $primary->ID,
+            'StartDate' => '2025-06-20',
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+
+        $events = $this->fetchEvents($primary, ['search' => $title64 . 'zzzzzzzzzz']);
+
+        $this->assertContains(
+            $title64,
+            $this->titles($events),
+            'Only the first 64 chars of search may participate in matching'
+        );
+    }
+
+    public function testAllDayRejectsNonAllowlistedValues(): void
+    {
+        $primary = $this->objFromFixture(Calendar::class, 'primary');
+
+        // Anything outside the exact strings '0'/'1' must mean "no filter" -
+        // previously allDay=banana coerced to an all-day-only filter.
+        $unfiltered = $this->titles($this->fetchEvents($primary));
+
+        foreach (['banana', 'false', '0.0', '00', '-1'] as $garbage) {
+            $this->assertSame(
+                $unfiltered,
+                $this->titles($this->fetchEvents($primary, ['allDay' => $garbage])),
+                "allDay={$garbage} must behave as no filter"
+            );
+        }
     }
 
     public function testIcalHonoursFilters(): void

@@ -114,7 +114,12 @@ export class CalendarView {
     // Add any active filters
     const activeFilters = this.getActiveFilters();
     Object.entries(activeFilters).forEach(([key, value]) => {
-      if (value && key !== 'action_doFilter') {
+      // FormData values are strings, so the non-empty string '0' (allDay's
+      // "Timed Events" value) was already truthy here - no JS-side drop bug,
+      // unlike the PHP truthiness checks this issue fixes. Excluding
+      // SecurityID matters though: it's a CSRF token with no place on a
+      // cacheable GET feed URL.
+      if (value !== '' && key !== 'action_doFilter' && key !== 'SecurityID') {
         params.append(key, value);
       }
     });

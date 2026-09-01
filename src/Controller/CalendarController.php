@@ -157,7 +157,13 @@ class CalendarController extends \PageController
             }
         }
 
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+        $events = $this->calendar->getEventsFeed(
+            null,
+            $categories,
+            $fromDate,
+            $toDate,
+            $this->getFilterParams($request)
+        );
 
         // Check if this is an AJAX request for JSON data
         if ($this->isAjaxRequest($request)) {
@@ -281,7 +287,13 @@ class CalendarController extends \PageController
         }
 
         // Use the Calendar page's getEventsFeed method with category filtering
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+        $events = $this->calendar->getEventsFeed(
+            null,
+            $categories,
+            $fromDate,
+            $toDate,
+            $this->getFilterParams($request)
+        );
 
         // Create paginated list
         $paginatedEvents = PaginatedList::create($events, $request);
@@ -297,6 +309,73 @@ class CalendarController extends \PageController
             'AvailableCategories' => $this->getAvailableCategoriesForTemplate($request),
             'ShowCategoryFilter' => $this->calendar->ShowCategoryFilter,
         ];
+    }
+
+    /**
+     * Longest search string accepted. The value feeds both the SQL predicate
+     * and the cache key, so it must be bounded - an unbounded visitor-supplied
+     * value would hand visitors control of cache-pool growth (same hazard
+     * parseRequestDate() guards for dates).
+     */
+    public const SEARCH_MAX_LENGTH = 64;
+
+    /**
+     * Normalise the optional feed filters from a request.
+     *
+     * These params were sent by CalendarFilterForm and appended to the
+     * events XHR by CalendarView.js all along - the controller just never
+     * read them (issue #133). allDay uses a strict allowlist: '0' (Timed
+     * Events) is a real filter value that if($var) would drop, and anything
+     * outside '0'/'1' means "no filter".
+     *
+     * Public and static because it is the SINGLE definition of "what counts
+     * as an active filter". CalendarFilterForm's hasActiveFiltersStatic() and
+     * getFilterSummary() consume it too, so the chrome (the active-filter
+     * banner, the Clear Filters link, the summary) can never claim a filter
+     * is live that this method discarded. An earlier version duplicated the
+     * allowlists in the form and they drifted: ?eventType=banana rendered
+     * "Clear Filters" over a completely unfiltered feed - the same silent
+     * UI-lies-about-the-server defect as #133 itself, relocated to the chrome.
+     * Add a new filter param here and both consumers pick it up for free.
+     *
+     * @return array{search: string, eventType: string, allDay: string|null}
+     */
+    public static function normaliseFilterParams(HTTPRequest $request): array
+    {
+        // Array-typed params (?search[]=x) must not reach the string casts.
+        $rawSearch = $request->getVar('search');
+        $search = is_string($rawSearch)
+            ? mb_substr(trim($rawSearch), 0, self::SEARCH_MAX_LENGTH)
+            : '';
+
+        $rawType = $request->getVar('eventType');
+        $eventType = is_string($rawType) && in_array($rawType, ['one-time', 'recurring'], true)
+            ? $rawType
+            : '';
+
+        // Allowlisted like eventType: the form submits exactly '0' or '1',
+        // and anything else ('banana', 'false', '0.0') must mean "no filter"
+        // rather than silently coercing to an all-day-only filter.
+        $allDay = $request->getVar('allDay');
+        $allDay = (is_string($allDay) && in_array($allDay, ['0', '1'], true))
+            ? $allDay
+            : null;
+
+        return [
+            'search' => $search,
+            'eventType' => $eventType,
+            'allDay' => $allDay,
+        ];
+    }
+
+    /**
+     * Instance-side alias kept so existing call sites read naturally.
+     *
+     * @return array{search: string, eventType: string, allDay: string|null}
+     */
+    protected function getFilterParams(HTTPRequest $request): array
+    {
+        return self::normaliseFilterParams($request);
     }
 
     /**
@@ -496,7 +575,13 @@ class CalendarController extends \PageController
         }
 
         // Use the existing Calendar page's getEventsFeed method
-        $events = $this->calendar->getEventsFeed(null, $categories, $fromDate, $toDate);
+        $events = $this->calendar->getEventsFeed(
+            null,
+            $categories,
+            $fromDate,
+            $toDate,
+            $this->getFilterParams($request)
+        );
 
         // Generate ICS content manually for now
         $icsContent = $this->generateICSContent($events);
@@ -659,14 +744,37 @@ class CalendarController extends \PageController
         $start = $startParam ? md5($startParam) : 'no-start';
         $endParam = $request->getVar('end') ?? $request->getVar('to');
         $end = $endParam ? md5($endParam) : 'no-end';
-        $cats = $request->getVar('categories') ? md5(serialize($request->getVar('categories'))) : 'no-cats';
+
+        // Key on the resolved, sorted category IDs rather than the raw
+        // parameter, so ?categories[]=1&categories[]=2 and its reverse
+        // ordering share a cache entry.
+        $categoryIDs = $request->getVar('categories');
+        if ($categoryIDs) {
+            if (!is_array($categoryIDs)) {
+                $categoryIDs = [$categoryIDs];
+            }
+            sort($categoryIDs);
+            $cats = md5(serialize($categoryIDs));
+        } else {
+            $cats = 'no-cats';
+        }
+
+        // The filters change the response body, so they must be part of the
+        // key - a shared entry would serve filtered results to unfiltered
+        // requests and vice versa. Hashed: search is free text and Symfony
+        // cache keys forbid several characters.
+        $filters = $this->getFilterParams($request);
+        $filterPart = ($filters['search'] === '' && $filters['eventType'] === '' && $filters['allDay'] === null)
+            ? 'no-filters'
+            : md5(mb_strtolower($filters['search']) . '|' . $filters['eventType'] . '|' . ($filters['allDay'] ?? ''));
 
         $parts = [
             'calendar_json',
             $this->calendar->ID,
             $start,
             $end,
-            $cats
+            $cats,
+            $filterPart
         ];
 
         return implode('_', $parts);

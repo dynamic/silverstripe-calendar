@@ -172,7 +172,11 @@ class CalendarModule {
         if (filterForm) {
             const formData = new FormData(filterForm);
             for (const [key, value] of formData.entries()) {
-                if (value && key !== 'action_doFilter') {
+                // Same contract as CalendarView.fetchEvents(): FormData values
+                // are strings, so allDay's '0' ("Timed Events") was already
+                // truthy here - the change that matters is excluding
+                // SecurityID, a CSRF token with no place on a feed URL.
+                if (value !== '' && key !== 'action_doFilter' && key !== 'SecurityID') {
                     params.append(key, value);
                 }
             }

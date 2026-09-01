@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Form;
 
+use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
@@ -13,7 +14,6 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
-use SilverStripe\Forms\HiddenField;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\OptionsetField;
 use SilverStripe\Forms\TextField;
@@ -191,43 +191,34 @@ class CalendarFilterForm extends Form
             ->setDescription('Show events until this date')
             ->addExtraClass('col-md-2 mb-3'));
 
-        // Advanced filters - with simple toggle
-        if ($this->calendar->ShowEventTypeFilter || $this->calendar->ShowAllDayFilter) {
-            $showAdvanced = $request->getVar('advanced') ||
-                           $request->getVar('eventType') ||
-                           $request->getVar('allDay');
+        // These fields were previously wrapped in a $showAdvanced gate that
+        // was only true when advanced/eventType/allDay were ALREADY in the
+        // querystring, and the toggle button the comments promised was never
+        // built - so the fields could never be submitted from the rendered
+        // form. The ShowEventTypeFilter / ShowAllDayFilter CMS flags are the
+        // real visibility controls; use them directly.
+        if ($this->calendar->ShowEventTypeFilter) {
+            $fields->push(DropdownField::create('eventType', 'Type')
+                ->setSource([
+                    '' => 'All Events',
+                    'one-time' => 'One-Time Events',
+                    'recurring' => 'Recurring Events'
+                ])
+                ->setValue($request->getVar('eventType'))
+                ->setAttribute('class', 'form-control')
+                ->addExtraClass('col-md-6 d-inline-block mt-2'));
+        }
 
-            // Always show the toggle button
-            $fields->push(HiddenField::create('advanced', 'advanced')
-                ->setValue($showAdvanced ? '1' : '0'));
-
-            if ($showAdvanced) {
-                // Event type filter
-                if ($this->calendar->ShowEventTypeFilter) {
-                    $fields->push(DropdownField::create('eventType', 'Type')
-                        ->setSource([
-                            '' => 'All Events',
-                            'one-time' => 'One-Time Events',
-                            'recurring' => 'Recurring Events'
-                        ])
-                        ->setValue($request->getVar('eventType'))
-                        ->setAttribute('class', 'form-control')
-                        ->addExtraClass('col-md-6 d-inline-block mt-2'));
-                }
-
-                // All-day filter
-                if ($this->calendar->ShowAllDayFilter) {
-                    $fields->push(DropdownField::create('allDay', 'Duration')
-                        ->setSource([
-                            '' => 'All Events',
-                            '1' => 'All-Day Events',
-                            '0' => 'Timed Events'
-                        ])
-                        ->setValue($request->getVar('allDay'))
-                        ->setAttribute('class', 'form-control')
-                        ->addExtraClass('col-md-6 d-inline-block mt-2'));
-                }
-            }
+        if ($this->calendar->ShowAllDayFilter) {
+            $fields->push(DropdownField::create('allDay', 'Duration')
+                ->setSource([
+                    '' => 'All Events',
+                    '1' => 'All-Day Events',
+                    '0' => 'Timed Events'
+                ])
+                ->setValue($request->getVar('allDay'))
+                ->setAttribute('class', 'form-control')
+                ->addExtraClass('col-md-6 d-inline-block mt-2'));
         }
 
         return $fields;
@@ -319,11 +310,21 @@ class CalendarFilterForm extends Form
      */
     public static function hasActiveFiltersStatic(HTTPRequest $request): bool
     {
-        $filterVars = ['categories', 'eventType', 'allDay', 'search', 'from', 'to'];
+        // search/eventType/allDay go through the controller's normaliser rather
+        // than a raw emptiness check, so this can never report a filter as
+        // active that the feed itself discarded (?eventType=banana used to
+        // render "Clear Filters" over completely unfiltered results - the same
+        // defect class as #133, moved from the feed to the chrome).
+        $filters = CalendarController::normaliseFilterParams($request);
+        if ($filters['search'] !== '' || $filters['eventType'] !== '' || $filters['allDay'] !== null) {
+            return true;
+        }
 
-        foreach ($filterVars as $var) {
+        // categories/from/to have no shared normaliser yet. Strict checks so a
+        // literal '0' still registers.
+        foreach (['categories', 'from', 'to'] as $var) {
             $value = $request->getVar($var);
-            if ($value && $value !== '') {
+            if ($value !== null && $value !== '' && $value !== []) {
                 return true;
             }
         }
@@ -400,19 +401,24 @@ class CalendarFilterForm extends Form
             $summary['categories'] = $categories->column('Title');
         }
 
-        // Event type filter
-        if ($eventType = $request->getVar('eventType')) {
-            $summary['eventType'] = $eventType;
+        // search/eventType/allDay come from the controller's normaliser, so the
+        // summary reports exactly what the feed applied - never a value it
+        // discarded (?eventType=banana), and never an untruncated search string
+        // the SQL predicate never saw.
+        $filters = CalendarController::normaliseFilterParams($request);
+
+        if ($filters['eventType'] !== '') {
+            $summary['eventType'] = $filters['eventType'];
         }
 
-        // All-day filter
-        if ($allDay = $request->getVar('allDay')) {
-            $summary['allDay'] = $allDay === '1' ? 'All-Day Events' : 'Timed Events';
+        if ($filters['allDay'] !== null) {
+            $summary['allDay'] = $filters['allDay'] === '1' ? 'All-Day Events' : 'Timed Events';
         }
 
-        // Search filter
-        if ($search = $request->getVar('search')) {
-            $summary['search'] = $search;
+        // Strict check so search=0 registers (a truthy check treats the string
+        // "0" as empty and silently drops it, even though the feed applies it).
+        if ($filters['search'] !== '') {
+            $summary['search'] = $filters['search'];
         }
 
         return $summary;

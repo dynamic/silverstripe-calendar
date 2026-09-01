@@ -267,4 +267,173 @@ class CalendarFilterFormTest extends SapphireTest
         $toField = $form->Fields()->dataFieldByName('to');
         $this->assertEquals('2025-12-31', $toField->getValue());
     }
+
+    /**
+     * search=0 is a real (if unusual) search term, not an empty value. A
+     * truthy check on the string "0" would silently drop it from the
+     * summary even though CalendarController::getFilterParams() applies it.
+     */
+    public function testGetFilterSummarySearchZeroIsNotDropped()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar';
+        $calendar->write();
+
+        $request = new HTTPRequest('GET', '/calendar', ['search' => '0']);
+
+        $summary = CalendarFilterForm::getFilterSummary($request, $calendar);
+
+        $this->assertArrayHasKey('search', $summary);
+        $this->assertSame('0', $summary['search']);
+    }
+
+    /**
+     * An array-typed eventType[] param must not flow into the summary as an
+     * array - it must behave the same as "no filter" here, matching
+     * CalendarController::getFilterParams()'s allowlist.
+     */
+    public function testGetFilterSummaryArrayTypedEventTypeIsIgnored()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar';
+        $calendar->write();
+
+        $request = new HTTPRequest('GET', '/calendar', ['eventType' => ['recurring']]);
+
+        $summary = CalendarFilterForm::getFilterSummary($request, $calendar);
+
+        $this->assertArrayNotHasKey('eventType', $summary);
+    }
+
+    /**
+     * allDay='0' ("Timed Events") is a real filter the feed applies. A
+     * truthiness check drops it, hiding the active-filter banner and the
+     * Clear Filters link so the user cannot tell a filter is applied.
+     */
+    public function testHasActiveFiltersStaticCountsZeroValuedFilters()
+    {
+        $request = new HTTPRequest('GET', '/calendar', ['allDay' => '0']);
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
+
+        $request = new HTTPRequest('GET', '/calendar', ['search' => '0']);
+        $this->assertTrue(CalendarFilterForm::hasActiveFiltersStatic($request));
+    }
+
+    /**
+     * The chrome must not claim a filter is active that the feed discarded.
+     * These values all normalise to "no filter" in
+     * CalendarController::normaliseFilterParams(), so rendering "Clear All
+     * Filters" over them is the #133 defect relocated to the UI.
+     */
+    public function testHasActiveFiltersStaticRejectsValuesTheFeedIgnores()
+    {
+        foreach (
+            [
+                ['eventType' => 'banana'],
+                ['allDay' => 'maybe'],
+                ['allDay' => 'false'],
+                ['search' => ['x']],
+                ['eventType' => ['recurring']],
+            ] as $vars
+        ) {
+            $request = new HTTPRequest('GET', '/calendar', $vars);
+            $this->assertFalse(
+                CalendarFilterForm::hasActiveFiltersStatic($request),
+                'Must not report an active filter for ' . json_encode($vars)
+            );
+        }
+    }
+
+    /**
+     * getFilterSummary() allowlisted allDay but not eventType, so
+     * ?eventType=banana was reported as an active filter while the feed
+     * ignored it. Both now share the controller's normaliser.
+     */
+    public function testGetFilterSummaryRejectsValuesTheFeedIgnores()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar-summary-allowlist';
+        $calendar->write();
+
+        $request = new HTTPRequest('GET', '/calendar', [
+            'eventType' => 'banana',
+            'allDay' => 'banana',
+        ]);
+        $summary = CalendarFilterForm::getFilterSummary($request, $calendar);
+
+        $this->assertArrayNotHasKey('eventType', $summary);
+        $this->assertArrayNotHasKey('allDay', $summary);
+    }
+
+    /**
+     * allDay='0' must be summarised as "Timed Events", not dropped.
+     */
+    public function testGetFilterSummaryReportsTimedEvents()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar-summary-timed';
+        $calendar->write();
+
+        $request = new HTTPRequest('GET', '/calendar', ['allDay' => '0']);
+        $summary = CalendarFilterForm::getFilterSummary($request, $calendar);
+
+        $this->assertSame('Timed Events', $summary['allDay']);
+    }
+
+    /**
+     * Removing the $showAdvanced gate is what makes eventType/allDay
+     * submittable at all - without it the controller-side wiring for #133 is
+     * unreachable through the UI. Nothing pinned that the fields render.
+     */
+    public function testEventTypeAndAllDayFieldsRenderWithoutAnAdvancedFlag()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar-fields';
+        $calendar->ShowEventTypeFilter = 1;
+        $calendar->ShowAllDayFilter = 1;
+        $calendar->write();
+
+        $request = new HTTPRequest('GET', '/calendar');
+        $request->setSession(new Session([]));
+        $controller = Controller::create();
+        $controller->setRequest($request);
+
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
+
+        $this->assertNotNull(
+            $form->Fields()->dataFieldByName('eventType'),
+            'eventType must render without ?advanced'
+        );
+        $this->assertNotNull(
+            $form->Fields()->dataFieldByName('allDay'),
+            'allDay must render without ?advanced'
+        );
+    }
+
+    /**
+     * The CMS flag is now the only visibility control for allDay.
+     */
+    public function testAllDayFieldIsHiddenWhenTheCmsFlagIsOff()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar-fields-off';
+        $calendar->ShowEventTypeFilter = 1;
+        $calendar->ShowAllDayFilter = 0;
+        $calendar->write();
+
+        $request = new HTTPRequest('GET', '/calendar');
+        $request->setSession(new Session([]));
+        $controller = Controller::create();
+        $controller->setRequest($request);
+
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
+
+        $this->assertNull($form->Fields()->dataFieldByName('allDay'));
+    }
 }

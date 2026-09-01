@@ -163,6 +163,15 @@ class EventException extends DataObject implements PermissionProvider
         $overrideField = $overridableFields[$property];
         $value = $this->$overrideField;
 
+        // KNOWN LIMITATION: ModifiedAllDay is a NOT-NULL Boolean, so the
+        // !empty() fallthrough below cannot represent "override an all-day
+        // parent down to a timed occurrence" - !empty(0) is false, and the
+        // occurrence falls back to the parent's AllDay. Overriding a timed
+        // parent UP to all-day works. Representing the reverse needs a
+        // nullable column (schema change) - tracked in issue #143 for the
+        // next major.
+        // Filter code (the allDay feed filter) inherits this asymmetry.
+
         // For time fields, check if value is explicitly set (not NULL)
         // This allows users to intentionally set midnight (00:00:00) as an override
         if (in_array($overrideField, ['ModifiedStartTime', 'ModifiedEndTime'])) {

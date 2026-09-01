@@ -267,4 +267,43 @@ class CalendarFilterFormTest extends SapphireTest
         $toField = $form->Fields()->dataFieldByName('to');
         $this->assertEquals('2025-12-31', $toField->getValue());
     }
+
+    /**
+     * search=0 is a real (if unusual) search term, not an empty value. A
+     * truthy check on the string "0" would silently drop it from the
+     * summary even though CalendarController::getFilterParams() applies it.
+     */
+    public function testGetFilterSummarySearchZeroIsNotDropped()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar';
+        $calendar->write();
+
+        $request = new HTTPRequest('GET', '/calendar', ['search' => '0']);
+
+        $summary = CalendarFilterForm::getFilterSummary($request, $calendar);
+
+        $this->assertArrayHasKey('search', $summary);
+        $this->assertSame('0', $summary['search']);
+    }
+
+    /**
+     * An array-typed eventType[] param must not flow into the summary as an
+     * array - it must behave the same as "no filter" here, matching
+     * CalendarController::getFilterParams()'s allowlist.
+     */
+    public function testGetFilterSummaryArrayTypedEventTypeIsIgnored()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar';
+        $calendar->write();
+
+        $request = new HTTPRequest('GET', '/calendar', ['eventType' => ['recurring']]);
+
+        $summary = CalendarFilterForm::getFilterSummary($request, $calendar);
+
+        $this->assertArrayNotHasKey('eventType', $summary);
+    }
 }

@@ -267,10 +267,27 @@ class Calendar extends \Page
      * @param ManyManyList|null $categories Categories to filter by
      * @param Carbon|string|null $fromDate Start date for events (default: now)
      * @param Carbon|string|null $toDate End date for events (default: 6 months from now)
+     * @param array|null $filters Optional filters: 'search' (matches Title and
+     *                            Content), 'eventType' ('one-time'|'recurring'),
+     *                            'allDay' ('1'|'0'; '' and null mean no filter)
      * @return ArrayList
      */
-    public function getEventsFeed(?int $limit = null, $categories = null, $fromDate = null, $toDate = null): ArrayList
-    {
+    public function getEventsFeed(
+        ?int $limit = null,
+        $categories = null,
+        $fromDate = null,
+        $toDate = null,
+        ?array $filters = null
+    ): ArrayList {
+        // Normalise the optional filters. 'eventType' selects a branch
+        // (one-time vs recurring); 'search' and 'allDay' are predicates.
+        // allDay arrives as the string '1'/'0' - '' and null mean "no filter",
+        // and '0' (Timed Events) is a real filter, hence the strict checks.
+        $search = trim((string) ($filters['search'] ?? ''));
+        $eventType = $filters['eventType'] ?? '';
+        $allDayFilter = $filters['allDay'] ?? null;
+        $allDayFilter = ($allDayFilter === null || $allDayFilter === '') ? null : (bool) $allDayFilter;
+
         // Parse dates - date filtering is only applied if date parameters are provided
         $fromDate = $fromDate ? Carbon::parse($fromDate) : null;
         $toDate = $toDate ? Carbon::parse($toDate) : null;
@@ -294,6 +311,23 @@ class Calendar extends \Page
 
         $regularEvents = EventPage::get()->filter($regularEventsFilter);
 
+        // Non-recurring events have no per-occurrence overrides, so search
+        // and allDay are safe as SQL predicates here (unlike the recurring
+        // branch below, where EventException can override Title/Content/
+        // AllDay per instance).
+        if ($search !== '') {
+            $regularEvents = $regularEvents->filterAny([
+                // :nocase keeps the SQL branch consistent with the recurring
+                // branch's mb_stripos() under case-sensitive collations.
+                'Title:PartialMatch:nocase' => $search,
+                'Content:PartialMatch:nocase' => $search,
+            ]);
+        }
+
+        if ($allDayFilter !== null) {
+            $regularEvents = $regularEvents->filter('AllDay', $allDayFilter);
+        }
+
         // Only apply date filtering if dates were explicitly provided
         if ($applyDateFilter) {
             $whereClause = [];
@@ -308,8 +342,12 @@ class Calendar extends \Page
             }
         }
 
-        foreach ($regularEvents as $event) {
-            $allEvents->push($event);
+        // eventType === 'recurring' excludes regular (non-recurring) events
+        // entirely.
+        if ($eventType !== 'recurring') {
+            foreach ($regularEvents as $event) {
+                $allEvents->push($event);
+            }
         }
 
         // Get recurring events and their virtual instances
@@ -328,51 +366,74 @@ class Calendar extends \Page
         $windowYears = $this->config()->get('default_recurring_window_years')
             ?? self::config()->get('default_recurring_window_years');
 
-        foreach ($recurringEvents as $event) {
-            // For recurring events, we need date ranges for occurrence generation
-            // If no dates provided, use configurable default range for recurring events
-            $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
-            $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
+        // eventType === 'one-time' excludes recurring events entirely.
+        if ($eventType !== 'one-time') {
+            foreach ($recurringEvents as $event) {
+                // For recurring events, we need date ranges for occurrence generation
+                // If no dates provided, use configurable default range for recurring events
+                $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
+                $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
 
-            // Get occurrences within the date range using Carbon recursion with caching
-            $occurrences = $event->getCachedOccurrences($occurrenceFromDate, $occurrenceToDate);
+                // Get occurrences within the date range using Carbon recursion with caching
+                $occurrences = $event->getCachedOccurrences($occurrenceFromDate, $occurrenceToDate);
 
-            // Get event exceptions for this event
-            $exceptions = $event->EventExceptions();
-            $exceptionsByDate = [];
+                // Get event exceptions for this event
+                $exceptions = $event->EventExceptions();
+                $exceptionsByDate = [];
 
-            foreach ($exceptions as $exception) {
-                $exceptionsByDate[$exception->InstanceDate] = $exception;
-            }
+                foreach ($exceptions as $exception) {
+                    $exceptionsByDate[$exception->InstanceDate] = $exception;
+                }
 
-            foreach ($occurrences as $occurrence) {
-                $instanceDate = $occurrence->getInstanceDate()->format('Y-m-d');
+                foreach ($occurrences as $occurrence) {
+                    $instanceDate = $occurrence->getInstanceDate()->format('Y-m-d');
 
-                // Check if this instance has an exception
-                if (isset($exceptionsByDate[$instanceDate])) {
-                    $exception = $exceptionsByDate[$instanceDate];
+                    // Check if this instance has an exception
+                    if (isset($exceptionsByDate[$instanceDate])) {
+                        $exception = $exceptionsByDate[$instanceDate];
 
-                    // Skip deleted instances
-                    if ($exception->isDeleted()) {
+                        // Skip deleted instances
+                        if ($exception->isDeleted()) {
+                            continue;
+                        }
+
+                        // Apply modifications for modified instances
+                        if ($exception->isModified()) {
+                            // Apply any modifications from the exception
+                            $modifications = $exception->getOverrides();
+                            foreach ($modifications as $property => $value) {
+                                if ($value !== null && $value !== '') {
+                                    $occurrence->$property = $value;
+                                }
+                            }
+                            // Set a flag so we know this instance is modified
+                            $occurrence->IsModified = true;
+                            $occurrence->Exception = $exception;
+                        }
+                    }
+
+                    // search/allDay apply per-occurrence here, NOT as SQL on
+                    // the parent event: EventException can override Title,
+                    // Content and AllDay for individual instances, so a
+                    // parent-level predicate would wrongly include/exclude
+                    // overridden occurrences. The values below are already
+                    // exception-resolved by the block above (or fall back to
+                    // the parent via EventInstance::__get), and the
+                    // candidate set is window-bounded, so this loop adds no
+                    // queries.
+                    if ($allDayFilter !== null && (bool) $occurrence->AllDay !== $allDayFilter) {
                         continue;
                     }
 
-                    // Apply modifications for modified instances
-                    if ($exception->isModified()) {
-                        // Apply any modifications from the exception
-                        $modifications = $exception->getOverrides();
-                        foreach ($modifications as $property => $value) {
-                            if ($value !== null && $value !== '') {
-                                $occurrence->$property = $value;
-                            }
+                    if ($search !== '') {
+                        $haystack = (string) $occurrence->Title . ' ' . (string) $occurrence->Content;
+                        if (mb_stripos($haystack, $search) === false) {
+                            continue;
                         }
-                        // Set a flag so we know this instance is modified
-                        $occurrence->IsModified = true;
-                        $occurrence->Exception = $exception;
                     }
-                }
 
-                $allEvents->push($occurrence);
+                    $allEvents->push($occurrence);
+                }
             }
         }
 

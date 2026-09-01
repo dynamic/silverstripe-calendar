@@ -82,7 +82,7 @@
 
     <!-- Hidden Fields -->
     <% loop $Fields %>
-        <% if $Name == 'SecurityID' || $Name == 'advanced' %>
+        <% if $Name == 'SecurityID' %>
             $Field
         <% end_if %>
     <% end_loop %>

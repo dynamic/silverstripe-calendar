@@ -317,10 +317,10 @@ class CalendarController extends \PageController
      * value would hand visitors control of cache-pool growth (same hazard
      * parseRequestDate() guards for dates).
      */
-    private const SEARCH_MAX_LENGTH = 64;
+    public const SEARCH_MAX_LENGTH = 64;
 
     /**
-     * Extract the optional feed filters from the request.
+     * Normalise the optional feed filters from a request.
      *
      * These params were sent by CalendarFilterForm and appended to the
      * events XHR by CalendarView.js all along - the controller just never
@@ -328,9 +328,19 @@ class CalendarController extends \PageController
      * Events) is a real filter value that if($var) would drop, and anything
      * outside '0'/'1' means "no filter".
      *
+     * Public and static because it is the SINGLE definition of "what counts
+     * as an active filter". CalendarFilterForm's hasActiveFiltersStatic() and
+     * getFilterSummary() consume it too, so the chrome (the active-filter
+     * banner, the Clear Filters link, the summary) can never claim a filter
+     * is live that this method discarded. An earlier version duplicated the
+     * allowlists in the form and they drifted: ?eventType=banana rendered
+     * "Clear Filters" over a completely unfiltered feed - the same silent
+     * UI-lies-about-the-server defect as #133 itself, relocated to the chrome.
+     * Add a new filter param here and both consumers pick it up for free.
+     *
      * @return array{search: string, eventType: string, allDay: string|null}
      */
-    protected function getFilterParams(HTTPRequest $request): array
+    public static function normaliseFilterParams(HTTPRequest $request): array
     {
         // Array-typed params (?search[]=x) must not reach the string casts.
         $rawSearch = $request->getVar('search');
@@ -356,6 +366,16 @@ class CalendarController extends \PageController
             'eventType' => $eventType,
             'allDay' => $allDay,
         ];
+    }
+
+    /**
+     * Instance-side alias kept so existing call sites read naturally.
+     *
+     * @return array{search: string, eventType: string, allDay: string|null}
+     */
+    protected function getFilterParams(HTTPRequest $request): array
+    {
+        return self::normaliseFilterParams($request);
     }
 
     /**

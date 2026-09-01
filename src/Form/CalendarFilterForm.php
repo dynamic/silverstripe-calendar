@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Form;
 
+use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
@@ -309,12 +310,20 @@ class CalendarFilterForm extends Form
      */
     public static function hasActiveFiltersStatic(HTTPRequest $request): bool
     {
-        $filterVars = ['categories', 'eventType', 'allDay', 'search', 'from', 'to'];
+        // search/eventType/allDay go through the controller's normaliser rather
+        // than a raw emptiness check, so this can never report a filter as
+        // active that the feed itself discarded (?eventType=banana used to
+        // render "Clear Filters" over completely unfiltered results - the same
+        // defect class as #133, moved from the feed to the chrome).
+        $filters = CalendarController::normaliseFilterParams($request);
+        if ($filters['search'] !== '' || $filters['eventType'] !== '' || $filters['allDay'] !== null) {
+            return true;
+        }
 
-        foreach ($filterVars as $var) {
+        // categories/from/to have no shared normaliser yet. Strict checks so a
+        // literal '0' still registers.
+        foreach (['categories', 'from', 'to'] as $var) {
             $value = $request->getVar($var);
-            // Strict check: allDay=0 ("Timed Events") is a real filter that a
-            // truthiness test silently dropped.
             if ($value !== null && $value !== '' && $value !== []) {
                 return true;
             }
@@ -392,28 +401,24 @@ class CalendarFilterForm extends Form
             $summary['categories'] = $categories->column('Title');
         }
 
-        // Event type filter - only a plain string counts; an array-typed
-        // ?eventType[]=x must not flow into the summary as an array.
-        $eventType = $request->getVar('eventType');
-        if (is_string($eventType) && $eventType !== '') {
-            $summary['eventType'] = $eventType;
+        // search/eventType/allDay come from the controller's normaliser, so the
+        // summary reports exactly what the feed applied - never a value it
+        // discarded (?eventType=banana), and never an untruncated search string
+        // the SQL predicate never saw.
+        $filters = CalendarController::normaliseFilterParams($request);
+
+        if ($filters['eventType'] !== '') {
+            $summary['eventType'] = $filters['eventType'];
         }
 
-        // All-day filter - strict check so '0' (Timed Events) registers, and
-        // allowlisted like CalendarController::getFilterParams() so a value
-        // outside '0'/'1' (e.g. ?allDay=banana, which applies no filter)
-        // doesn't get mislabelled here as an active "Timed Events" filter.
-        $allDay = $request->getVar('allDay');
-        if (is_string($allDay) && in_array($allDay, ['0', '1'], true)) {
-            $summary['allDay'] = $allDay === '1' ? 'All-Day Events' : 'Timed Events';
+        if ($filters['allDay'] !== null) {
+            $summary['allDay'] = $filters['allDay'] === '1' ? 'All-Day Events' : 'Timed Events';
         }
 
-        // Search filter - strict check so search=0 registers (a truthy
-        // check treats the string "0" as empty and silently drops it, even
-        // though the real filtering path in CalendarController applies it).
-        $search = $request->getVar('search');
-        if (is_string($search) && $search !== '') {
-            $summary['search'] = $search;
+        // Strict check so search=0 registers (a truthy check treats the string
+        // "0" as empty and silently drops it, even though the feed applies it).
+        if ($filters['search'] !== '') {
+            $summary['search'] = $filters['search'];
         }
 
         return $summary;

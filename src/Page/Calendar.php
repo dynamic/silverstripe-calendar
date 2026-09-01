@@ -426,8 +426,17 @@ class Calendar extends \Page
                     }
 
                     if ($search !== '') {
-                        $haystack = (string) $occurrence->Title . ' ' . (string) $occurrence->Content;
-                        if (mb_stripos($haystack, $search) === false) {
+                        // Per-field, mirroring the regular branch's
+                        // filterAny(['Title:PartialMatch', 'Content:PartialMatch']).
+                        // Concatenating Title and Content into one haystack would
+                        // additionally match needles straddling the join (Title
+                        // "Annual Gala" + Content "Registration opens" matching
+                        // "Gala Registration"), so the same search returned
+                        // different results depending only on Recursion.
+                        if (
+                            mb_stripos((string) $occurrence->Title, $search) === false
+                            && mb_stripos((string) $occurrence->Content, $search) === false
+                        ) {
                             continue;
                         }
                     }

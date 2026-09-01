@@ -338,6 +338,133 @@ class CalendarFilterParamsTest extends FunctionalTest
         );
     }
 
+    /**
+     * CalendarController::events() returns $this->getResponse() - the SAME
+     * HTTPResponse instance on every call - so a caller holding two references
+     * reads the later call's body from both. Snapshot the parts we assert on
+     * immediately rather than retaining the object.
+     *
+     * @param array<string,mixed> $vars
+     * @return array{cache: string|null, titles: array<int,string>}
+     */
+    private function fetchSnapshot(array $vars = []): array
+    {
+        $request = new HTTPRequest('GET', 'events', array_merge([
+            'start' => '2025-06-01',
+            'end' => '2025-06-30',
+        ], $vars));
+        $request->addHeader('X-Requested-With', 'XMLHttpRequest');
+
+        $response = $this->controller->events($request);
+
+        return [
+            'cache' => $response->getHeader('X-Calendar-Cache'),
+            'titles' => $this->titles(json_decode($response->getBody(), true)),
+        ];
+    }
+
+    /**
+     * Guards the SECOND half of #133. Every other search test issues a single
+     * request against a cold cache, so it always takes the MISS path and would
+     * pass even with `search` deleted from generateEventsCacheKey() - at which
+     * point ?search=Standup and ?search=Meeting share one entry for the whole
+     * 30-minute TTL and serve each other's results.
+     */
+    public function testSearchDifferentiatesTheCacheKey(): void
+    {
+        $this->createOneTimeEvent();
+        $this->createRecurringEvent();
+
+        $first = $this->fetchSnapshot(['search' => 'Standup']);
+        $second = $this->fetchSnapshot(['search' => 'Meeting']);
+
+        $this->assertEquals('MISS', $first['cache']);
+        $this->assertEquals(
+            'MISS',
+            $second['cache'],
+            'A different search term must not hit the previous search\'s cache entry'
+        );
+
+        $this->assertSame(['Weekly Standup'], $first['titles']);
+        $this->assertSame(['Community Meeting'], $second['titles']);
+    }
+
+    /**
+     * Sibling of the above for eventType. The two eventType tests are separate
+     * methods with a cache clear between them, so a defect collapsing
+     * 'one-time' and 'recurring' onto one key is invisible today.
+     */
+    public function testEventTypeDifferentiatesTheCacheKey(): void
+    {
+        $this->createOneTimeEvent();
+        $this->createRecurringEvent();
+
+        $oneTime = $this->fetchSnapshot(['eventType' => 'one-time']);
+        $recurring = $this->fetchSnapshot(['eventType' => 'recurring']);
+
+        $this->assertEquals('MISS', $oneTime['cache']);
+        $this->assertEquals(
+            'MISS',
+            $recurring['cache'],
+            'eventType=recurring must not hit the eventType=one-time cache entry'
+        );
+
+        $this->assertSame(['Community Meeting'], $oneTime['titles']);
+        $this->assertSame(['Weekly Standup'], $recurring['titles']);
+    }
+
+    /**
+     * The regular branch ORs two PartialMatch predicates; the recurring branch
+     * checks the two fields independently. Both must agree, so a needle
+     * straddling the Title/Content join matches NEITHER event type.
+     */
+    public function testSearchMatchesContentAndDoesNotStraddleFields(): void
+    {
+        $oneTime = $this->createOneTimeEvent();
+        $oneTime->Content = 'Budget review and planning';
+        $oneTime->write();
+        $oneTime->publishRecursive();
+
+        $recurring = $this->createRecurringEvent();
+        $recurring->Content = 'Budget review and planning';
+        $recurring->write();
+        $recurring->publishRecursive();
+
+        // Content-only match works for both branches.
+        $byContent = $this->titles($this->fetchEvents(['search' => 'Budget review']));
+        $this->assertContains('Community Meeting', $byContent, 'regular branch must search Content');
+        $this->assertContains('Weekly Standup', $byContent, 'recurring branch must search Content');
+
+        // A needle spanning Title's TAIL and Content's HEAD. Under the old
+        // concatenated haystack ('Weekly Standup' . ' ' . 'Budget review...')
+        // 'Standup Budget' matched; per-field it matches neither field, which
+        // is what the regular branch's filterAny already did. The needle must
+        // genuinely straddle the join or this assertion is vacuous.
+        $straddle = $this->titles($this->fetchEvents(['search' => 'Standup Budget']));
+        $this->assertNotContains(
+            'Weekly Standup',
+            $straddle,
+            'Recurring search must be per-field, not against Title . " " . Content'
+        );
+
+        // Same shape against the regular branch, which has always been per-field.
+        $straddleRegular = $this->titles($this->fetchEvents(['search' => 'Meeting Budget']));
+        $this->assertNotContains('Community Meeting', $straddleRegular);
+    }
+
+    /**
+     * The SQL branch's :nocase modifiers are only exercised by a one-time
+     * event; the recurring branch uses mb_stripos and would mask their removal
+     * under a case-sensitive collation.
+     */
+    public function testSearchIsCaseInsensitiveOnTheSqlBranch(): void
+    {
+        $this->createOneTimeEvent();
+
+        $titles = $this->titles($this->fetchEvents(['search' => 'community meeting']));
+        $this->assertContains('Community Meeting', $titles);
+    }
+
     public function testIcalHonoursFilters(): void
     {
         $this->createOneTimeEvent();

@@ -92,7 +92,6 @@ export class SmartFiltering {
     showFilterSuggestions(history)
     {
       // Show suggested filter combinations
-        console.log('Showing filter suggestions based on history:', history);
     }
 
     loadFilterHistory()
@@ -116,7 +115,6 @@ export class SmartFiltering {
     renderSavedFilters(filters)
     {
       // Render saved filter dropdown
-        console.log('Rendering saved filters:', filters);
     }
 
     saveCurrentFilter(name, filterData)

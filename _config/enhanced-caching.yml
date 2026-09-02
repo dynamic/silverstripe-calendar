@@ -23,7 +23,6 @@ SilverStripe\Core\Cache\CacheFactory:
 Dynamic\Calendar\Page\EventPage:
   # Performance settings for virtual instances
   cache_occurrences: true
-  max_occurrences_per_request: 1000
 
   # Fields that trigger cache invalidation when changed
   recursion_changed:
@@ -48,10 +47,3 @@ Dynamic\Calendar\Model\EventInstance:
 Dynamic\Calendar\Controller\CalendarController:
   # Use cached occurrences by default
   use_cached_occurrences: true
-
-  # Default date range for events (in days)
-  default_date_range: 365
-
-  # Performance settings
-  events_per_page: 12
-  max_virtual_instances: 500

@@ -137,7 +137,6 @@ export class CalendarView {
       }
 
       const events = await response.json();
-      console.log('Fetched events:', events);
 
       // Events should be an array directly from the server
       if (Array.isArray(events)) {
@@ -219,7 +218,6 @@ export class CalendarView {
 
   handleDateClick(info) {
     // Handle date clicks (could open "add event" interface)
-    console.log('Date clicked:', info.dateStr);
 
     // Example: Navigate to date-specific view
     const url = new URL(window.location);

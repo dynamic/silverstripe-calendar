@@ -24,7 +24,6 @@ use SilverStripe\AssetAdmin\Forms\UploadField;
 use SilverStripe\Assets\Image;
 use SilverStripe\Lumberjack\Model\Lumberjack;
 use SilverStripe\ORM\DataObject;
-use SilverStripe\ORM\FieldType\DBBoolean;
 use SilverStripe\ORM\FieldType\DBDate;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBTime;
@@ -277,22 +276,11 @@ class EventPage extends \Page
     }
 
     /**
-     * @return mixed|string
+     * @return string
      */
-    public function getHasRecurringEvents()
+    public function getHasRecurringEvents(): string
     {
-        // With Carbon system, check if this event has recurring patterns
-        $hasRecurrence = $this->eventRecurs();
-
-        $summary = DBField::create_field(DBBoolean::class, $hasRecurrence)->Nice();
-
-        if ($hasRecurrence) {
-            // Count virtual instances in a reasonable timeframe
-            $count = min($this->getFullRecursionCount(), 100); // Cap display count
-            $summary .= " ({$count})";
-        }
-
-        return $summary;
+        return $this->getRecurrenceDescription();
     }
 
     /**

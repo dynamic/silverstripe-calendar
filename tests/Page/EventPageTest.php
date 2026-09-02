@@ -174,4 +174,20 @@ class EventPageTest extends SapphireTest
 
         $this->assertSame('Unknown pattern', $event->getHasRecurringEvents());
     }
+
+    /**
+     * With the module's recursion system disabled, eventRecurs() is false regardless
+     * of the Recursion value, so the summary must report no recurrence rather than
+     * describing a pattern that isn't actually active.
+     */
+    public function testGetHasRecurringEventsWhenRecursionConfigDisabled()
+    {
+        Config::modify()->set(EventPage::class, 'recursion', false);
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->Recursion = 'WEEKLY';
+
+        $this->assertSame('Does not repeat', $event->getHasRecurringEvents());
+    }
 }

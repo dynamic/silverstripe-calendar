@@ -113,4 +113,81 @@ class EventPageTest extends SapphireTest
 
         $this->assertInstanceOf(FieldList::class, $event->getCMSFields());
     }
+
+    /**
+     * getHasRecurringEvents() backs the CMS summary_fields listing and must describe
+     * the recursion pattern without generating occurrences.
+     */
+    public function testGetHasRecurringEventsForNonRecurringEvent()
+    {
+        Config::modify()->set(EventPage::class, 'recursion', true);
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->Recursion = 'NONE';
+
+        $this->assertSame('Does not repeat', $event->getHasRecurringEvents());
+    }
+
+    /**
+     *
+     */
+    public function testGetHasRecurringEventsForWeeklyEvent()
+    {
+        Config::modify()->set(EventPage::class, 'recursion', true);
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->Recursion = 'WEEKLY';
+        $event->Interval = 1;
+
+        $this->assertSame('Weekly', $event->getHasRecurringEvents());
+    }
+
+    /**
+     *
+     */
+    public function testGetHasRecurringEventsForWeeklyEventWithEndDate()
+    {
+        Config::modify()->set(EventPage::class, 'recursion', true);
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->Recursion = 'WEEKLY';
+        $event->Interval = 1;
+        $event->RecursionEndDate = '2025-07-30';
+
+        $this->assertSame('Weekly until Jul 30, 2025', $event->getHasRecurringEvents());
+    }
+
+    /**
+     * An unrecognized Recursion value must resolve to the trait's default match
+     * arm rather than throwing.
+     */
+    public function testGetHasRecurringEventsForUnknownRecursionPattern()
+    {
+        Config::modify()->set(EventPage::class, 'recursion', true);
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->Recursion = 'FORTNIGHTLY';
+
+        $this->assertSame('Unknown pattern', $event->getHasRecurringEvents());
+    }
+
+    /**
+     * With the module's recursion system disabled, eventRecurs() is false regardless
+     * of the Recursion value, so the summary must report no recurrence rather than
+     * describing a pattern that isn't actually active.
+     */
+    public function testGetHasRecurringEventsWhenRecursionConfigDisabled()
+    {
+        Config::modify()->set(EventPage::class, 'recursion', false);
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->Recursion = 'WEEKLY';
+
+        $this->assertSame('Does not repeat', $event->getHasRecurringEvents());
+    }
 }

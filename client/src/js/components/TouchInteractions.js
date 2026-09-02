@@ -174,7 +174,6 @@ export class TouchInteractions {
     performRefresh()
     {
       // Refresh calendar data
-        console.log('Refreshing calendar data...');
 
       // Show loading state
         const indicator = document.querySelector('.pull-refresh-indicator');

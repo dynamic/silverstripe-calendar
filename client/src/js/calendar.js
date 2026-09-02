@@ -53,8 +53,6 @@ class CalendarModule {
 
     initializeComponents()
     {
-        console.log('Initializing Dynamic Calendar Module...');
-
       // Initialize FullCalendar directly
         this.initializeFullCalendar();
 
@@ -77,8 +75,6 @@ class CalendarModule {
         if (this.isTouchDevice()) {
             this.touchInteractions = new TouchInteractions();
         }
-
-        console.log('Calendar module initialized successfully');
     }
 
     initializeFullCalendar()
@@ -92,15 +88,12 @@ class CalendarModule {
             const eventsUrl = fullCalendarSection.dataset.eventsUrl;
             const calendarId = fullCalendarSection.dataset.calendarId;
 
-            console.log('Initializing FullCalendar with events URL:', eventsUrl);
-
             try {
                 this.calendarView = new CalendarView(calendarElement, {
                     eventsUrl: eventsUrl,
                     calendarId: calendarId,
                     defaultView: fullCalendarSection.dataset.defaultView
                 });
-                console.log('FullCalendar initialized successfully');
             } catch (error) {
                 console.error('Failed to initialize FullCalendar:', error);
             }
@@ -133,8 +126,6 @@ class CalendarModule {
                 return;
             }
 
-            console.log(`Initializing Element Calendar ${index + 1} with events URL:`, eventsUrl);
-
             try {
               // Initialize with FullCalendarView component with all view options
                 new FullCalendarView(targetCalendar, {
@@ -151,8 +142,6 @@ class CalendarModule {
                         this.fetchElementCalendarEvents(eventsUrl, info, successCallback, failureCallback);
                     }
                 });
-
-                console.log(`Element Calendar ${index + 1} initialized successfully`);
             } catch (error) {
                 console.error(`Failed to initialize Element Calendar ${index + 1}:`, error);
             }
@@ -199,7 +188,6 @@ class CalendarModule {
             return response.json();
         })
         .then(events => {
-            console.log('Fetched calendar events:', events.length);
             successCallback(events);
         })
         .catch(error => {
@@ -230,8 +218,6 @@ class CalendarModule {
             return response.json();
         })
         .then(events => {
-            console.log('Fetched element calendar events:', events.length);
-
             // Events are already in FullCalendar format from the Calendar module
             successCallback(events);
         })

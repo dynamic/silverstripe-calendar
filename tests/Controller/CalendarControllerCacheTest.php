@@ -7,8 +7,12 @@ use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
+use Psr\Log\LoggerInterface;
+use Psr\SimpleCache\CacheInterface;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Core\Cache\CacheFactory;
 use SilverStripe\Core\Config\Config;
+use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\FunctionalTest;
 
 /**
@@ -378,6 +382,131 @@ class CalendarControllerCacheTest extends FunctionalTest
         $request4 = $this->createAjaxRequest();
         $response4 = $this->controller->events($request4);
         $this->assertEquals('HIT', $response4->getHeader('X-Calendar-Cache'), 'Cache should be repopulated');
+    }
+
+    /**
+     * Build a CacheFactory stub whose create() always returns the given cache,
+     * regardless of the requested service name/params.
+     *
+     * @param CacheInterface $cache
+     * @return CacheFactory
+     */
+    protected function makeCacheFactoryReturning(CacheInterface $cache): CacheFactory
+    {
+        $factory = $this->createStub(CacheFactory::class);
+        $factory->method('create')->willReturn($cache);
+
+        return $factory;
+    }
+
+    /**
+     * Test 9: a failing cache write logs a warning and still returns the
+     * built JSON. PSR-16 set() returns false on failure - previously this
+     * was silently discarded, leaving every request an indistinguishable
+     * permanent MISS with no signal that caching had stopped working
+     * (issue #152).
+     */
+    public function testFailingCacheWriteLogsWarningAndStillReturnsJson()
+    {
+        $event = EventPage::create([
+            'Title' => 'Event With Broken Cache',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $brokenCache = $this->createStub(CacheInterface::class);
+        $brokenCache->method('get')->willReturn(null);
+        $brokenCache->method('set')->willReturn(false);
+
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())
+            ->method('warning')
+            ->with($this->stringContains('failed to write events cache entry'));
+
+        Injector::nest();
+        try {
+            Injector::inst()->registerService(
+                $this->makeCacheFactoryReturning($brokenCache),
+                CacheFactory::class
+            );
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+
+            $request = $this->createAjaxRequest();
+            $response = $this->controller->events($request);
+
+            $this->assertEquals('MISS', $response->getHeader('X-Calendar-Cache'));
+
+            $data = json_decode($response->getBody(), true);
+            $this->assertIsArray($data);
+            $found = false;
+            foreach ($data as $eventData) {
+                if ($eventData['title'] === 'Event With Broken Cache') {
+                    $found = true;
+                    break;
+                }
+            }
+            $this->assertTrue($found, 'Built JSON must still be returned when the cache write fails');
+        } finally {
+            Injector::unnest();
+        }
+    }
+
+    /**
+     * Test 10: if the logger service itself is unavailable/broken, a failing
+     * cache write must still return the built JSON rather than surfacing a
+     * fatal error - the try/catch in logCacheWriteFailure() exists
+     * specifically for this combined failure mode.
+     */
+    public function testFailingCacheWriteWithBrokenLoggerStillReturnsJson()
+    {
+        $event = EventPage::create([
+            'Title' => 'Event With Broken Cache And Logger',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $brokenCache = $this->createStub(CacheInterface::class);
+        $brokenCache->method('get')->willReturn(null);
+        $brokenCache->method('set')->willReturn(false);
+
+        $brokenLogger = $this->createStub(LoggerInterface::class);
+        $brokenLogger->method('warning')->willThrowException(new \RuntimeException('logger unavailable'));
+
+        Injector::nest();
+        try {
+            Injector::inst()->registerService(
+                $this->makeCacheFactoryReturning($brokenCache),
+                CacheFactory::class
+            );
+            Injector::inst()->registerService($brokenLogger, LoggerInterface::class);
+
+            $request = $this->createAjaxRequest();
+            $response = $this->controller->events($request);
+
+            $this->assertEquals('MISS', $response->getHeader('X-Calendar-Cache'));
+
+            $data = json_decode($response->getBody(), true);
+            $this->assertIsArray($data);
+            $found = false;
+            foreach ($data as $eventData) {
+                if ($eventData['title'] === 'Event With Broken Cache And Logger') {
+                    $found = true;
+                    break;
+                }
+            }
+            $this->assertTrue(
+                $found,
+                'Built JSON must still be returned even when both the cache write and the logger fail'
+            );
+        } finally {
+            Injector::unnest();
+        }
     }
 
     /**

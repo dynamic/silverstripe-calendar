@@ -15,6 +15,7 @@ use SilverStripe\Model\ArrayData;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Cache\CacheFactory;
 use Psr\SimpleCache\CacheInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * Calendar Controller
@@ -239,7 +240,9 @@ class CalendarController extends \PageController
             // Cache the JSON response
             $cacheKey = $this->generateEventsCacheKey($request);
             $cache = $this->getEventsCache();
-            $cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'));
+            if (!$cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'))) {
+                $this->logCacheWriteFailure($cacheKey);
+            }
 
             $response = $this->getResponse();
             $response->addHeader('Content-Type', 'application/json');
@@ -312,10 +315,12 @@ class CalendarController extends \PageController
     }
 
     /**
-     * Longest search string accepted. The value feeds both the SQL predicate
-     * and the cache key, so it must be bounded - an unbounded visitor-supplied
-     * value would hand visitors control of cache-pool growth (same hazard
-     * parseRequestDate() guards for dates).
+     * Longest search string accepted. Bounds the SQL LIKE operand and the
+     * pre-hash cache-key input, keeping both to a fixed size regardless of
+     * how long a visitor-supplied value is. It does not bound cache-key
+     * cardinality - distinct short values (?search=a1, ?search=a2, ...)
+     * still mint unbounded distinct cache entries, since the key is hashed
+     * per value in generateEventsCacheKey() regardless of length.
      */
     public const SEARCH_MAX_LENGTH = 64;
 
@@ -791,5 +796,27 @@ class CalendarController extends \PageController
             'CalendarJSON',
             ['defaultLifetime' => $this->config()->get('json_cache_ttl')]
         );
+    }
+
+    /**
+     * Log a failed events cache write. A false-returning set() otherwise
+     * leaves every request a permanent, indistinguishable MISS with no
+     * signal that caching has stopped working. The lookup is guarded so a
+     * missing/misconfigured logger service can't turn a cache-write failure
+     * into a fatal error on the response path - falling back to error_log()
+     * so the failure is never entirely silent even then.
+     *
+     * @param string $cacheKey
+     * @return void
+     */
+    private function logCacheWriteFailure(string $cacheKey): void
+    {
+        $message = 'CalendarController: failed to write events cache entry - ' . $cacheKey;
+        try {
+            $logger = Injector::inst()->get(LoggerInterface::class);
+            $logger->warning($message);
+        } catch (\Throwable $e) {
+            error_log($message . ' (logger service unavailable: ' . $e->getMessage() . ')');
+        }
     }
 }

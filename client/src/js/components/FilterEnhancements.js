@@ -2,8 +2,8 @@
 export class FilterEnhancements {
     constructor()
     {
-        this.initCollapsibleFilters();
         this.initActiveFilterTracking();
+        this.initCollapsibleFilters();
         this.initKeyboardSupport();
         this.initFilterMemory();
     }
@@ -56,6 +56,8 @@ export class FilterEnhancements {
                 activeCount++;
             }
         }
+
+        this.updateFilterBadge(activeCount);
 
         const updateActiveFiltersBadge = (fieldName, fieldValue) => {
             if (fieldName === 'SecurityID' || fieldName === 'action_doFilter') {
@@ -114,13 +116,6 @@ export class FilterEnhancements {
         if (!header) {
             return;
         }
-
-        header.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                header.click();
-            }
-        });
 
       // Add keyboard navigation within filters
         this.setupFormKeyboardNav();

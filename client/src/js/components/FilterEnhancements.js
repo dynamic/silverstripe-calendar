@@ -112,11 +112,6 @@ export class FilterEnhancements {
 
     initKeyboardSupport()
     {
-        const header = document.querySelector('.js-toggle-filters');
-        if (!header) {
-            return;
-        }
-
       // Add keyboard navigation within filters
         this.setupFormKeyboardNav();
     }

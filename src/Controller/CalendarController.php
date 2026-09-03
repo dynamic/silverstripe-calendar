@@ -800,11 +800,16 @@ class CalendarController extends \PageController
 
     /**
      * Log a failed events cache write. A false-returning set() otherwise
-     * leaves every request a permanent, indistinguishable MISS with no
-     * signal that caching has stopped working. The lookup is guarded so a
-     * missing/misconfigured logger service can't turn a cache-write failure
-     * into a fatal error on the response path - falling back to error_log()
-     * so the failure is never entirely silent even then.
+     * leaves every request a permanent, indistinguishable MISS. Symfony's
+     * own cache adapter already logs a "Failed to save key" warning in this
+     * case when it has a logger attached (which SilverStripe's default
+     * CacheFactory wiring provides) - this adds calendar-specific context
+     * (the calendar cache key) rather than being the only signal, and is
+     * the sole signal for a CacheFactory implementation that doesn't wire
+     * one. The lookup is guarded so a missing/misconfigured logger service
+     * can't turn a cache-write failure into a fatal error on the response
+     * path - falling back to error_log() so the failure is never entirely
+     * silent even then.
      *
      * @param string $cacheKey
      * @return void
@@ -816,7 +821,7 @@ class CalendarController extends \PageController
             $logger = Injector::inst()->get(LoggerInterface::class);
             $logger->warning($message);
         } catch (\Throwable $e) {
-            error_log($message . ' (logger service unavailable: ' . $e->getMessage() . ')');
+            error_log($message . ' (logger service unavailable: ' . get_class($e) . ': ' . $e->getMessage() . ')');
         }
     }
 }

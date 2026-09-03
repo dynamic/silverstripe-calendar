@@ -478,6 +478,9 @@ class CalendarControllerCacheTest extends FunctionalTest
         $brokenLogger = $this->createStub(LoggerInterface::class);
         $brokenLogger->method('warning')->willThrowException(new \RuntimeException('logger unavailable'));
 
+        $errorLogFile = tempnam(sys_get_temp_dir(), 'calendar-error-log-');
+        $previousErrorLog = ini_set('error_log', $errorLogFile);
+
         Injector::nest();
         try {
             Injector::inst()->registerService(
@@ -504,8 +507,18 @@ class CalendarControllerCacheTest extends FunctionalTest
                 $found,
                 'Built JSON must still be returned even when both the cache write and the logger fail'
             );
+
+            $loggedContent = file_get_contents($errorLogFile);
+            $this->assertStringContainsString(
+                'failed to write events cache entry',
+                $loggedContent,
+                'The error_log() fallback must actually fire when the logger service throws'
+            );
+            $this->assertStringContainsString('RuntimeException', $loggedContent);
         } finally {
             Injector::unnest();
+            ini_set('error_log', $previousErrorLog);
+            unlink($errorLogFile);
         }
     }
 

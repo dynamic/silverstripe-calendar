@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Tests\Form;
 
+use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Form\CalendarFilterForm;
 use Dynamic\Calendar\Page\Calendar;
 use SilverStripe\Control\Controller;
@@ -430,15 +431,14 @@ class CalendarFilterFormTest extends SapphireTest
         $calendar->URLSegment = 'test-calendar-summary-search-truncation';
         $calendar->write();
 
-        $rawSearch = str_repeat('a', 70);
-        $expectedTruncated = str_repeat('a', \Dynamic\Calendar\Controller\CalendarController::SEARCH_MAX_LENGTH);
+        $rawSearch = str_repeat('a', CalendarController::SEARCH_MAX_LENGTH + 6);
+        $expectedTruncated = str_repeat('a', CalendarController::SEARCH_MAX_LENGTH);
 
         $request = new HTTPRequest('GET', '/calendar', ['search' => $rawSearch]);
         $summary = CalendarFilterForm::getFilterSummary($request, $calendar);
 
         $this->assertSame($expectedTruncated, $summary['search']);
-        $this->assertSame(70, strlen($rawSearch));
-        $this->assertSame(64, strlen($summary['search']));
+        $this->assertSame(CalendarController::SEARCH_MAX_LENGTH, strlen($summary['search']));
     }
 
     /**

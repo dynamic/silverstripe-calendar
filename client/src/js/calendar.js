@@ -148,54 +148,6 @@ class CalendarModule {
         });
     }
 
-    fetchCalendarEvents(start, end, successCallback, failureCallback)
-    {
-      // Get current filter values
-        const filterForm = document.querySelector('form[name="CalendarFilterForm"]');
-        const params = new URLSearchParams();
-
-        params.append('start', start.toISOString().split('T')[0]);
-        params.append('end', end.toISOString().split('T')[0]);
-        params.append('format', 'json');
-
-        if (filterForm) {
-            const formData = new FormData(filterForm);
-            for (const [key, value] of formData.entries()) {
-                // Same contract as CalendarView.fetchEvents(): FormData values
-                // are strings, so allDay's '0' ("Timed Events") was already
-                // truthy here - the change that matters is excluding
-                // SecurityID, a CSRF token with no place on a feed URL.
-                if (value !== '' && key !== 'action_doFilter' && key !== 'SecurityID') {
-                    params.append(key, value);
-                }
-            }
-        }
-
-      // Fetch events from current page with AJAX
-        const currentUrl = new URL(window.location);
-        const eventsUrl = `${currentUrl.pathname}?${params.toString()}`;
-
-        fetch(eventsUrl, {
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(events => {
-            successCallback(events);
-        })
-        .catch(error => {
-            console.error('Failed to fetch calendar events:', error);
-            failureCallback(error);
-        });
-    }
-
     fetchElementCalendarEvents(eventsUrl, info, successCallback, failureCallback)
     {
         const params = new URLSearchParams();

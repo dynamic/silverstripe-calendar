@@ -38,15 +38,17 @@ use SilverStripe\Versioned\Versioned;
  * Class EventPage
  * @package Dynamic\Calendar\Page
  *
- * @property DBDate $StartDate
- * @property DBTime $StartTime
- * @property DBDate $EndDate
- * @property string $EndTime Raw 'H:i:s' string - the magic property accessor reads/writes the raw scalar
- * @property bool $AllDay
- * @property string $Recursion
- * @property int $Interval
- * @property string $EventType
- * @property DBDate $RecursionEndDate
+ * @property ?string $StartDatetime Raw 'Y-m-d H:i:s' string - the magic property accessor reads/writes the raw scalar
+ * @property ?string $EndDatetime Raw 'Y-m-d H:i:s' string - deprecated column; raw scalar accessor semantics as above
+ * @property ?string $StartDate Raw 'Y-m-d' string - the magic property accessor reads/writes the raw scalar
+ * @property ?string $StartTime Raw 'H:i:s' string - the magic property accessor reads/writes the raw scalar
+ * @property ?string $EndDate Raw 'Y-m-d' string - the magic property accessor reads/writes the raw scalar
+ * @property ?string $EndTime Raw 'H:i:s' string - the magic property accessor reads/writes the raw scalar
+ * @property int|bool|null $AllDay int 0/1 as loaded from the database, bool when assigned in PHP
+ * @property ?string $Recursion
+ * @property ?int $Interval
+ * @property ?string $EventType
+ * @property ?string $RecursionEndDate Raw 'Y-m-d' string - the magic property accessor reads/writes the raw scalar
  * @method ManyManyList<Category> Categories()
  */
 class EventPage extends \Page
@@ -262,7 +264,7 @@ class EventPage extends \Page
     }
 
     /**
-     * @return false|string
+     * @return string
      */
     public function getGridFieldTime()
     {
@@ -341,16 +343,15 @@ class EventPage extends \Page
     }
 
     /**
-     * @return \SilverStripe\ORM\DataList<EventPage>
+     * @return \SilverStripe\ORM\DataList<covariant EventPage>
      */
     public function getLumberjackPagesForGridfield()
     {
         // With Carbon system, we don't have physical RecursiveEvent records
         // Return empty DataList since we use virtual instances
-        /** @var \SilverStripe\ORM\DataList<EventPage> $pages */
-        $pages = EventPage::get()->filter('ID', 0); // Returns empty DataList
-
-        return $pages;
+        // The `covariant` marker is required: DataObject::get()'s `@return DataList<static>`
+        // resolves its template T non-covariantly, and a bare @return EventPage fails level 6.
+        return EventPage::get()->filter('ID', 0); // Returns empty DataList
     }
 
     /**
@@ -505,9 +506,9 @@ class EventPage extends \Page
     }
 
     /**
-     *
+     * @return void
      */
-    public function onBeforeWrite(): void
+    public function onBeforeWrite()
     {
         parent::onBeforeWrite();
 
@@ -544,9 +545,9 @@ class EventPage extends \Page
     }
 
     /**
-     *
+     * @return void
      */
-    public function onAfterPublish(): void
+    public function onAfterPublish()
     {
         parent::onAfterPublish();
 

@@ -1,5 +1,9 @@
 # Change Log
 
+## [Unreleased]
+### Changed
+- `EventPage` class docblock `@property` annotations corrected to the raw scalar types the magic accessors actually return (`?string` for the Date/Time/Varchar columns, `int|bool|null` for the Boolean column) ([#125](https://github.com/dynamic/silverstripe-calendar/issues/125)). Documentation only - no runtime or signature changes - but static-analysis consumers of this module will see different inferred types.
+
 ## [1.0.0-alpha1](https://github.com/dynamic/dynamic-calendar/tree/1.0.0-alpha1) (2016-04-28)
 **Implemented enhancements:**
 

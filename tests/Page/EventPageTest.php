@@ -200,8 +200,9 @@ class EventPageTest extends SapphireTest
         /** @var EventPage $event */
         $event = $this->objFromFixture(EventPage::class, 'one');
 
-        // Fixture 'one' has StartDate 2025-06-18
-        $this->assertSame('Jun 18th, 2025', $event->getGridFieldDate());
+        // Fixture 'one' has StartDate 2025-06-18. Relaxed to a pattern (rather than
+        // an exact string) so the ordinal suffix can't vary by ICU version.
+        $this->assertMatchesRegularExpression('/^Jun 18(st|nd|rd|th), 2025$/', $event->getGridFieldDate());
     }
 
     /**
@@ -231,7 +232,9 @@ class EventPageTest extends SapphireTest
         $time = $event->getGridFieldTime();
 
         $this->assertNotSame('All Day', $time);
-        $this->assertMatchesRegularExpression('/9:00/', $time);
+        // SapphireTest pins en_US so Nice() renders "9:00:00 AM"; matched as a
+        // fragment with a non-digit boundary so 19:00 can't false-match.
+        $this->assertMatchesRegularExpression('/(^|[^0-9])9:00/', $time);
     }
 
     /**
@@ -297,8 +300,9 @@ class EventPageTest extends SapphireTest
     }
 
     /**
-     * onBeforeWrite() also stamps EventType with the record's own class and must
-     * leave an event without StartTime/StartDate unchanged apart from that.
+     * onBeforeWrite() stamps EventType with the record's own class. With no
+     * StartTime/StartDate set, the EndTime/EndDate defaults must not fire, so
+     * those columns stay empty.
      */
     public function testOnBeforeWriteSetsEventType()
     {
@@ -312,5 +316,9 @@ class EventPageTest extends SapphireTest
         $event->write();
 
         $this->assertSame(EventPage::class, $event->EventType);
+
+        $fresh = EventPage::get()->byID($event->ID);
+        $this->assertNull($fresh->EndTime, 'EndTime must stay NULL without a StartTime');
+        $this->assertNull($fresh->EndDate, 'EndDate must stay NULL without a StartDate');
     }
 }

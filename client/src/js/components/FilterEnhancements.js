@@ -2,28 +2,23 @@
 export class FilterEnhancements {
     constructor()
     {
-        this.initCollapsibleFilters();
         this.initActiveFilterTracking();
+        this.initCollapsibleFilters();
         this.initKeyboardSupport();
         this.initFilterMemory();
     }
 
     initCollapsibleFilters()
     {
-        const filterForm = document.querySelector('.calendar-filter-form');
-        if (!filterForm) {
-            return;
-        }
-
-        const header = filterForm.querySelector('.filter-header');
-        const collapseTarget = filterForm.querySelector('#calendar-filters-content');
+        const header = document.querySelector('.js-toggle-filters');
+        const collapseTarget = document.querySelector('#calendar-filters');
 
         if (!header || !collapseTarget) {
             return;
         }
 
       // Auto-expand if there are active filters
-        const hasActiveFilters = filterForm.querySelector('.badge[aria-label="Active filters"]');
+        const hasActiveFilters = header.querySelector('.badge[aria-label="Active filters"]');
         if (hasActiveFilters) {
             collapseTarget.classList.add('show');
             header.setAttribute('aria-expanded', 'true');
@@ -44,7 +39,7 @@ export class FilterEnhancements {
 
     initActiveFilterTracking()
     {
-        const form = document.querySelector('.calendar-filter-form form');
+        const form = document.querySelector('.calendar-filter-form');
         if (!form) {
             return;
         }
@@ -61,6 +56,8 @@ export class FilterEnhancements {
                 activeCount++;
             }
         }
+
+        this.updateFilterBadge(activeCount);
 
         const updateActiveFiltersBadge = (fieldName, fieldValue) => {
             if (fieldName === 'SecurityID' || fieldName === 'action_doFilter') {
@@ -93,7 +90,7 @@ export class FilterEnhancements {
 
     updateFilterBadge(count)
     {
-        const header = document.querySelector('.filter-header h5');
+        const header = document.querySelector('.js-toggle-filters');
         if (!header) {
             return;
         }
@@ -115,25 +112,13 @@ export class FilterEnhancements {
 
     initKeyboardSupport()
     {
-        const header = document.querySelector('.filter-header');
-        if (!header) {
-            return;
-        }
-
-        header.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                header.click();
-            }
-        });
-
       // Add keyboard navigation within filters
         this.setupFormKeyboardNav();
     }
 
     setupFormKeyboardNav()
     {
-        const form = document.querySelector('.calendar-filter-form form');
+        const form = document.querySelector('.calendar-filter-form');
         if (!form) {
             return;
         }
@@ -159,7 +144,7 @@ export class FilterEnhancements {
 
     initFilterMemory()
     {
-        const form = document.querySelector('.calendar-filter-form form');
+        const form = document.querySelector('.calendar-filter-form');
         if (!form) {
             return;
         }

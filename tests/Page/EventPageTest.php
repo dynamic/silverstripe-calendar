@@ -190,4 +190,127 @@ class EventPageTest extends SapphireTest
 
         $this->assertSame('Does not repeat', $event->getHasRecurringEvents());
     }
+
+    /**
+     * getGridFieldDate() renders StartDate as "Month Day, Year" for the GridField
+     * summary column (DBDate::ShortMonth/DayOfMonth/Year).
+     */
+    public function testGetGridFieldDate()
+    {
+        /** @var EventPage $event */
+        $event = $this->objFromFixture(EventPage::class, 'one');
+
+        // Fixture 'one' has StartDate 2025-06-18
+        $this->assertSame('Jun 18th, 2025', $event->getGridFieldDate());
+    }
+
+    /**
+     * All-day events must show the localised "All Day" label in the GridField time
+     * column, even though a StartTime is present in the fixture.
+     */
+    public function testGetGridFieldTimeForAllDayEvent()
+    {
+        /** @var EventPage $event */
+        $event = $this->objFromFixture(EventPage::class, 'two');
+
+        $this->assertTrue((bool)$event->AllDay, 'Fixture two should be an all-day event');
+        $this->assertSame('All Day', $event->getGridFieldTime());
+    }
+
+    /**
+     * A timed event must show the DBTime::Nice() formatted start time, not the
+     * all-day label. The "9:00" fragment is checked rather than the full string so
+     * the assertion holds across en variants of ICU's medium time format.
+     */
+    public function testGetGridFieldTimeForTimedEvent()
+    {
+        /** @var EventPage $event */
+        $event = $this->objFromFixture(EventPage::class, 'one');
+
+        // Fixture 'one' has StartTime 09:00:00, AllDay 0
+        $time = $event->getGridFieldTime();
+
+        $this->assertNotSame('All Day', $time);
+        $this->assertMatchesRegularExpression('/9:00/', $time);
+    }
+
+    /**
+     * A timed event with no StartTime falls into the empty-value branch of
+     * DBTime::Nice() and must render an empty string rather than throwing.
+     */
+    public function testGetGridFieldTimeForEmptyStartTime()
+    {
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->AllDay = false;
+        $event->StartTime = '';
+
+        $this->assertSame('', $event->getGridFieldTime());
+    }
+
+    /**
+     * onBeforeWrite() defaults EndTime to StartTime + 1 hour when a StartTime is
+     * set but no EndTime, and mirrors StartDate into EndDate when EndDate is empty.
+     */
+    public function testOnBeforeWriteDefaultsEndTimeAndEndDate()
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->ParentID = $calendar->ID;
+        $event->Title = 'Defaults Test';
+        $event->StartDate = '2025-06-18';
+        $event->StartTime = '09:00:00';
+        $event->write();
+
+        $this->assertSame('10:00:00', $event->EndTime);
+
+        $fresh = EventPage::get()->byID($event->ID);
+        $this->assertSame('10:00:00', $fresh->EndTime);
+        $this->assertSame('2025-06-18', $fresh->EndDate);
+    }
+
+    /**
+     * An explicitly set EndTime must not be overwritten by the +1 hour default,
+     * and an explicitly set EndDate must not be mirrored from StartDate.
+     */
+    public function testOnBeforeWriteKeepsExplicitEndTimeAndEndDate()
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->ParentID = $calendar->ID;
+        $event->Title = 'Explicit Time Test';
+        $event->StartDate = '2025-06-18';
+        $event->EndDate = '2025-06-19';
+        $event->StartTime = '09:00:00';
+        $event->EndTime = '09:45:00';
+        $event->write();
+
+        $fresh = EventPage::get()->byID($event->ID);
+        $this->assertSame('09:45:00', $fresh->EndTime);
+        $this->assertSame('2025-06-19', $fresh->EndDate);
+    }
+
+    /**
+     * onBeforeWrite() also stamps EventType with the record's own class and must
+     * leave an event without StartTime/StartDate unchanged apart from that.
+     */
+    public function testOnBeforeWriteSetsEventType()
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        /** @var EventPage $event */
+        $event = EventPage::create();
+        $event->ParentID = $calendar->ID;
+        $event->Title = 'Event Type Test';
+        $event->write();
+
+        $this->assertSame(EventPage::class, $event->EventType);
+    }
 }

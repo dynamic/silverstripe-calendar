@@ -8,6 +8,7 @@ use Dynamic\Calendar\Extension\CalendarCacheInvalidation;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
+use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Traits\CarbonRecursion;
 use SilverStripe\Forms\DateField;
@@ -29,6 +30,7 @@ use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
+use SilverStripe\Security\Member;
 use SilverStripe\Core\Validation\ValidationResult;
 use SilverStripe\Versioned\Versioned;
 
@@ -39,13 +41,13 @@ use SilverStripe\Versioned\Versioned;
  * @property DBDate $StartDate
  * @property DBTime $StartTime
  * @property DBDate $EndDate
- * @property DBTime $EndTime
+ * @property string $EndTime Raw 'H:i:s' string - the magic property accessor reads/writes the raw scalar
  * @property bool $AllDay
  * @property string $Recursion
  * @property int $Interval
  * @property string $EventType
  * @property DBDate $RecursionEndDate
- * @method ManyManyList Categories()
+ * @method ManyManyList<Category> Categories()
  */
 class EventPage extends \Page
 {
@@ -54,7 +56,7 @@ class EventPage extends \Page
 
     /**
      * Recurring pattern options for event frequency
-     * @var array
+     * @var array<string,string>
      */
     private const CARBON_PATTERNS = [
         'DAILY' => 'Day(s)',
@@ -269,7 +271,7 @@ class EventPage extends \Page
             return _t('EventPage.ALL_DAY', 'All Day');
         }
 
-        /** @var DBTime $date */
+        /** @var DBTime $time */
         $time = DBField::create_field(DBTime::class, $this->StartTime);
 
         return $time->Nice();
@@ -339,13 +341,16 @@ class EventPage extends \Page
     }
 
     /**
-     * @return \SilverStripe\ORM\DataList
+     * @return \SilverStripe\ORM\DataList<EventPage>
      */
     public function getLumberjackPagesForGridfield()
     {
         // With Carbon system, we don't have physical RecursiveEvent records
         // Return empty DataList since we use virtual instances
-        return EventPage::get()->filter('ID', 0); // Returns empty DataList
+        /** @var \SilverStripe\ORM\DataList<EventPage> $pages */
+        $pages = EventPage::get()->filter('ID', 0); // Returns empty DataList
+
+        return $pages;
     }
 
     /**
@@ -502,7 +507,7 @@ class EventPage extends \Page
     /**
      *
      */
-    public function onBeforeWrite()
+    public function onBeforeWrite(): void
     {
         parent::onBeforeWrite();
 
@@ -541,7 +546,7 @@ class EventPage extends \Page
     /**
      *
      */
-    public function onAfterPublish()
+    public function onAfterPublish(): void
     {
         parent::onAfterPublish();
 
@@ -603,7 +608,7 @@ class EventPage extends \Page
     }
 
     /**
-     * @param null $member
+     * @param Member|null $member
      * @return bool
      */
     public function canEdit($member = null)
@@ -616,7 +621,7 @@ class EventPage extends \Page
     }
 
     /**
-     * @param null $member
+     * @param Member|null $member
      * @return bool
      */
     public function canPublish($member = null)
@@ -642,7 +647,7 @@ class EventPage extends \Page
     }
 
     /**
-     * @param null $member
+     * @param Member|null $member
      * @return bool
      */
     public function canDelete($member = null)
@@ -665,7 +670,7 @@ class EventPage extends \Page
 
     /**
      * Get the pattern source for recurring events dropdown
-     * @return array
+     * @return array<string,string>
      */
     public function getPatternSource()
     {
@@ -673,7 +678,7 @@ class EventPage extends \Page
     }
 
     /**
-     * @param $list
+     * @param iterable<mixed> $list
      * @return \Generator
      */
     private function yieldSingle($list)
@@ -688,7 +693,7 @@ class EventPage extends \Page
      *
      * @param string $instanceDate
      * @param string $action Either 'MODIFIED' or 'DELETED'
-     * @param array $overrides Override values for modified instances
+     * @param array<string,mixed> $overrides Override values for modified instances
      * @param string $reason Optional reason for the exception
      * @return EventException
      */
@@ -712,7 +717,7 @@ class EventPage extends \Page
      *
      * For the Carbon system, this returns an ArrayList of virtual instances
      *
-     * @return \SilverStripe\Model\List\ArrayList
+     * @return \SilverStripe\Model\List\ArrayList<EventInstance>
      */
     public function allChildren()
     {

@@ -2,6 +2,7 @@
 
 namespace Dynamic\Calendar\Tests\Form;
 
+use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Form\CalendarFilterForm;
 use Dynamic\Calendar\Page\Calendar;
 use SilverStripe\Control\Controller;
@@ -413,6 +414,31 @@ class CalendarFilterFormTest extends SapphireTest
             $form->Fields()->dataFieldByName('allDay'),
             'allDay must render without ?advanced'
         );
+    }
+
+    /**
+     * getFilterSummary() must report exactly what the feed applied. A
+     * >64-char search string is truncated by
+     * CalendarController::normaliseFilterParams() before it ever reaches the
+     * SQL predicate, so the summary must echo that same truncated value -
+     * not the raw, untruncated one - or the displayed filter would not
+     * match the applied filter (issue #152 acceptance criterion 3).
+     */
+    public function testGetFilterSummaryReportsTruncatedSearchValue()
+    {
+        $calendar = Calendar::create();
+        $calendar->Title = 'Test Calendar';
+        $calendar->URLSegment = 'test-calendar-summary-search-truncation';
+        $calendar->write();
+
+        $rawSearch = str_repeat('a', CalendarController::SEARCH_MAX_LENGTH + 6);
+        $expectedTruncated = str_repeat('a', CalendarController::SEARCH_MAX_LENGTH);
+
+        $request = new HTTPRequest('GET', '/calendar', ['search' => $rawSearch]);
+        $summary = CalendarFilterForm::getFilterSummary($request, $calendar);
+
+        $this->assertSame($expectedTruncated, $summary['search']);
+        $this->assertSame(CalendarController::SEARCH_MAX_LENGTH, strlen($summary['search']));
     }
 
     /**

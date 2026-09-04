@@ -19,11 +19,17 @@
     "require": {
         "php": "^8.3",
         "nesbot/carbon": "^3.0",
+        "psr/simple-cache": "^3.0",
+        "silverstripe/admin": "^3.0",
         "silverstripe/asset-admin": "^3.0",
+        "silverstripe/assets": "^3.0",
         "silverstripe/cms": "^6.0",
+        "silverstripe/framework": "^6.0",
         "silverstripe/lumberjack": "^4.0",
+        "silverstripe/versioned": "^3.0",
         "symbiote/silverstripe-gridfieldextensions": "^5.0",
         "symbiote/silverstripe-queuedjobs": "^6.0",
+        "symfony/console": "^7.0",
         "tractorcow/silverstripe-colorpicker": "dev-master as 5.0",
         "unclecheese/display-logic": "^4.0"
     },

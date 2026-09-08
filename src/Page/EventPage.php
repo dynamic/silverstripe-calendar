@@ -8,6 +8,7 @@ use Dynamic\Calendar\Extension\CalendarCacheInvalidation;
 use Dynamic\Calendar\Form\CalendarTimeField;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Model\EventException;
+use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Traits\CarbonRecursion;
 use SilverStripe\Forms\DateField;
@@ -30,22 +31,39 @@ use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\Core\Validation\ValidationResult;
+use SilverStripe\Security\Member;
 use SilverStripe\Versioned\Versioned;
 
 /**
  * Class EventPage
  * @package Dynamic\Calendar\Page
  *
- * @property DBDate $StartDate
- * @property DBTime $StartTime
- * @property DBDate $EndDate
- * @property DBTime $EndTime
- * @property bool $AllDay
- * @property string $Recursion
- * @property int $Interval
- * @property string $EventType
- * @property DBDate $RecursionEndDate
- * @method ManyManyList Categories()
+ * Simple (non-composite) DB columns are read back through the magic property accessor as the raw
+ * scalar stored by the database - DataObject::getField() only hands back a DBField object for
+ * composite fields - so these are annotated with the scalar types callers actually receive. The
+ * block is maintained here rather than left to inference because Cambis\Silverstan is a
+ * require-dev dependency: consumers of this module analyse against these annotations alone.
+ * A value assigned in PHP reads back unchanged until a write stores the column's own cast, so a
+ * column typed int may briefly hold a string or bool. Keep this block aligned with the $db,
+ * $has_many, $many_many and $has_one definitions below.
+ *
+ * @property ?string $StartDate Raw 'Y-m-d', null until set
+ * @property ?string $StartTime Raw 'H:i:s', null until set
+ * @property ?string $EndDate Raw 'Y-m-d'; if left empty on write, defaults to StartDate
+ * @property ?string $EndTime Raw 'H:i:s'; if left empty on write, defaults to StartTime + 1 hour
+ *         (which rolls past midnight for late start times)
+ * @property int|bool|null $AllDay 0/1 as loaded from the database, bool when assigned in PHP
+ * @property ?string $Recursion One of the Recursion enum keys, 'NONE' by default
+ * @property ?int $Interval Recursion period count; 0 once written, null only on an unsaved record
+ * @property ?string $EventType Stamped with the record's own class name on write
+ * @property ?string $RecursionEndDate Raw 'Y-m-d', null when the recurrence is open-ended
+ * @property ?string $StartDatetime Raw 'Y-m-d H:i:s', deprecated in favour of StartDate
+ * @property ?string $EndDatetime Raw 'Y-m-d H:i:s', deprecated in favour of EndDate
+ * @property ?int $FeaturedImageID Foreign key of the has_one below; 0 once saved without an image,
+ *         null on an unsaved record
+ * @method HasManyList<EventException> EventExceptions()
+ * @method ManyManyList<Category> Categories()
+ * @method Image FeaturedImage()
  */
 class EventPage extends \Page
 {
@@ -54,7 +72,7 @@ class EventPage extends \Page
 
     /**
      * Recurring pattern options for event frequency
-     * @var array
+     * @var array<string,string>
      */
     private const CARBON_PATTERNS = [
         'DAILY' => 'Day(s)',
@@ -104,10 +122,10 @@ class EventPage extends \Page
      * @var array
      */
     private static array $db = [
+        /** @deprecated in favour of StartDate */
         'StartDatetime' => 'DBDatetime',
-        /** @deprecated */
+        /** @deprecated in favour of EndDate */
         'EndDatetime' => 'DBDatetime',
-        /** @deprecated */
         'StartDate' => 'Date',
         'EndDate' => 'Date',
         'StartTime' => 'Time',
@@ -260,7 +278,8 @@ class EventPage extends \Page
     }
 
     /**
-     * @return false|string
+     * @return string The formatted start time, or the translated "All Day" label; an event with no
+     *                StartTime formats to an empty string
      */
     public function getGridFieldTime()
     {
@@ -269,7 +288,7 @@ class EventPage extends \Page
             return _t('EventPage.ALL_DAY', 'All Day');
         }
 
-        /** @var DBTime $date */
+        /** @var DBTime $time */
         $time = DBField::create_field(DBTime::class, $this->StartTime);
 
         return $time->Nice();
@@ -339,7 +358,8 @@ class EventPage extends \Page
     }
 
     /**
-     * @return \SilverStripe\ORM\DataList
+     * @return \SilverStripe\ORM\DataList<covariant EventPage> DataList's template T is invariant
+     *         upstream, so the variance marker is required for a clean level-6 run
      */
     public function getLumberjackPagesForGridfield()
     {
@@ -500,7 +520,9 @@ class EventPage extends \Page
     }
 
     /**
+     * Stamps EventType with this record's class and derives default EndTime/EndDate.
      *
+     * @return void
      */
     public function onBeforeWrite()
     {
@@ -539,7 +561,10 @@ class EventPage extends \Page
     }
 
     /**
+     * Adds no behaviour of its own: the Carbon system uses virtual instances, so nothing is
+     * generated on publish beyond the parent's own work.
      *
+     * @return void
      */
     public function onAfterPublish()
     {
@@ -603,7 +628,7 @@ class EventPage extends \Page
     }
 
     /**
-     * @param null $member
+     * @param Member|null $member
      * @return bool
      */
     public function canEdit($member = null)
@@ -616,7 +641,7 @@ class EventPage extends \Page
     }
 
     /**
-     * @param null $member
+     * @param Member|null $member
      * @return bool
      */
     public function canPublish($member = null)
@@ -629,8 +654,8 @@ class EventPage extends \Page
     }
 
     /**
-     * @param null $member
-     * @return bool|mixed
+     * @param Member|null $member
+     * @return bool Versioned::canUnpublish() is annotated @return mixed but returns a boolean
      */
     public function canUnpublish($member = null)
     {
@@ -642,7 +667,7 @@ class EventPage extends \Page
     }
 
     /**
-     * @param null $member
+     * @param Member|null $member
      * @return bool
      */
     public function canDelete($member = null)
@@ -665,7 +690,7 @@ class EventPage extends \Page
 
     /**
      * Get the pattern source for recurring events dropdown
-     * @return array
+     * @return array<string,string>
      */
     public function getPatternSource()
     {
@@ -673,8 +698,8 @@ class EventPage extends \Page
     }
 
     /**
-     * @param $list
-     * @return \Generator
+     * @param iterable<string> $list
+     * @return \Generator<string>
      */
     private function yieldSingle($list)
     {
@@ -688,7 +713,7 @@ class EventPage extends \Page
      *
      * @param string $instanceDate
      * @param string $action Either 'MODIFIED' or 'DELETED'
-     * @param array $overrides Override values for modified instances
+     * @param array<string,mixed> $overrides Override values for modified instances
      * @param string $reason Optional reason for the exception
      * @return EventException
      */
@@ -712,7 +737,7 @@ class EventPage extends \Page
      *
      * For the Carbon system, this returns an ArrayList of virtual instances
      *
-     * @return \SilverStripe\Model\List\ArrayList
+     * @return \SilverStripe\Model\List\ArrayList<EventInstance>
      */
     public function allChildren()
     {

@@ -11,6 +11,7 @@ use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Traits\CarbonRecursion;
+use Dynamic\Calendar\Traits\LoggerFallback;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
@@ -69,6 +70,7 @@ class EventPage extends \Page
 {
     use CarbonRecursion;
     use CalendarCacheInvalidation;
+    use LoggerFallback;
 
     /**
      * Recurring pattern options for event frequency
@@ -522,6 +524,17 @@ class EventPage extends \Page
     /**
      * Stamps EventType with this record's class and derives default EndTime/EndDate.
      *
+     * A StartTime that cannot be parsed is reported through the injected logger (see
+     * LoggerFallback::logWithFallback()) at the default warning level - a missing derived
+     * default is correctable by the editor, unlike the user-visible output the ICS transform
+     * loses - and the derivation is not aborted: EndTime is simply left unset.
+     *
+     * Both reports are defensive rather than the primary guard, and neither is exercised by
+     * the suite: for a bad StartTime the throw comes from DBTime::setValue() while
+     * DataObject::validate() builds this record's field objects, before onBeforeWrite() is
+     * entered at all. dynamic/silverstripe-calendar#183 holds the traces and the decision on
+     * what a bad StartTime should do instead.
+     *
      * @return void
      */
     public function onBeforeWrite()
@@ -542,12 +555,12 @@ class EventPage extends \Page
                     $startTimeDT->add(new \DateInterval('PT1H')); // Add 1 hour
                     $this->EndTime = $startTimeDT->format('H:i:s');
                 } else {
-                    error_log(
+                    $this->logWithFallback(
                         "EventPage: Failed to parse StartTime '{$this->StartTime}' as DBTime in onBeforeWrite."
                     );
                 }
             } catch (\Exception $e) {
-                error_log(
+                $this->logWithFallback(
                     "EventPage: Exception parsing StartTime '{$this->StartTime}' in onBeforeWrite: " .
                     $e->getMessage()
                 );

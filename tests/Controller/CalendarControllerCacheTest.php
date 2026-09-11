@@ -457,8 +457,8 @@ class CalendarControllerCacheTest extends FunctionalTest
     /**
      * Test 10: if the logger service itself is unavailable/broken, a failing
      * cache write must still return the built JSON rather than surfacing a
-     * fatal error - the try/catch in logCacheWriteFailure() exists
-     * specifically for this combined failure mode.
+     * fatal error - the guarding try/catch, now in LoggerFallback::logWithFallback()
+     * behind logCacheWriteFailure(), exists specifically for this combined failure mode.
      */
     public function testFailingCacheWriteWithBrokenLoggerStillReturnsJson()
     {

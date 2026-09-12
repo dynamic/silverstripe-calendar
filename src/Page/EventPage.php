@@ -267,12 +267,16 @@ class EventPage extends \Page
     private $categoriesListCache = null;
 
     /**
-     * @return string
+     * @return string The formatted start date, or an empty string when the event has no StartDate
      */
     public function getGridFieldDate(): string
     {
         /** @var DBDate $date */
         $date = DBField::create_field(DBDate::class, $this->StartDate);
+
+        if (!$date->getValue()) {
+            return '';
+        }
 
         return "{$date->ShortMonth()} {$date->DayOfMonth(true)}, {$date->Year()}";
     }

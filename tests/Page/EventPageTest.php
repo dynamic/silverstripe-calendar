@@ -206,15 +206,14 @@ class EventPageTest extends SapphireTest
     }
 
     /**
-     * Characterisation test, not an endorsement: with no StartDate the grid column renders the
-     * malformed fragment " , " instead of a clean placeholder. Nothing validates StartDate, so the
-     * path is reachable. Pinning it here keeps the behaviour visible; #167 tracks fixing it.
+     * getGridFieldDate() must render an empty string when the event has no StartDate, matching the
+     * empty-value convention getGridFieldTime() establishes, rather than a stray separator fragment.
      */
-    public function testGridFieldDateWithoutStartDateRendersSeparatorFragment()
+    public function testGridFieldDateWithoutStartDateRendersEmptyString()
     {
         $event = EventPage::create();
 
-        $this->assertSame(' , ', $event->getGridFieldDate());
+        $this->assertSame('', $event->getGridFieldDate());
     }
 
     /**

@@ -8,7 +8,10 @@ use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
+use Psr\Log\LoggerInterface;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Core\Injector\Injector;
+use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Dev\FunctionalTest;
 
 /**
@@ -334,5 +337,108 @@ class CalendarControllerICSTest extends FunctionalTest
 
         // Should not contain any events
         $this->assertStringNotContainsString('BEGIN:VEVENT', $icsContent);
+    }
+
+    /**
+     * An event that raises while being transformed must be reported through the injected
+     * logger at the error level - the module's logging convention - rather than through
+     * the bare error_log() this issue reports, and the feed must still render without it.
+     *
+     * The double raises deterministically from a property read inside transformEventToICS(),
+     * so the failure under test does not depend on any particular library's parse behaviour.
+     *
+     * This is the reachable call-site proof for #165: pre-fix the message went straight to
+     * error_log() and the injected logger received nothing, so the once() expectation below is
+     * what fails on the unfixed code. It also asserts the fallback sink stayed clean, so a
+     * regression that logged through both sinks would not pass.
+     */
+    public function testUntransformableEventLogsErrorThroughInjectedLogger()
+    {
+        // Assert on the cause, not just the "Error transforming event ... to ICS" prefix:
+        // the controller emits that prefix for an exception raised anywhere in the method,
+        // so matching only the prefix would stay green if the transform started dying
+        // upstream of the trigger this double is built to hit.
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())
+            ->method('error')
+            ->with($this->logicalAnd(
+                $this->stringContains('Error transforming event 123 to ICS'),
+                $this->stringContains('simulated transform failure')
+            ));
+        $logger->expects($this->never())->method('warning');
+
+        $broken = new class {
+            public function hasMethod(string $method): bool
+            {
+                return false;
+            }
+
+            /**
+             * @param string $property
+             * @return mixed
+             */
+            public function __get(string $property)
+            {
+                switch ($property) {
+                    case 'ID':
+                        return 123;
+                    case 'Title':
+                        return 'Broken Event';
+                    case 'Content':
+                        throw new \RuntimeException('simulated transform failure');
+                    default:
+                        return null;
+                }
+            }
+        };
+
+        // transformEventToICS() reads $_SERVER['HTTP_HOST'] directly when building the UID,
+        // and this test drives the generator by reflection rather than through a request, so
+        // the key is set here to keep the test independent of bootstrap side effects. Note
+        // that the 'calendar.local' default on that line is currently unreachable - the
+        // concatenation binds tighter than the ?? - which is tracked as
+        // dynamic/silverstripe-calendar#185 and is not what this test covers.
+        $hadHost = array_key_exists('HTTP_HOST', $_SERVER);
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+        $_SERVER['HTTP_HOST'] = 'localhost';
+
+        // Captured with ini_get() before being replaced, so the real prior value is restored
+        // even when ini_set() signals the change by returning false rather than the old value.
+        $errorLogFile = tempnam(sys_get_temp_dir(), 'ics-error-log-');
+        $previousErrorLog = (string) ini_get('error_log');
+        ini_set('error_log', $errorLogFile !== false ? $errorLogFile : '/dev/null');
+
+        Injector::nest();
+
+        try {
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+
+            $generate = new \ReflectionMethod(CalendarController::class, 'generateICSContent');
+            $ics = $generate->invoke($this->controller, ArrayList::create([$broken]));
+
+            // The failing event is skipped, but the feed itself still renders.
+            $this->assertStringContainsString('BEGIN:VCALENDAR', $ics);
+            $this->assertStringNotContainsString('BEGIN:VEVENT', $ics);
+
+            // The injected logger must be the only sink. The annotation checks pin that the
+            // trait's own fallback did not fire; the message check closes the wider hole,
+            // because a call site that regressed to a bare error_log() of this message would
+            // carry neither annotation and would otherwise slip through both assertions above.
+            $logged = is_file($errorLogFile) ? (string) file_get_contents($errorLogFile) : '';
+            $this->assertStringNotContainsString('logging failed', $logged);
+            $this->assertStringNotContainsString('logger service unavailable', $logged);
+            $this->assertStringNotContainsString('Error transforming event 123 to ICS', $logged);
+        } finally {
+            Injector::unnest();
+            ini_set('error_log', $previousErrorLog);
+            if ($hadHost) {
+                $_SERVER['HTTP_HOST'] = $previousHost;
+            } else {
+                unset($_SERVER['HTTP_HOST']);
+            }
+            if ($errorLogFile !== false && is_file($errorLogFile)) {
+                unlink($errorLogFile);
+            }
+        }
     }
 }

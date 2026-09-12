@@ -8,6 +8,7 @@ use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Form\CalendarFilterForm;
+use Dynamic\Calendar\Traits\LoggerFallback;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Model\List\PaginatedList;
@@ -15,7 +16,7 @@ use SilverStripe\Model\ArrayData;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Cache\CacheFactory;
 use Psr\SimpleCache\CacheInterface;
-use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 
 /**
  * Calendar Controller
@@ -27,6 +28,8 @@ use Psr\Log\LoggerInterface;
  */
 class CalendarController extends \PageController
 {
+    use LoggerFallback;
+
     /**
      * @var Calendar
      */
@@ -715,7 +718,10 @@ class CalendarController extends \PageController
             return $ics;
         } catch (\Exception $e) {
             // Log error and continue with other events
-            error_log("Error transforming event {$event->ID} to ICS: " . $e->getMessage());
+            $this->logWithFallback(
+                "Error transforming event {$event->ID} to ICS: " . $e->getMessage(),
+                LogLevel::ERROR
+            );
             return null;
         }
     }
@@ -806,10 +812,9 @@ class CalendarController extends \PageController
      * CacheFactory wiring provides) - this adds calendar-specific context
      * (the calendar cache key) rather than being the only signal, and is
      * the sole signal for a CacheFactory implementation that doesn't wire
-     * one. The lookup is guarded so a missing/misconfigured logger service
-     * can't turn a cache-write failure into a fatal error on the response
-     * path - falling back to error_log() so the failure is never entirely
-     * silent even then.
+     * one. The logger lookup itself is guarded by LoggerFallback::logWithFallback(),
+     * which keeps a missing or misconfigured logger service from turning a cache-write
+     * failure into a fatal error on the response path.
      *
      * @param string $cacheKey
      * @return void
@@ -817,11 +822,6 @@ class CalendarController extends \PageController
     private function logCacheWriteFailure(string $cacheKey): void
     {
         $message = 'CalendarController: failed to write events cache entry - ' . $cacheKey;
-        try {
-            $logger = Injector::inst()->get(LoggerInterface::class);
-            $logger->warning($message);
-        } catch (\Throwable $e) {
-            error_log($message . ' (logger service unavailable: ' . get_class($e) . ': ' . $e->getMessage() . ')');
-        }
+        $this->logWithFallback($message);
     }
 }

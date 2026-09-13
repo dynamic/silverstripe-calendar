@@ -5,7 +5,6 @@ export class FilterEnhancements {
         this.initActiveFilterTracking();
         this.initCollapsibleFilters();
         this.initKeyboardSupport();
-        this.initFilterMemory();
     }
 
     initCollapsibleFilters()
@@ -140,31 +139,6 @@ export class FilterEnhancements {
                 }
             });
         });
-    }
-
-    initFilterMemory()
-    {
-        const form = document.querySelector('.calendar-filter-form');
-        if (!form) {
-            return;
-        }
-
-      // Remember filter state in localStorage
-        const saveFilters = () => {
-            const formData = new FormData(form);
-            const filters = {};
-
-            for (let [key, value] of formData.entries()) {
-                if (key !== 'SecurityID' && key !== 'action_doFilter') {
-                    filters[key] = value;
-                }
-            }
-
-            localStorage.setItem('calendar-filters', JSON.stringify(filters));
-        };
-
-      // Auto-save on change
-        form.addEventListener('change', saveFilters);
     }
 
     focusFirstInput(container)

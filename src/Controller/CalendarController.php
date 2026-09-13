@@ -162,21 +162,29 @@ class CalendarController extends \PageController
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
-        // Get category filter
-        $categoryIDs = $request->getVar('categories');
-        $categories = null;
-
-        if ($categoryIDs) {
-            if (!is_array($categoryIDs)) {
-                $categoryIDs = [$categoryIDs];
-            }
-            $categories = Category::get()->byIDs($categoryIDs);
-        } else {
+        // Reuse the same resolution generateEventsCacheKey() already read the
+        // cache key from. A second, independent derivation here (as this used
+        // to do) can drift from it: two implementations of "what categories
+        // does this request mean" agreeing today does not guarantee they keep
+        // agreeing, and a cache key that describes a different body than the
+        // one it's stored under is a poisoning hole, not just a wasted entry.
+        $resolvedCategoryIDs = $this->resolveCategoryIDs($request);
+        if ($resolvedCategoryIDs === null) {
             // If no categories provided in request, check if calendar has default categories
             $defaultCategories = $this->calendar->DefaultCategories();
-            if ($defaultCategories && $defaultCategories->exists()) {
-                $categories = $defaultCategories;
-            }
+            $categories = ($defaultCategories && $defaultCategories->exists()) ? $defaultCategories : null;
+        } elseif ($resolvedCategoryIDs === []) {
+            // Present, matched nothing: byIDs([]) throws InvalidArgumentException
+            // in this framework version rather than returning an empty list
+            // (confirmed - not assumed). getEventsFeed() treats a null $categories
+            // and a non-existent DataList identically (`$categories && $categories
+            // ->exists()`), so null reproduces the same unfiltered-feed behaviour
+            // without the empty-set call. Skips the default-category fallback
+            // above deliberately - the request DID specify categories, just ones
+            // that don't exist, so it must not fall back to filtering.
+            $categories = null;
+        } else {
+            $categories = Category::get()->byIDs($resolvedCategoryIDs);
         }
 
         $events = $this->calendar->getEventsFeed(
@@ -351,6 +359,14 @@ class CalendarController extends \PageController
      * reaches the CalendarJSON pool at any length.
      */
     public const SEARCH_MAX_LENGTH = 64;
+
+    /**
+     * Longest submitted `categories` list resolveCategoryIDs() will query on.
+     * Bounds the SQL IN() list to a fixed size regardless of how many values a
+     * visitor supplies; a request over the cap is truncated before the query,
+     * identically for the feed body and the cache key that describes it.
+     */
+    public const MAX_SUBMITTED_CATEGORIES = 100;
 
     /**
      * Normalise the optional feed filters from a request.
@@ -807,7 +823,17 @@ class CalendarController extends \PageController
      * local (int) cast would have called that category 1 and keyed it as such.
      *
      * Costs one indexed primary-key SELECT, and only for requests that supply
-     * the param, so an ordinary no-param cache hit stays query-free.
+     * the param, so an ordinary no-param cache hit stays query-free. This is
+     * now the single place the feed and the cache key both resolve categories
+     * from (issue #162 round 3) - a second, independent derivation previously
+     * lived in events(), and nothing kept the two in agreement.
+     *
+     * The submitted list is capped at self::MAX_SUBMITTED_CATEGORIES before it
+     * reaches the query: an unbounded IN() list is a real cost on every
+     * categorised request, cache hit or miss, not just an uncached one. The
+     * cap applies here - the one place both the key and the body read from -
+     * so a request over the cap is truncated identically for both; it cannot
+     * key one set and filter another.
      *
      * @return int[]|null
      */
@@ -828,6 +854,7 @@ class CalendarController extends \PageController
             return [];
         }
 
+        $submitted = array_slice($submitted, 0, self::MAX_SUBMITTED_CATEGORIES);
         $matched = Category::get()->byIDs($submitted)->column('ID');
 
         return array_map('intval', $matched);
@@ -885,18 +912,33 @@ class CalendarController extends \PageController
 
         // Filters that change the response body must be part of the key - a
         // shared entry would serve filtered results to unfiltered requests and
-        // vice versa, and the two allowlisted filters are written out verbatim
-        // rather than hashed: nine possible values, all legal key characters,
-        // and a readable key beats an opaque digest when reading a cache dump.
-        // `search` is absent by design (issue #162) - it is unbounded free
-        // text, and hashing it per value minted one permanent entry per term,
-        // which is the pool growth being fixed. events() neither reads nor
-        // writes the cache while a search filter is live (see
-        // shouldCacheEvents()), so no cached entry ever holds search-filtered
-        // results.
-        $filterPart = ($filters['eventType'] === '' && $filters['allDay'] === null)
-            ? 'no-filters'
-            : 'filters-' . $filters['eventType'] . '-' . ($filters['allDay'] ?? 'any');
+        // vice versa. Built by iterating $filters rather than naming
+        // eventType/allDay individually (issue #162 round 3): a filter added
+        // to getFilterParams() in the future is keyed by default, so leaving
+        // one out of the key has to be a deliberate edit to this exclusion
+        // list, not a silent omission. `search` is the one deliberate
+        // exclusion - it is unbounded free text, and keying on it per value
+        // minted one permanent entry per term, which is the pool growth being
+        // fixed. events() neither reads nor writes the cache while a search
+        // filter is live (see shouldCacheEvents()), so no cached entry ever
+        // holds search-filtered results; the tradeoff this accepts is that a
+        // search-filtered request always re-runs the full uncached query
+        // (documented on issue #193 alongside the cardinality tradeoff it
+        // already tracks, rather than building bounded search caching here).
+        $filterParts = [];
+        foreach ($filters as $name => $value) {
+            // `''`/null is the "not set" convention every normaliseFilterParams()
+            // entry uses (see its own allowlist comments) - a filter at that
+            // value contributes nothing to the key, matching every existing
+            // filter's behaviour and keeping the common "no filters" request
+            // on its own short, readable key rather than every request paying
+            // for every filter name.
+            if ($name === 'search' || $value === '' || $value === null) {
+                continue;
+            }
+            $filterParts[] = $name . '-' . $value;
+        }
+        $filterPart = $filterParts === [] ? 'no-filters' : 'filters-' . implode('-', $filterParts);
 
         $parts = [
             'calendar_json',

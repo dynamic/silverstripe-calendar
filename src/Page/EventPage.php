@@ -528,6 +528,10 @@ class EventPage extends \Page
     /**
      * Stamps EventType with this record's class and derives default EndTime/EndDate.
      *
+     * An all-day write clears StartTime and EndTime: AllDay is the source of truth for the
+     * feed (issue #150), and the CMS only hideIf()s the time fields rather than nulling
+     * them, so the divergent state has to be closed at the write boundary.
+     *
      * A StartTime that cannot be parsed is reported through the injected logger (see
      * LoggerFallback::logWithFallback()) at the default warning level - a missing derived
      * default is correctable by the editor, unlike the user-visible output the ICS transform
@@ -546,6 +550,18 @@ class EventPage extends \Page
         parent::onBeforeWrite();
 
         $this->EventType = static::class;
+
+        // AllDay is the source of truth (issue #150). The CMS only hideIf()s the time
+        // fields when it is ticked, so a record saved as all-day can still carry whatever
+        // times were entered before the tick - and Calendar::getEventsFeed() filters on
+        // this column while the feed used to serialise allDay from StartTime. Clearing
+        // both here, before the derivation below, makes that disagreement unreachable rather
+        // than relying on the UI to have nulled the fields. Existing rows already in this
+        // state are not rewritten by this hook - they only normalise when next saved.
+        if ($this->AllDay) {
+            $this->StartTime = null;
+            $this->EndTime = null;
+        }
 
         // Add default 1-hour duration if start time is set but no end time
         if ($this->StartTime && !$this->EndTime) {

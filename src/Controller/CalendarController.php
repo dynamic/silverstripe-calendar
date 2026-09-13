@@ -174,11 +174,25 @@ class CalendarController extends \PageController
             // Transform events for FullCalendar format
             $eventsData = [];
             foreach ($events as $event) {
+                // AllDay is the source of truth (issue #150). It is the field an editor
+                // sets in the CMS, and it is the column the feed filters on in
+                // Calendar::getEventsFeed(). Deriving allDay from StartTime presence instead
+                // let the two disagree, so one record could match ?allDay=1 and still be
+                // drawn as timed. For an EventInstance this resolves through __get() to the
+                // exception's ModifiedAllDay when one is set, so an occurrence can be promoted
+                // to all-day. It cannot be demoted: ModifiedAllDay is a NOT NULL Boolean, so
+                // ModifiedAllDay = 0 is indistinguishable from "no override" and the parent's
+                // all-day value wins. A ModifiedStartTime on such an occurrence is dropped
+                // below. Making the column nullable is tracked in issue #143.
+                $allDay = (bool) $event->AllDay;
+
                 $eventData = [
                     'id' => $event->ID,
                     'title' => $event->Title,
-                    'start' => $event->StartDate,
-                    'allDay' => true, // Default to all day
+                    // Cast: an EventInstance resolves StartDate/EndDate through __get() to a
+                    // DBField object, which json_encode() would emit as {} rather than a date.
+                    'start' => (string) $event->StartDate,
+                    'allDay' => $allDay,
                     'url' => $event->AbsoluteLink(),
                     'extendedProps' => [
                         'summary' => $event->Summary ? $event->dbObject('Summary')->Summary(100) : '',
@@ -187,16 +201,20 @@ class CalendarController extends \PageController
                     ]
                 ];
 
-                // Add time information if available
-                if ($event->StartTime) {
+                // Only a timed event carries a clock time. An all-day row keeps a date-only
+                // start even when a StartTime is still stored against it, which is the state
+                // of every row saved as all-day before the onBeforeWrite() guard existed: the
+                // CMS hides the time field without emptying it. Emitting that leftover here
+                // would draw the row as timed and contradict the filter that matched it.
+                if (!$allDay && $event->StartTime) {
                     $eventData['start'] = $event->StartDate . 'T' . $event->StartTime;
-                    $eventData['allDay'] = false;
                 }
 
-                if ($event->EndDate && $event->EndTime) {
-                    $eventData['end'] = $event->EndDate . 'T' . $event->EndTime;
-                } elseif ($event->EndDate) {
-                    $eventData['end'] = $event->EndDate;
+                if ($event->EndDate) {
+                    // Same rule on the far edge: an all-day range stays date-only.
+                    $eventData['end'] = (!$allDay && $event->EndTime)
+                        ? $event->EndDate . 'T' . $event->EndTime
+                        : (string) $event->EndDate;
                 }
 
                 // Add category information with colors

@@ -273,6 +273,83 @@ This migrates datetime data to separate date and time fields.
 - Review recurring event configurations
 - Run `/dev/build` to apply database changes
 
+### All-day events in the AJAX feed
+
+The `AllDay` column is the single source of truth for the `allDay` value the AJAX events
+feed emits (`CalendarController::events()`). It previously derived `allDay` from whether
+`StartTime` was set, which disagreed with the `?allDay=0|1` filter, because that has
+always filtered on the `AllDay` column. A single event could therefore match the all-day
+filter and still be drawn as timed.
+
+Two visible consequences:
+
+- An event with `AllDay` off and no `StartTime` serialises `"allDay": false` and renders
+  as a timed event at midnight, where it used to render all-day. The backfill task below
+  flags those events as all-day again, so run it after upgrading.
+- Saving a record with *All Day* ticked clears `StartTime` and `EndTime`. The CMS only
+  hides those fields rather than emptying them, so a clock time entered before the tick
+  used to survive the save.
+
+Run the backfill once after upgrading to normalise existing rows:
+
+```bash
+sake dev/tasks/calendar-allday-normalisation-task
+```
+
+(`sake tasks:calendar-allday-normalisation-task` is the same command; in a browser it is at
+`dev/tasks/calendar-allday-normalisation-task`.)
+
+It sets `AllDay` on events that have no time (preserving how they already rendered) and
+clears the times left behind on events already flagged all-day. Untouched rows are not
+written, so consistent events gain no new version.
+
+Run it while the site is quiet. It writes and publishes content, and it reads its rows up
+front, so a record an editor saves part-way through the run is written from the snapshot the
+task took rather than from their edit.
+
+The task works on the draft stage and mirrors to live only where that publishes nothing
+else: a page carrying unpublished edits is normalised on draft and reported as *held back*,
+and its live copy keeps the old values until you publish it. Draft-only pages are
+normalised on draft and never published. Re-running the task is harmless, so run it again
+after publishing the held-back pages, or check the counts it prints.
+
+**"No time" means `StartTime` is empty, so an event with a lone `EndTime` is promoted too.**
+The old serializer decided `allDay` from `StartTime` alone, so a record with no `StartTime`
+rendered as all-day whatever its `EndTime` said. Promoting those rows keeps them rendering
+that way; the leftover `EndTime` is cleared by the all-day write, and never influenced
+`allDay` before or after.
+
+**A stored `00:00:00` is treated as midnight, not as no time.** An event with a `StartTime`
+of `00:00:00` and *All Day* off is a timed event that begins at midnight, and the backfill
+leaves it alone. Only a `NULL` time counts as "no time entered". This matters because on a
+SQL `TIME` column a comparison against `''` coerces to `TIME '00:00:00'`, so a "time is
+empty" test written in SQL reports a stored midnight as empty while PHP does not, and the
+two disagree about the same row. The legacy `calendar-datetime-conversion-task` writes
+`00:00:00` for midnight datetimes, so real upgraded installs do have these rows.
+
+The events feed caches its JSON per calendar, date window and filter set, not per
+serialisation format, so responses produced before the upgrade keep serving the old
+`allDay` values until `json_cache_ttl` expires. Flush the cache, or wait out the TTL,
+before concluding the backfill did not take effect.
+
+### Per-occurrence all-day overrides
+
+An `EventException` that sets *All Day* makes that occurrence serialise `"allDay": true`
+with a date-only `start`, whatever its parent event says.
+
+The reverse is not expressible, and this is a pre-existing limitation rather than a
+consequence of the change above: `ModifiedAllDay` is a NOT NULL Boolean, so an exception
+that leaves it at `0` is indistinguishable from one that never intended to override the
+parent. A `ModifiedStartTime` entered on an occurrence of an all-day parent is therefore
+discarded, and that occurrence stays all-day. Making the column nullable would fix it,
+which is tracked in issue #143. Until then, an all-day event cannot have a single timed
+occurrence.
+
+One further pre-existing quirk, unchanged here: FullCalendar reads an all-day `end` as
+exclusive, but the feed emits `EndDate` unchanged, so a multi-day all-day event renders one
+day short. The ICS export does add the day, so the two exports of one event differ. Filed
+as issue #187.
+
 ## Troubleshooting
 
 ### Common Issues

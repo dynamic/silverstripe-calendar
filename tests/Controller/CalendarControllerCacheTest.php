@@ -1026,7 +1026,13 @@ class CalendarControllerCacheTest extends FunctionalTest
             $other = EventPage::create([
                 'Title' => 'Second Categorised Event',
                 'ParentID' => $this->calendar->ID,
-                'StartDate' => Carbon::now()->format('Y-m-d'),
+                // A day after $event's StartDate: getEventsFeed() sorts only by
+                // StartDate, so an equal date makes the subset body's row order an
+                // unspecified tie the DB is free to break differently per engine
+                // (observed: MariaDB and MySQL disagree). A distinct date gives the
+                // sort a total order, and the assertion below no longer needs to
+                // tolerate either ordering.
+                'StartDate' => Carbon::now()->addDay()->format('Y-m-d'),
                 'Recursion' => 'NONE',
             ]);
             $other->write();

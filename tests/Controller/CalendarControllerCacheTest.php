@@ -27,6 +27,18 @@ use SilverStripe\Versioned\Versioned;
 class CalendarControllerCacheTest extends FunctionalTest
 {
     /**
+     * Declared explicitly rather than relied on by default: this class has no
+     * $fixture_file, and FunctionalTest does not default $usesDatabase to
+     * true, so run standalone (not after a fixture-bearing class in the same
+     * process) it errors on every test with "Table 'db.SiteTree' doesn't
+     * exist." These tests are the #149 security guards - they should not
+     * depend on suite ordering to have a database at all.
+     *
+     * @var bool
+     */
+    protected $usesDatabase = true;
+
+    /**
      * @var Calendar
      */
     protected $calendar;

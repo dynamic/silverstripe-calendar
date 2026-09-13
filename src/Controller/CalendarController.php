@@ -400,10 +400,13 @@ class CalendarController extends \PageController
      */
     protected function getFromDate(HTTPRequest $request): ?Carbon
     {
-        // Legacy 'from' wins over 'start' (FullCalendar), but only when it is
-        // actually usable: ?? alone would let an array-typed `?from[]=x` win the
+        // Legacy 'from' wins over 'start' (FullCalendar), but only when it is a
+        // non-empty string: ?? alone would let an array-typed `?from[]=x` win the
         // coalesce, fail the string check below, and so discard a valid
         // `&start=` that was also present - widening the feed instead of failing.
+        // A non-empty but UNPARSEABLE `from` (`?from=garbage&start=2025-10-01`)
+        // still wins here and is dropped by the hasFormat() check below, also
+        // widening the feed - pre-existing behaviour, unchanged by this guard.
         $from = $request->getVar('from');
         if (!is_string($from) || $from === '') {
             $from = $request->getVar('start');
@@ -430,8 +433,10 @@ class CalendarController extends \PageController
      */
     protected function getToDate(HTTPRequest $request): ?Carbon
     {
-        // Legacy 'to' wins over 'end', falling through when unusable - see
-        // getFromDate() for why ?? alone is not enough.
+        // Legacy 'to' wins over 'end', falling through when empty or not a
+        // string - see
+        // getFromDate() for why ?? alone is not enough, and for the same
+        // non-empty-but-unparseable caveat.
         $to = $request->getVar('to');
         if (!is_string($to) || $to === '') {
             $to = $request->getVar('end');
@@ -792,9 +797,12 @@ class CalendarController extends \PageController
     {
         // Cast, not merely for symmetry: Versioned::$reading_mode is null until
         // something sets it, and md5(null) is deprecated in PHP 8.1+. The empty
-        // string is what Versioned::reset() leaves behind, and it is the right
-        // identity here - it means "no mode", which is how the adapter reached
-        // by getEventsCache() treats it too.
+        // string is what Versioned::reset() leaves behind. It is NOT equivalent
+        // to Stage.Live - ReadingMode::toDataQueryParams('') returns null, so
+        // Versioned::augmentSQL() early-returns and the query hits the draft
+        // base table. It therefore needs its own bucket, and
+        // VersionedCacheAdapter::getKeyID() will not provide one because it
+        // appends nothing for a falsy mode.
         $mode = (string) Versioned::get_reading_mode();
 
         // Key on the RESOLVED dates, not the raw parameters, so that the key

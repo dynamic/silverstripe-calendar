@@ -17,8 +17,12 @@ use Symfony\Component\Console\Input\InputInterface;
  * The events feed used to derive its allDay value from StartTime while the ?allDay filter
  * read the AllDay column, so the two could disagree for the same record. The serializer now
  * reads the column, which makes the column responsible for what the clock times used to
- * imply. This task backfills that implication into the column, and clears the times the other
- * way round, so no existing row changes how it renders on upgrade.
+ * imply. This task backfills that implication into the column - preserving how the row
+ * already rendered for case 1 below, but deliberately NOT for case 2: a row with AllDay on
+ * and a stored time rendered as timed under the old serializer and renders all-day after this
+ * task, because that flip is the correct resolution of #150, not a side effect to avoid. The
+ * clock times it clears are not recoverable outside _Versions, and the same row's ICS export
+ * (CalendarController::transformEventToICS()) changes from a timed VEVENT to an all-day one.
  *
  * DEFINITION - "has no clock time" means the field is NULL. A stored '00:00:00' is a real
  * time, i.e. an event that begins at midnight, not an event with no time. That is the same

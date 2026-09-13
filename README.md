@@ -303,6 +303,13 @@ It sets `AllDay` on events that have no time (preserving how they already render
 clears the times left behind on events already flagged all-day. Untouched rows are not
 written, so consistent events gain no new version.
 
+**The second direction is not render-preserving, deliberately.** A row with *All Day* on and
+a stored clock time rendered as a *timed* event under the old serializer; after this task it
+renders all-day, which is the correct resolution of #150, not a side effect. The `StartTime`/
+`EndTime` this clears are not recoverable outside `_Versions`, and the same row's ICS export
+changes from a timed event to an all-day one. Check the counts the task reports before
+concluding a production run changed nothing.
+
 Run it while the site is quiet. It writes and publishes content, and it reads its rows up
 front, so a record an editor saves part-way through the run is written from the snapshot the
 task took rather than from their edit.

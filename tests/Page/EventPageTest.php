@@ -402,4 +402,86 @@ class EventPageTest extends SapphireTest
         $fresh->AllDay = true;
         $this->assertTrue($fresh->AllDay);
     }
+
+    /**
+     * Write-boundary guard (issue #150): the CMS only hideIf()s the time fields when
+     * AllDay is on, so a record can be saved as all-day while still carrying a
+     * StartTime. That divergent state is what makes the feed's filter and its
+     * serialised allDay disagree, so onBeforeWrite() must null both times.
+     */
+    public function testAllDayWriteClearsStartTimeAndEndTime(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Becomes all day';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2025-09-01';
+        $event->StartTime = '18:30:00';
+        $event->EndTime = '20:00:00';
+        $event->AllDay = 0;
+        $event->write();
+
+        $this->assertSame(
+            '18:30:00',
+            EventPage::get()->byID($event->ID)->StartTime,
+            'Precondition: timed before the flag flips'
+        );
+
+        // Flip to all-day and save, as the CMS would after hiding the time fields.
+        $event->AllDay = 1;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertNull($stored->StartTime, 'An all-day write must clear a leftover StartTime');
+        $this->assertNull($stored->EndTime, 'An all-day write must clear a leftover EndTime');
+        $this->assertEquals(1, $stored->AllDay);
+        $this->assertSame('2025-09-01', $stored->StartDate, 'The date must survive');
+    }
+
+    /**
+     * The clear must happen before the 1-hour derivation, otherwise an all-day record
+     * with a StartTime and no EndTime would gain an EndTime it must not have.
+     */
+    public function testAllDayWriteDoesNotDeriveEndTime(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'All day no end';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2025-09-02';
+        $event->StartTime = '09:00:00';
+        $event->AllDay = 1;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertNull($stored->StartTime);
+        $this->assertNull($stored->EndTime, 'An all-day record must not gain a derived EndTime');
+        $this->assertSame('2025-09-02', $stored->EndDate, 'EndDate derivation still applies');
+    }
+
+    /**
+     * The guard must not reach past all-day records: a timed event keeps both times and
+     * still derives its default 1-hour EndTime.
+     */
+    public function testTimedWriteKeepsTimesAndDerivation(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Stays timed';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2025-09-03';
+        $event->StartTime = '09:00:00';
+        $event->AllDay = 0;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertSame('09:00:00', $stored->StartTime);
+        $this->assertSame('10:00:00', $stored->EndTime, 'The 1-hour default must still apply to timed events');
+    }
 }

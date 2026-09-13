@@ -15,6 +15,7 @@ use SilverStripe\Model\List\PaginatedList;
 use SilverStripe\Model\ArrayData;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Core\Cache\CacheFactory;
+use SilverStripe\Versioned\Versioned;
 use Psr\SimpleCache\CacheInterface;
 use Psr\Log\LogLevel;
 
@@ -127,10 +128,15 @@ class CalendarController extends \PageController
      */
     public function events(HTTPRequest $request)
     {
+        $isAjax = $this->isAjaxRequest($request);
+        // Resolved once, so the entry this action reads from and the entry it
+        // writes to are the same one, and computed once rather than once per
+        // pass. Both stay null off the AJAX path, where no cache is touched.
+        $cache = $isAjax ? $this->getEventsCache() : null;
+        $cacheKey = $isAjax ? $this->generateEventsCacheKey($request) : null;
+
         // Check cache for JSON responses first
-        if ($this->isAjaxRequest($request)) {
-            $cacheKey = $this->generateEventsCacheKey($request);
-            $cache = $this->getEventsCache();
+        if ($cache !== null && $cacheKey !== null) {
             $cachedJson = $cache->get($cacheKey);
 
             if ($cachedJson !== null) {
@@ -169,8 +175,9 @@ class CalendarController extends \PageController
             $this->getFilterParams($request)
         );
 
-        // Check if this is an AJAX request for JSON data
-        if ($this->isAjaxRequest($request)) {
+        // Same snapshot as the cache read above, so the branch taken here
+        // cannot disagree with the one taken there.
+        if ($isAjax) {
             // Transform events for FullCalendar format
             $eventsData = [];
             foreach ($events as $event) {
@@ -240,9 +247,8 @@ class CalendarController extends \PageController
 
             $json = json_encode($eventsData);
 
-            // Cache the JSON response
-            $cacheKey = $this->generateEventsCacheKey($request);
-            $cache = $this->getEventsCache();
+            // $cache and $cacheKey were resolved at the top of this action for
+            // exactly this branch, so neither is null here.
             if (!$cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'))) {
                 $this->logCacheWriteFailure($cacheKey);
             }
@@ -394,10 +400,21 @@ class CalendarController extends \PageController
      */
     protected function getFromDate(HTTPRequest $request): ?Carbon
     {
-        // Support both 'from' (legacy) and 'start' (FullCalendar) parameter names
-        $from = $request->getVar('from') ?? $request->getVar('start');
+        // Legacy 'from' wins over 'start' (FullCalendar), but only when it is
+        // actually usable: ?? alone would let an array-typed `?from[]=x` win the
+        // coalesce, fail the string check below, and so discard a valid
+        // `&start=` that was also present - widening the feed instead of failing.
+        $from = $request->getVar('from');
+        if (!is_string($from) || $from === '') {
+            $from = $request->getVar('start');
+        }
 
-        if ($from && Carbon::hasFormat($from, 'Y-m-d')) {
+        // is_string() before the string-typed hasFormat(): array-typed params
+        // (`?from[]=x`) must not reach it, same convention as
+        // normaliseFilterParams(). Without it such a request is an uncaught
+        // TypeError, and since the cache key now resolves dates through this
+        // accessor it fires on the cache path too, ahead of the cache read.
+        if (is_string($from) && Carbon::hasFormat($from, 'Y-m-d')) {
             return Carbon::createFromFormat('Y-m-d', $from);
         }
 
@@ -413,10 +430,15 @@ class CalendarController extends \PageController
      */
     protected function getToDate(HTTPRequest $request): ?Carbon
     {
-        // Support both 'to' (legacy) and 'end' (FullCalendar) parameter names
-        $to = $request->getVar('to') ?? $request->getVar('end');
+        // Legacy 'to' wins over 'end', falling through when unusable - see
+        // getFromDate() for why ?? alone is not enough.
+        $to = $request->getVar('to');
+        if (!is_string($to) || $to === '') {
+            $to = $request->getVar('end');
+        }
 
-        if ($to && Carbon::hasFormat($to, 'Y-m-d')) {
+        // See getFromDate() - array-typed params must not reach hasFormat().
+        if (is_string($to) && Carbon::hasFormat($to, 'Y-m-d')) {
             return Carbon::createFromFormat('Y-m-d', $to);
         }
 
@@ -743,18 +765,54 @@ class CalendarController extends \PageController
     /**
      * Generate a cache key for the events JSON response
      *
+     * Covers every request-parameter and reading-mode component the response
+     * body varies on, so no two such requests share an entry.
+     *
+     * NOT covered, two dimensions, both pre-existing and both filed:
+     *  - the absolute-URL dimension. The body embeds `AbsoluteLink()`, which
+     *    resolves through Director::host() and so varies with the request Host
+     *    header, and with the scheme, unless `alternate_base_url` is pinned.
+     *    See #206.
+     *  - time of day. getFromDate()/getToDate() parse with 'Y-m-d', which
+     *    fills the unspecified time fields from now rather than midnight, so
+     *    the resolved window's boundaries move with the wall clock while this
+     *    key does not. See #207.
+     *
+     * The Versioned reading mode IS covered here rather than left to the
+     * framework's versioned cache adapter, which also segments by reading mode
+     * but only while the mode is non-empty and only while that adapter is in
+     * place. The full mode is used, not Versioned::get_stage(), because
+     * get_stage() is null for every `Archive.<date>.<stage>` mode and for an
+     * empty mode.
+     *
      * @param HTTPRequest $request
      * @return string
      */
     private function generateEventsCacheKey(HTTPRequest $request): string
     {
-        // Symfony cache keys cannot contain: {}()/\@:
-        // Hash timestamps to avoid special characters
-        // Support both start/end (FullCalendar) and from/to parameter names
-        $startParam = $request->getVar('start') ?? $request->getVar('from');
-        $start = $startParam ? md5($startParam) : 'no-start';
-        $endParam = $request->getVar('end') ?? $request->getVar('to');
-        $end = $endParam ? md5($endParam) : 'no-end';
+        // Cast, not merely for symmetry: Versioned::$reading_mode is null until
+        // something sets it, and md5(null) is deprecated in PHP 8.1+. The empty
+        // string is what Versioned::reset() leaves behind, and it is the right
+        // identity here - it means "no mode", which is how the adapter reached
+        // by getEventsCache() treats it too.
+        $mode = (string) Versioned::get_reading_mode();
+
+        // Key on the RESOLVED dates, not the raw parameters, so that the key
+        // and the body are derived from the same values. getFromDate() and
+        // getToDate() prefer the legacy 'from'/'to' when that value is a
+        // usable non-empty string, and fall back to 'start'/'end' otherwise.
+        // Reading the raw parameters here would prefer 'start' instead, which
+        // would hand '?start=A&end=B&from=C' (window C..B) and
+        // '?start=A&end=B' (window A..B) one key despite different windows.
+        // Values failing the strict Y-m-d check - garbage, ISO8601 datetimes,
+        // unpadded days - resolve to null, i.e. no filter, so they key as
+        // 'no-start'/'no-end': one entry for every unfiltered request rather
+        // than one per distinct invalid string.
+        // Formatted as Ymd: Symfony cache keys cannot contain {}()/\@:.
+        $fromDate = $this->getFromDate($request);
+        $start = $fromDate ? $fromDate->format('Ymd') : 'no-start';
+        $toDate = $this->getToDate($request);
+        $end = $toDate ? $toDate->format('Ymd') : 'no-end';
 
         // Key on the resolved, sorted category IDs rather than the raw
         // parameter, so ?categories[]=1&categories[]=2 and its reverse
@@ -785,7 +843,8 @@ class CalendarController extends \PageController
             $start,
             $end,
             $cats,
-            $filterPart
+            $filterPart,
+            md5($mode)
         ];
 
         return implode('_', $parts);

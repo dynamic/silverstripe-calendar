@@ -11,7 +11,6 @@ use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Traits\CarbonRecursion;
-use Dynamic\Calendar\Traits\LoggerFallback;
 use SilverStripe\Forms\DateField;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldGroup;
@@ -68,9 +67,9 @@ use SilverStripe\Versioned\Versioned;
  */
 class EventPage extends \Page
 {
+    // LoggerFallback is composed transitively via CarbonRecursion (dynamic/silverstripe-calendar#182).
     use CarbonRecursion;
     use CalendarCacheInvalidation;
-    use LoggerFallback;
 
     /**
      * Recurring pattern options for event frequency

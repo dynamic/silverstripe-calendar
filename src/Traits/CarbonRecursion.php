@@ -16,10 +16,16 @@ use Generator;
  * Provides Carbon-based recursion functionality for EventPage.
  * This replaces the RRule-based system with a more efficient and flexible approach.
  *
+ * Composes LoggerFallback rather than just requiring callers to add it separately -
+ * PHP allows a trait to use another trait, so any class using CarbonRecursion gets
+ * logWithFallback() for free instead of needing to know it must add LoggerFallback too.
+ *
  * @package Dynamic\Calendar\Traits
  */
 trait CarbonRecursion
 {
+    use LoggerFallback;
+
     /**
      * @var array Cache for occurrence calculations
      */
@@ -167,9 +173,14 @@ trait CarbonRecursion
                 return $date->between($rangeStart, $rangeEnd, true);
             });
         } catch (\Exception $e) {
-            // Log error and return null to prevent crashes
-            $logger = \SilverStripe\Core\Injector\Injector::inst()->get(\Psr\Log\LoggerInterface::class);
-            $logger->error("Error creating Carbon period for event {$this->ID}: " . $e->getMessage());
+            // Route through LoggerFallback rather than resolving the logger directly: an
+            // unguarded lookup/write here would let a broken logger service turn this
+            // "prevent crashes" catch into a new, uncaught throwable on the render path -
+            // exactly the failure this catch exists to stop (dynamic/silverstripe-calendar#182).
+            $this->logWithFallback(
+                "Error creating Carbon period for event {$this->ID}: " . $e->getMessage(),
+                \Psr\Log\LogLevel::ERROR
+            );
             return null;
         }
     }

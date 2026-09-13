@@ -23,8 +23,8 @@ use SilverStripe\Core\Injector\Injector;
  * level and the throw point for the same reason: they may be all that survives.
  *
  * This is the convention for the call sites that use it, not yet the whole module:
- * CarbonRecursion and CalendarFilterForm still resolve the logger themselves without
- * this guard; see dynamic/silverstripe-calendar#182.
+ * CalendarFilterForm still resolves the logger itself without this guard (its sites are
+ * static, so adopting this trait there needs its own decision - filed as #200).
  *
  * The level is validated against a whitelist and dispatched to the matching shorthand
  * method rather than passed to Psr\Log\LoggerInterface::log(), deliberately: Psr\Log

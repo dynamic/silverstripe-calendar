@@ -364,19 +364,29 @@ class CalendarFilterParamsTest extends FunctionalTest
     }
 
     /**
-     * Guards the SECOND half of #133. Every other search test issues a single
-     * request against a cold cache, so it always takes the MISS path and would
-     * pass even with `search` deleted from generateEventsCacheKey() - at which
-     * point ?search=Standup and ?search=Meeting share one entry for the whole
-     * 30-minute TTL and serve each other's results.
+     * Rewritten for #162. This method existed to guard the OLD invariant -
+     * that `search` must be part of the cache key, so two search terms could
+     * not share an entry (#133's second half). #162 removed `search` from
+     * generateEventsCacheKey() altogether, which makes that invariant untrue by
+     * construction, so the guard had to be repurposed rather than deleted: it
+     * now guards the replacement invariant, that a search-filtered response is
+     * neither read from nor written to the CalendarJSON pool.
+     *
+     * The two-different-searches assertions carry over unchanged (they held
+     * before and still hold, now because the cache is bypassed rather than
+     * because the keys differ). The load-bearing new assertion is the third
+     * one: a REPEATED identical ?search= must still be MISS. Only that proves
+     * no write happened - which is the whole cardinality defence, since a
+     * permanent entry per distinct search value is exactly what #162 reports.
      */
-    public function testSearchDifferentiatesTheCacheKey(): void
+    public function testSearchFilteredRequestsAreNeverCached(): void
     {
         $this->createOneTimeEvent();
         $this->createRecurringEvent();
 
         $first = $this->fetchSnapshot(['search' => 'Standup']);
         $second = $this->fetchSnapshot(['search' => 'Meeting']);
+        $firstAgain = $this->fetchSnapshot(['search' => 'Standup']);
 
         $this->assertEquals('MISS', $first['cache']);
         $this->assertEquals(
@@ -384,9 +394,20 @@ class CalendarFilterParamsTest extends FunctionalTest
             $second['cache'],
             'A different search term must not hit the previous search\'s cache entry'
         );
+        $this->assertEquals(
+            'MISS',
+            $firstAgain['cache'],
+            'A repeated identical ?search= must not find an entry, because no '
+                . 'search-filtered response may be written to the cache (#162)'
+        );
 
         $this->assertSame(['Weekly Standup'], $first['titles']);
         $this->assertSame(['Community Meeting'], $second['titles']);
+        $this->assertSame(
+            ['Weekly Standup'],
+            $firstAgain['titles'],
+            'The uncached repeat must still be filtered by its own search term'
+        );
     }
 
     /**

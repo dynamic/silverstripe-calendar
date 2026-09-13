@@ -6,7 +6,6 @@ export class KeyboardNavigation {
     {
         this.initEventCardNavigation();
         this.initCalendarNavigation();
-        this.initFilterNavigation();
         this.initSkipLinks();
         this.currentFocusIndex = 0;
     }
@@ -145,31 +144,6 @@ export class KeyboardNavigation {
         }
     }
 
-    initFilterNavigation()
-    {
-        const filterForm = document.querySelector('.calendar-filters');
-        if (!filterForm) {
-            return;
-        }
-
-      // Quick filter navigation
-        const quickFilters = document.querySelectorAll('.quick-filter');
-        quickFilters.forEach((filter, index) => {
-            filter.addEventListener('keydown', (e) => {
-                switch (e.key) {
-                    case 'ArrowLeft':
-                        e.preventDefault();
-                        this.focusQuickFilter(quickFilters, index - 1);
-                    break;
-                    case 'ArrowRight':
-                        e.preventDefault();
-                        this.focusQuickFilter(quickFilters, index + 1);
-                    break;
-                }
-            });
-        });
-    }
-
     initSkipLinks()
     {
       // Add skip link if not present
@@ -229,13 +203,6 @@ export class KeyboardNavigation {
         if (index >= 0 && index < days.length) {
             days[index].focus();
             this.announceToScreenReader(`Focused on ${this.getDayLabel(days[index])}`);
-        }
-    }
-
-    focusQuickFilter(filters, index)
-    {
-        if (index >= 0 && index < filters.length) {
-            filters[index].focus();
         }
     }
 

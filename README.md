@@ -29,6 +29,28 @@ composer require dynamic/silverstripe-calendar
 
 After installation, run `/dev/build?flush=all` to update your database.
 
+### Colour picker dependency source
+
+`composer.json` requires `tractorcow/silverstripe-colorpicker` as `"dev-master as 5.0"` and declares
+`https://github.com/dynamic/silverstripe-colorpicker.git` in a top-level `repositories` block, so this
+module's own builds resolve that package from Dynamic's fork instead of from Packagist upstream.
+
+The `as 5.0` alias is load-bearing, not decorative. The fork has branches `3.0`/`4`/`master` and its tags
+top out at `4.2.1` — there is no `5` branch and no 5.x tag to require. The fork publishes under the upstream
+package name and carries `extra.branch-alias` `dev-master: 5.0.x-dev`, which is what makes `as 5.0`
+resolvable at all.
+
+Two limits of this arrangement are worth stating plainly:
+
+- Composer reads `repositories` from the root package only. When this module is installed *as a dependency*,
+  this block is ignored — a consumer that needs the fork must declare the same VCS entry in its own root
+  `composer.json`.
+- The entry is unpinned: root-context builds (this module's CI and standalone checkouts) follow the fork's
+  `master` HEAD, and this module does not track a `composer.lock` in git. Because the fork keeps the upstream
+  package name, that substitution is not visible from the `require` block alone. The durable fix is to cut a
+  `5` branch and a `5.0.0` tag on the fork and require `^5` with no alias; tracked in
+  dynamic/silverstripe-calendar#127.
+
 ## License
 
 See [License](LICENSE.md)

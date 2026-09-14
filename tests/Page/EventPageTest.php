@@ -11,6 +11,8 @@ use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Versioned\Versioned;
+use ReflectionClass;
+use ReflectionMethod;
 
 /**
  * Class EventPageTest
@@ -294,8 +296,9 @@ class EventPageTest extends SapphireTest
     /**
      * canEdit()/canPublish()/canDelete()/canUnpublish() accept an explicit Member as well as the
      * null "whoever is current" default, and pass it straight to SiteTree: denied anonymously,
-     * granted to a member holding ADMIN. isCopy() is hardcoded false by the Carbon system, so
-     * this passthrough is the only branch these methods have.
+     * granted to a member holding ADMIN. EventPage no longer overrides any of these four methods,
+     * so they resolve to the inherited SiteTree/Versioned implementations, and that inherited
+     * passthrough is the only behaviour these methods have.
      */
     public function testCanMethodsHonourNullAndExplicitMember()
     {
@@ -317,6 +320,77 @@ class EventPageTest extends SapphireTest
         $this->logInAs($member);
         $this->assertTrue($event->canEdit(), 'canEdit() with the default null must see the logged-in member');
         $this->logOut();
+    }
+
+    /**
+     * The copy guard is gone rather than left behind as an always-false branch: none of isCopy()
+     * or the four permission methods may remain declared on EventPage itself. Only the class's own
+     * declared methods are inspected, so that the canEdit()/canPublish()/canDelete() implementations
+     * EventPage inherits from SiteTree, and the canUnpublish() supplied by the Versioned extension,
+     * do not register as EventPage's own. A re-added guard would reappear in this list even while
+     * returning the same booleans.
+     */
+    public function testCopyGuardIsRemovedAndPermissionsResolveToInheritedImplementations()
+    {
+        $ownMethods = array_values(array_map(
+            static fn (ReflectionMethod $method): string => $method->getName(),
+            array_filter(
+                (new ReflectionClass(EventPage::class))->getMethods(),
+                static fn (ReflectionMethod $method): bool =>
+                    $method->getDeclaringClass()->getName() === EventPage::class
+            )
+        ));
+
+        foreach (['isCopy', 'canEdit', 'canPublish', 'canUnpublish', 'canDelete'] as $method) {
+            $this->assertNotContains(
+                $method,
+                $ownMethods,
+                $method . '() must not remain declared on EventPage now that its guard never fires'
+            );
+        }
+    }
+
+    /**
+     * The Root.Recursion tab and its Recursion dropdown, together with the ChildPages data field,
+     * are gated by the recursion config alone: scaffolded with recursion on, and removed with it
+     * off. Nothing else gates them now that the copy guard has been deleted. The tab is asserted
+     * through fieldByName() because dataFieldByName() resolves only data-bearing fields and never
+     * returns a composite wrapper such as the tab itself.
+     */
+    public function testRecursionFieldsAndChildPagesFollowTheRecursionConfigAlone()
+    {
+        /** @var EventPage $event */
+        $event = $this->objFromFixture(EventPage::class, 'one');
+
+        Config::modify()->set(EventPage::class, 'recursion', true);
+        $fields = $event->getCMSFields();
+        $this->assertNotNull(
+            $fields->fieldByName('Root.Recursion'),
+            'The Root.Recursion tab must still be scaffolded when the recursion config is on'
+        );
+        $this->assertNotNull(
+            $fields->dataFieldByName('Recursion'),
+            'The Recursion dropdown must still be scaffolded when the recursion config is on'
+        );
+        $this->assertNotNull(
+            $fields->dataFieldByName('ChildPages'),
+            'ChildPages must survive when the recursion config is on'
+        );
+
+        Config::modify()->set(EventPage::class, 'recursion', false);
+        $fields = $event->getCMSFields();
+        $this->assertNull(
+            $fields->fieldByName('Root.Recursion'),
+            'The Root.Recursion tab must be absent when the recursion config is off'
+        );
+        $this->assertNull(
+            $fields->dataFieldByName('Recursion'),
+            'The Recursion dropdown must be absent when the recursion config is off'
+        );
+        $this->assertNull(
+            $fields->dataFieldByName('ChildPages'),
+            'ChildPages must be removed when the recursion config is off'
+        );
     }
 
     /**

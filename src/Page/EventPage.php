@@ -31,7 +31,6 @@ use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\ORM\HasManyList;
 use SilverStripe\ORM\ManyManyList;
 use SilverStripe\Core\Validation\ValidationResult;
-use SilverStripe\Security\Member;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -469,7 +468,7 @@ class EventPage extends \Page
             $startTime->hideIf('AllDay')->isEqualTo(true)->end();
             $endTime->hideIf('AllDay')->isEqualTo(true)->end();
 
-            if ($this->config()->get('recursion') && !$this->isCopy()) {
+            if ($this->config()->get('recursion')) {
                 $fields->addFieldsToTab(
                     'Root.Recursion',
                     [
@@ -496,11 +495,6 @@ class EventPage extends \Page
                 // Set items per page for paginator
                 $component->setItemsPerPage(7);
             }
-        }
-
-        if ($this->isCopy()) {
-            $fields->removeByName('ChildPages');
-            $fields = $fields->makeReadonly();
         }
 
         if (!$this->config()->get('recursion')) {
@@ -656,67 +650,6 @@ class EventPage extends \Page
             }
         }
 
-        return false;
-    }
-
-    /**
-     * @param Member|null $member
-     * @return bool
-     */
-    public function canEdit($member = null)
-    {
-        if ($this->isCopy()) {
-            return false;
-        }
-
-        return parent::canEdit($member);
-    }
-
-    /**
-     * @param Member|null $member
-     * @return bool
-     */
-    public function canPublish($member = null)
-    {
-        if ($this->isCopy()) {
-            return false;
-        }
-
-        return parent::canPublish($member);
-    }
-
-    /**
-     * @param Member|null $member
-     * @return bool Versioned::canUnpublish() is annotated @return mixed but returns a boolean
-     */
-    public function canUnpublish($member = null)
-    {
-        if ($this->isCopy()) {
-            return false;
-        }
-
-        return parent::canUnpublish($member);
-    }
-
-    /**
-     * @param Member|null $member
-     * @return bool
-     */
-    public function canDelete($member = null)
-    {
-        if ($this->isCopy()) {
-            return false;
-        }
-
-        return parent::canDelete($member);
-    }
-
-    /**
-     * @return bool
-     */
-    public function isCopy()
-    {
-        // With Carbon system, we don't have physical RecursiveEvent records
         return false;
     }
 

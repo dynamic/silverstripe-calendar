@@ -49,6 +49,10 @@ _resources/
 coverage/
 *.lcov
 
+# Playwright test output
+playwright-report/
+test-results/
+
 # Webpack Bundle Analyzer
 webpack-bundle-analyzer-report.html
 

@@ -3,3 +3,4 @@
 /.travis.yml export-ignore
 /.scrutinizer.yml export-ignore
 /phpunit.xml export-ignore
+/playwright.config.js export-ignore

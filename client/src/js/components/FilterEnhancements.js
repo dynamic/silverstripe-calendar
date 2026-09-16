@@ -1,8 +1,9 @@
 // Elements that can take keyboard focus within the filter form.
 const FOCUSABLE_SELECTOR = 'input, select, textarea, a[href], button, [tabindex]:not([tabindex="-1"])';
 
-// Input types whose native ArrowUp/ArrowDown handling changes their own value,
-// so the form's focus navigation must leave those keys alone.
+// Input types whose native ArrowUp/ArrowDown handling changes their own value, so the
+// form's focus navigation must leave those keys alone. The same test decides ring
+// membership, so a field in the ring is always one the handler can navigate away from.
 const NATIVE_ARROW_INPUT_TYPES = [
     'date',
     'datetime-local',
@@ -13,6 +14,11 @@ const NATIVE_ARROW_INPUT_TYPES = [
     'range',
     'radio'
 ];
+
+// WAI-ARIA roles that define their own ArrowUp/ArrowDown contract, so anything inside
+// one of them keeps its keys for the widget instead of for field cycling.
+const NATIVE_ARROW_ROLE_SELECTOR = '[role="combobox"], [role="listbox"], [role="menu"], '
+    + '[role="menubar"], [role="radiogroup"], [role="tree"], [role="grid"]';
 
 // Enhanced Filter Experience
 export class FilterEnhancements {
@@ -152,6 +158,18 @@ export class FilterEnhancements {
             return;
         }
 
+      // A held arrow key belongs to the focused control (caret movement, option
+      // stepping, IME candidate paging) - only discrete presses drive the ring.
+        if (e.repeat) {
+            return;
+        }
+
+      // While an IME composition is open the arrow keys page its candidate list,
+      // and some engines report that as ArrowUp/ArrowDown rather than "Process".
+        if (e.isComposing || e.keyCode === 229) {
+            return;
+        }
+
       // Leave browser and OS shortcuts (Cmd+Arrow, Ctrl+Arrow, ...) untouched.
         if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
             return;
@@ -160,35 +178,63 @@ export class FilterEnhancements {
         const target = e.target;
 
       // <select> cycles its options and native date/time/number/range inputs step
-      // their value with these keys - returning here keeps that native behaviour,
+      // their value with these keys - returning here keeps that native behavior,
       // because preventDefault() below would otherwise swallow it.
-        if (!(target instanceof HTMLElement) || this.hasNativeArrowBehaviour(target)) {
+        if (!(target instanceof HTMLElement) || this.hasNativeArrowBehavior(target)) {
             return;
         }
 
-        const focusableElements = this.getFocusableFields(form);
+        const ring = this.getArrowNavigationTargets(form);
 
-        if (focusableElements.length < 2) {
+        if (ring.length < 2) {
             return;
         }
 
-        const currentIndex = focusableElements.indexOf(target);
+        const currentIndex = ring.indexOf(target);
 
         if (currentIndex === -1) {
             return;
         }
 
+      // Cycling wraps from the last control to the first, carried over from the
+      // original implementation so the ring has no dead end of its own.
         const offset = e.key === 'ArrowDown' ? 1 : -1;
-        const nextIndex = (currentIndex + offset + focusableElements.length) % focusableElements.length;
-        const nextElement = focusableElements[nextIndex];
+        const length = ring.length;
 
-        nextElement.focus();
+      // Walk forward until a candidate actually takes focus. If one refuses it, the
+      // key stays uncancelled and the next candidate is tried, so a single obscured
+      // control cannot leave the user with a dead arrow key.
+        for (let attempt = 1; attempt < length; attempt++) {
+            const candidate = ring[(currentIndex + offset * attempt + length) % length];
 
-      // Only cancel the key if focus actually moved. A focus() that no-ops would
-      // otherwise leave the user with a dead arrow key: nothing focused, nothing scrolled.
-        if (document.activeElement === nextElement) {
-            e.preventDefault();
+            candidate.focus();
+
+            if (this.hasReceivedFocus(candidate, target, form)) {
+                e.preventDefault();
+                return;
+            }
         }
+    }
+
+    hasReceivedFocus(candidate, target, form)
+    {
+      // Compare against the source, not the candidate: a destination that forwards
+      // focus to a descendant has still taken it, and the key must be cancelled for
+      // that too or the page scrolls as well as moving focus.
+        return document.activeElement !== target && form.contains(document.activeElement);
+    }
+
+    getArrowNavigationTargets(form)
+    {
+      // The ring holds only the controls this handler is also willing to navigate
+      // *away* from. Applying the native-arrow test to membership as well as to the
+      // keypress is what stops arrow nav becoming a one-way trap, where focus lands
+      // on a date field it then refuses to leave. Tab stays the way to reach those
+      // fields. This also covers Choices.js internals, which all sit inside
+      // `.choices` and so never need naming here.
+        return this.getFocusableFields(form).filter(
+            (element) => !this.hasNativeArrowBehavior(element)
+        );
     }
 
     getFocusableFields(form)
@@ -198,7 +244,7 @@ export class FilterEnhancements {
         );
     }
 
-    hasNativeArrowBehaviour(element)
+    hasNativeArrowBehavior(element)
     {
         if (element.tagName === 'SELECT' || element.tagName === 'TEXTAREA') {
             return true;
@@ -209,14 +255,19 @@ export class FilterEnhancements {
             return true;
         }
 
+      // A rich-text or ARIA composite widget owns its own arrow keys.
+        if (element.isContentEditable || element.closest(NATIVE_ARROW_ROLE_SELECTOR)) {
+            return true;
+        }
+
         if (element.tagName === 'INPUT') {
             // A datalist input opens its popup with these keys.
             if (element.hasAttribute('list')) {
                 return true;
             }
 
-            const type = (element.getAttribute('type') || 'text').toLowerCase();
-            return NATIVE_ARROW_INPUT_TYPES.includes(type);
+            // element.type normalises an absent, empty or unknown type to "text".
+            return NATIVE_ARROW_INPUT_TYPES.includes(element.type);
         }
 
         return false;
@@ -230,30 +281,26 @@ export class FilterEnhancements {
             return false;
         }
 
-        if (element.hidden || element.getAttribute('tabindex') === '-1') {
+      // tabIndex is the parsed number the browser honours; comparing the attribute as a
+      // string misses values like " -1" and "-01" that parse to the same thing.
+        if (element.hidden || element.tabIndex < 0) {
             return false;
         }
 
-      // getClientRects() is non-empty for visibility:hidden elements, which cannot take
-      // focus; checkVisibility() is the part that catches them.
-        if (typeof element.checkVisibility === 'function'
-            && !element.checkVisibility({ visibilityProperty: true })) {
+      // Computed style rather than checkVisibility(): that method's option for this was
+      // spelled `checkVisibilityCSS` before Chrome 119 / Safari 17.4, so passing
+      // `visibilityProperty` to an older engine silently returns true for a
+      // visibility:hidden element. Computed visibility is inherited, so this catches an
+      // element hidden only through an ancestor too.
+        const style = window.getComputedStyle(element);
+
+        if (style.visibility === 'hidden' || style.display === 'none') {
             return false;
         }
 
       // An inert subtree is neither focusable nor clickable, yet reports itself visible
       // and enabled and still has client rects.
         if (element.closest('[inert]')) {
-            return false;
-        }
-
-      // Inside a Choices.js widget the remove buttons on selected items and the dropdown
-      // rows are not destinations: focus would land on a control that the passthrough rule
-      // above then refuses to navigate away from. Everything else in the widget stays
-      // eligible, which covers both the multiple-select search box and the tabbable
-      // container a single-select instance renders.
-        if (element.closest('.choices')
-            && element.matches('.choices__button, [data-choice-selectable]')) {
             return false;
         }
 

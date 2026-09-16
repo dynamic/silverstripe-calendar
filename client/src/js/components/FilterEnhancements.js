@@ -6,13 +6,15 @@ const FOCUSABLE_SELECTOR = 'input, select, textarea, a[href], button, [tabindex]
 // membership, so a field in the ring is always one the handler can navigate away from.
 const NATIVE_ARROW_INPUT_TYPES = [
     'date',
+    'datetime',
     'datetime-local',
     'month',
     'week',
     'time',
     'number',
     'range',
-    'radio'
+    'radio',
+    'search'
 ];
 
 // WAI-ARIA roles that define their own ArrowUp/ArrowDown contract, so anything inside
@@ -144,6 +146,15 @@ export class FilterEnhancements {
             return;
         }
 
+      // Bound once per form, so a second construction (an AJAX-refreshed form, for
+      // instance) cannot stack a second listener and step the ring twice per keypress.
+      // Mirrors the `data-choices-initialized` guard in calendar.js.
+        if (form.dataset.arrowNavBound === 'true') {
+            return;
+        }
+
+        form.dataset.arrowNavBound = 'true';
+
       // Delegated on the form and re-queried per event, so fields that are replaced
       // after page load (Choices.js builds its own widget around `categories`)
       // take part in navigation instead of being looked up from a stale list.
@@ -164,9 +175,8 @@ export class FilterEnhancements {
             return;
         }
 
-      // While an IME composition is open the arrow keys page its candidate list,
-      // and some engines report that as ArrowUp/ArrowDown rather than "Process".
-        if (e.isComposing || e.keyCode === 229) {
+      // While an IME composition is open the arrow keys page its candidate list.
+        if (e.isComposing) {
             return;
         }
 
@@ -175,12 +185,24 @@ export class FilterEnhancements {
             return;
         }
 
+      // A widget that already claimed the key keeps it, even one this handler has
+      // never heard of: this listener sits on the form and sees everything.
+        if (e.defaultPrevented) {
+            return;
+        }
+
         const target = e.target;
+
+      // The ring is indexed against the focused control, so a keydown that merely
+      // bubbled up from an unfocused element has no position in it to step from.
+        if (!(target instanceof HTMLElement) || target !== document.activeElement) {
+            return;
+        }
 
       // <select> cycles its options and native date/time/number/range inputs step
       // their value with these keys - returning here keeps that native behavior,
       // because preventDefault() below would otherwise swallow it.
-        if (!(target instanceof HTMLElement) || this.hasNativeArrowBehavior(target)) {
+        if (this.hasNativeArrowBehavior(target)) {
             return;
         }
 
@@ -196,32 +218,36 @@ export class FilterEnhancements {
             return;
         }
 
-      // Cycling wraps from the last control to the first, carried over from the
-      // original implementation so the ring has no dead end of its own.
+      // Cycling wraps from the last control to the first so the ring has no dead end.
         const offset = e.key === 'ArrowDown' ? 1 : -1;
         const length = ring.length;
 
-      // Walk forward until a candidate actually takes focus. If one refuses it, the
-      // key stays uncancelled and the next candidate is tried, so a single obscured
-      // control cannot leave the user with a dead arrow key.
+      // Step to the next candidate that actually takes focus. The key stays
+      // uncancelled unless one does, so a refused focus still scrolls the page
+      // normally instead of landing on a dead key.
         for (let attempt = 1; attempt < length; attempt++) {
             const candidate = ring[(currentIndex + offset * attempt + length) % length];
 
             candidate.focus();
 
-            if (this.hasReceivedFocus(candidate, target, form)) {
+            if (this.hasReceivedFocus(candidate)) {
                 e.preventDefault();
                 return;
             }
         }
+
+      // Nothing in the ring would take focus. Each focus() above blurs the source, so
+      // return it here rather than stranding the user with focus on <body>, and leave
+      // the key uncancelled so the arrow still does its native thing.
+        target.focus();
     }
 
-    hasReceivedFocus(candidate, target, form)
+    hasReceivedFocus(candidate)
     {
-      // Compare against the source, not the candidate: a destination that forwards
-      // focus to a descendant has still taken it, and the key must be cancelled for
-      // that too or the page scrolls as well as moving focus.
-        return document.activeElement !== target && form.contains(document.activeElement);
+      // Ask the candidate that was just focused. A destination that forwards focus to a
+      // descendant has still taken it, and the key must be cancelled for that too or the
+      // page scrolls as well as moving focus.
+        return candidate === document.activeElement || candidate.contains(document.activeElement);
     }
 
     getArrowNavigationTargets(form)

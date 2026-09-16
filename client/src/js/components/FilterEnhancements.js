@@ -1,3 +1,19 @@
+// Elements that can take keyboard focus within the filter form.
+const FOCUSABLE_SELECTOR = 'input, select, textarea, a[href], button, [tabindex]:not([tabindex="-1"])';
+
+// Input types whose native ArrowUp/ArrowDown handling changes their own value,
+// so the form's focus navigation must leave those keys alone.
+const NATIVE_ARROW_INPUT_TYPES = [
+    'date',
+    'datetime-local',
+    'month',
+    'week',
+    'time',
+    'number',
+    'range',
+    'radio'
+];
+
 // Enhanced Filter Experience
 export class FilterEnhancements {
     constructor()
@@ -122,23 +138,126 @@ export class FilterEnhancements {
             return;
         }
 
-        const focusableElements = form.querySelectorAll(
-            'input, select, button, [tabindex]:not([tabindex="-1"])'
-        );
-
-        focusableElements.forEach((element, index) => {
-            element.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    const nextIndex = (index + 1) % focusableElements.length;
-                    focusableElements[nextIndex].focus();
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    const prevIndex = (index - 1 + focusableElements.length) % focusableElements.length;
-                    focusableElements[prevIndex].focus();
-                }
-            });
+      // Delegated on the form and re-queried per event, so fields that are replaced
+      // after page load (Choices.js builds its own widget around `categories`)
+      // take part in navigation instead of being looked up from a stale list.
+        form.addEventListener('keydown', (e) => {
+            this.handleFilterFormArrowNav(e, form);
         });
+    }
+
+    handleFilterFormArrowNav(e, form)
+    {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') {
+            return;
+        }
+
+      // Leave browser and OS shortcuts (Cmd+Arrow, Ctrl+Arrow, ...) untouched.
+        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+            return;
+        }
+
+        const target = e.target;
+
+      // <select> cycles its options and native date/time/number/range inputs step
+      // their value with these keys - returning here keeps that native behaviour,
+      // because preventDefault() below would otherwise swallow it.
+        if (!(target instanceof HTMLElement) || this.hasNativeArrowBehaviour(target)) {
+            return;
+        }
+
+        const focusableElements = this.getFocusableFields(form);
+
+        if (focusableElements.length < 2) {
+            return;
+        }
+
+        const currentIndex = focusableElements.indexOf(target);
+
+        if (currentIndex === -1) {
+            return;
+        }
+
+        const offset = e.key === 'ArrowDown' ? 1 : -1;
+        const nextIndex = (currentIndex + offset + focusableElements.length) % focusableElements.length;
+        const nextElement = focusableElements[nextIndex];
+
+        nextElement.focus();
+
+      // Only cancel the key if focus actually moved. A focus() that no-ops would
+      // otherwise leave the user with a dead arrow key: nothing focused, nothing scrolled.
+        if (document.activeElement === nextElement) {
+            e.preventDefault();
+        }
+    }
+
+    getFocusableFields(form)
+    {
+        return Array.from(form.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
+            (element) => this.isFocusableElement(element)
+        );
+    }
+
+    hasNativeArrowBehaviour(element)
+    {
+        if (element.tagName === 'SELECT' || element.tagName === 'TEXTAREA') {
+            return true;
+        }
+
+      // Choices.js renders its own widget and drives its keyboard interaction.
+        if (element.closest('.choices')) {
+            return true;
+        }
+
+        if (element.tagName === 'INPUT') {
+            // A datalist input opens its popup with these keys.
+            if (element.hasAttribute('list')) {
+                return true;
+            }
+
+            const type = (element.getAttribute('type') || 'text').toLowerCase();
+            return NATIVE_ARROW_INPUT_TYPES.includes(type);
+        }
+
+        return false;
+    }
+
+    isFocusableElement(element)
+    {
+      // :disabled also matches controls disabled by an ancestor <fieldset>, which the
+      // element's own disabled property does not reflect.
+        if (element.matches(':disabled')) {
+            return false;
+        }
+
+        if (element.hidden || element.getAttribute('tabindex') === '-1') {
+            return false;
+        }
+
+      // getClientRects() is non-empty for visibility:hidden elements, which cannot take
+      // focus; checkVisibility() is the part that catches them.
+        if (typeof element.checkVisibility === 'function'
+            && !element.checkVisibility({ visibilityProperty: true })) {
+            return false;
+        }
+
+      // An inert subtree is neither focusable nor clickable, yet reports itself visible
+      // and enabled and still has client rects.
+        if (element.closest('[inert]')) {
+            return false;
+        }
+
+      // Inside a Choices.js widget the remove buttons on selected items and the dropdown
+      // rows are not destinations: focus would land on a control that the passthrough rule
+      // above then refuses to navigate away from. Everything else in the widget stays
+      // eligible, which covers both the multiple-select search box and the tabbable
+      // container a single-select instance renders.
+        if (element.closest('.choices')
+            && element.matches('.choices__button, [data-choice-selectable]')) {
+            return false;
+        }
+
+        return element.getClientRects().length > 0;
     }
 
     focusFirstInput(container)

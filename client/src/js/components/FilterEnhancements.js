@@ -17,6 +17,12 @@ const NATIVE_ARROW_INPUT_TYPES = [
     'search'
 ];
 
+// Controls that *do* something rather than *hold* something: submitting the form, following
+// a link. An arrow key must never park focus on one of them, because the next Enter or Space
+// then fires it - so they are excluded from ring membership entirely. <button> counts even
+// without a type attribute, since a bare <button> inside a form submits it.
+const ACTIVATING_SELECTOR = 'button, input[type="submit"], input[type="reset"], a[href], [role="button"], .form-actions';
+
 // WAI-ARIA roles that define their own ArrowUp/ArrowDown contract, so anything inside
 // one of them keeps its keys for the widget instead of for field cycling.
 const NATIVE_ARROW_ROLE_SELECTOR = '[role="combobox"], [role="listbox"], [role="menu"], '
@@ -208,6 +214,10 @@ export class FilterEnhancements {
 
         const ring = this.getArrowNavigationTargets(form);
 
+      // Navigation needs at least two *fields* to be navigation. With fewer the keys
+      // belong to the focused control, and on a form whose only plain field is the
+      // search box this makes the handler a deliberate no-op rather than a shortcut
+      // onto its submit button.
         if (ring.length < 2) {
             return;
         }
@@ -221,6 +231,7 @@ export class FilterEnhancements {
       // Cycling wraps from the last control to the first so the ring has no dead end.
         const offset = e.key === 'ArrowDown' ? 1 : -1;
         const length = ring.length;
+        const previous = document.activeElement;
 
       // Step to the next candidate that actually takes focus. The key stays
       // uncancelled unless one does, so a refused focus still scrolls the page
@@ -230,7 +241,7 @@ export class FilterEnhancements {
 
             candidate.focus();
 
-            if (this.hasReceivedFocus(candidate)) {
+            if (this.hasReceivedFocus(candidate, previous)) {
                 e.preventDefault();
                 return;
             }
@@ -242,24 +253,34 @@ export class FilterEnhancements {
         target.focus();
     }
 
-    hasReceivedFocus(candidate)
+    hasReceivedFocus(candidate, previous)
     {
-      // Ask the candidate that was just focused. A destination that forwards focus to a
-      // descendant has still taken it, and the key must be cancelled for that too or the
-      // page scrolls as well as moving focus.
+      // Focus has to have left `previous` first. Without that, a ring member which is an
+      // ancestor of the focused control - a `[tabindex="0"]` wrapper, say - satisfies the
+      // contains() test without focus having moved at all, and the key gets swallowed on
+      // a step that did nothing.
+        if (document.activeElement === previous) {
+            return false;
+        }
+
+      // A destination that forwards focus to a descendant has still taken it, and the key
+      // must be cancelled for that too or the page scrolls as well as moving focus.
         return candidate === document.activeElement || candidate.contains(document.activeElement);
     }
 
     getArrowNavigationTargets(form)
     {
-      // The ring holds only the controls this handler is also willing to navigate
-      // *away* from. Applying the native-arrow test to membership as well as to the
-      // keypress is what stops arrow nav becoming a one-way trap, where focus lands
-      // on a date field it then refuses to leave. Tab stays the way to reach those
-      // fields. This also covers Choices.js internals, which all sit inside
-      // `.choices` and so never need naming here.
+      // The ring holds only the fields this handler is also willing to navigate *away*
+      // from. Applying the native-arrow test to membership as well as to the keypress is
+      // what stops arrow nav becoming a one-way trap, where focus lands on a date field
+      // it then refuses to leave. Tab stays the way to reach those fields, and it also
+      // covers Choices.js internals, which all sit inside `.choices` and so never need
+      // naming here. Buttons, submit inputs and links are out for a different reason:
+      // landing on them makes the following Enter destructive.
         return this.getFocusableFields(form).filter(
             (element) => !this.hasNativeArrowBehavior(element)
+                && !element.matches(ACTIVATING_SELECTOR)
+                && !element.closest('.form-actions')
         );
     }
 

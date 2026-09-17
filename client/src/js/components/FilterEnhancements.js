@@ -4,8 +4,9 @@ export class FilterEnhancements {
     {
         this.initActiveFilterTracking();
         this.initCollapsibleFilters();
-        this.initKeyboardSupport();
     }
+
+    // Arrow-key field cycling is deliberately absent from this form: see #158 and #219.
 
     initCollapsibleFilters()
     {
@@ -107,38 +108,6 @@ export class FilterEnhancements {
         } else if (badge) {
             badge.remove();
         }
-    }
-
-    initKeyboardSupport()
-    {
-      // Add keyboard navigation within filters
-        this.setupFormKeyboardNav();
-    }
-
-    setupFormKeyboardNav()
-    {
-        const form = document.querySelector('.calendar-filter-form');
-        if (!form) {
-            return;
-        }
-
-        const focusableElements = form.querySelectorAll(
-            'input, select, button, [tabindex]:not([tabindex="-1"])'
-        );
-
-        focusableElements.forEach((element, index) => {
-            element.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    const nextIndex = (index + 1) % focusableElements.length;
-                    focusableElements[nextIndex].focus();
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    const prevIndex = (index - 1 + focusableElements.length) % focusableElements.length;
-                    focusableElements[prevIndex].focus();
-                }
-            });
-        });
     }
 
     focusFirstInput(container)

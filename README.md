@@ -29,24 +29,29 @@ composer require dynamic/silverstripe-calendar
 
 After installation, run `/dev/build?flush=all` to update your database.
 
-### Colour picker dependency source
+### Color picker dependency source
 
-`composer.json` requires `tractorcow/silverstripe-colorpicker` as `"dev-master as 5.0"` and lists
-`https://github.com/dynamic/silverstripe-colorpicker.git` in a top-level `repositories` block. The block is
-what makes the Dynamic fork the declared source of that package when this module is built on its own. The
-fork publishes under the upstream package name and requires `silverstripe/framework: ^6`.
+`composer.json` requires `tractorcow/silverstripe-colorpicker` as `"dev-master as 5.0"` and declares the
+Dynamic fork, `https://github.com/dynamic/silverstripe-colorpicker.git`, in a top-level `repositories`
+block. The fork publishes under the upstream package name and requires `silverstripe/framework: ^6`.
 
-Composer consults `repositories` ahead of Packagist for every version of that package name, so a build driven
-by the root `composer.json` of this module resolves the package from the fork and depends on the fork staying
-public and reachable.
+Both entries are read from the root package only, so they shape this module's own builds and not a
+consumer's:
 
-Composer reads `repositories` from the root package only. Installed as a dependency, this block has no effect
-on what a consumer resolves; a consumer that wants the fork declares the same VCS entry in its own root
-`composer.json`.
+- Composer prefers a declared `repositories` entry over Packagist for the whole package name, so every
+  version this module resolves comes from the fork. That makes the fork the thing to keep in step: an
+  upstream tag or security fix stays invisible here until the fork's `master` carries it, and a build
+  fails if the fork stops being public. Consumers are unaffected either way, and resolve the package
+  from Packagist, that is, from upstream.
+- An inline `as` alias is discarded outside the root package, so a consumer of this module is held to
+  the constraint `5.0` rather than `dev-master`. There is no stable `5.0` under that name yet, so a
+  root with the default `minimum-stability: stable` cannot install this module; a root with
+  `minimum-stability: dev` installs `dev-master`.
 
-The constraint tracks `dev-master` and this module tracks no `composer.lock` in git, so root-context builds
-follow the `master` HEAD of the fork. The `as 5.0` alias supplies a version number that branch does not carry
-by itself; cutting a `5` branch and a `5.0.0` tag on the fork is what lets the constraint become a plain `^5`.
+The fork aliases its own `dev-master` to `5.0.x-dev`, so what `as 5.0` adds is a stable version number
+rather than a version number at all. This module tracks no `composer.lock` in git, so its builds follow
+the fork's `master` HEAD; cutting a `5` branch and a `5.0.0` tag on the fork is what retires the alias
+and the upstream drift noted above.
 
 ## License
 

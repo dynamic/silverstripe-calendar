@@ -33,21 +33,20 @@ After installation, run `/dev/build?flush=all` to update your database.
 
 `composer.json` requires `tractorcow/silverstripe-colorpicker` as `"dev-master as 5.0"` and lists
 `https://github.com/dynamic/silverstripe-colorpicker.git` in a top-level `repositories` block. The block is
-what makes Dynamic's fork the declared source of that package when this module is built on its own.
+what makes the Dynamic fork the declared source of that package when this module is built on its own. The
+fork publishes under the upstream package name and requires `silverstripe/framework: ^6`.
 
-- It changes provenance, not code. The fork and upstream `tractorcow/silverstripe-colorpicker` are at the
-  same commit (`1c52893`) right now, so both sources carry identical content. The fork keeps the upstream
-  package name and requires `silverstripe/framework: ^6`.
-- Composer consults `repositories` before Packagist for every version of that package name, so in this
-  module's root context the fork's branches (`3.0`, `4`, `master`) and tags (`3.0.0` through `4.2.1`) are
-  the ones considered, and resolution depends on the fork staying public and reachable.
-- Composer reads `repositories` from the root package only. Installed as a dependency, this block has no
-  effect on a consumer's resolution; a consumer that wants the fork declares the same VCS entry in its own
-  root `composer.json`.
-- The entry is unpinned and this module tracks no `composer.lock` in git, so root-context builds follow the
-  fork's `master` HEAD. Neither the fork nor upstream has a `5` branch or a 5.x tag, so nothing currently
-  narrows to a fixed release. Pinning that, by cutting a `5` branch and a `5.0.0` tag and requiring `^5`
-  with no alias, is the way to retire the moving ref.
+Composer consults `repositories` ahead of Packagist for every version of that package name, so a build driven
+by the root `composer.json` of this module resolves the package from the fork and depends on the fork staying
+public and reachable.
+
+Composer reads `repositories` from the root package only. Installed as a dependency, this block has no effect
+on what a consumer resolves; a consumer that wants the fork declares the same VCS entry in its own root
+`composer.json`.
+
+The constraint tracks `dev-master` and this module tracks no `composer.lock` in git, so root-context builds
+follow the `master` HEAD of the fork. The `as 5.0` alias supplies a version number that branch does not carry
+by itself; cutting a `5` branch and a `5.0.0` tag on the fork is what lets the constraint become a plain `^5`.
 
 ## License
 

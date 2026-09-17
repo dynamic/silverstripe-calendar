@@ -4,8 +4,10 @@ const { defineConfig } = require('@playwright/test');
 //
 // Pinning testDir is the point of this file. With no config, Playwright roots discovery at
 // the current working directory and hardcodes only a node_modules skip, so a *.spec.js
-// shipped by a dependency under vendor/ would be collected: vendor/ is not in this repo's
-// tracked .gitignore, only in the local .git/info/exclude, which Playwright never reads.
+// shipped by a dependency under vendor/ would be collected: vendor/ is not ignored by this
+// repo at all (absent from .gitignore, and .git/info/exclude carries no real entries either),
+// so only Playwright's own built-in node_modules skip stands between a vendored spec and
+// collection.
 //
 // respectGitIgnore keeps .gitignore filtering on inside testDir. Naming testDir flips that
 // default to false, and the option is honoured from Playwright 1.45 up - hence the

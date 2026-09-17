@@ -31,27 +31,23 @@ After installation, run `/dev/build?flush=all` to update your database.
 
 ### Colour picker dependency source
 
-`composer.json` requires `tractorcow/silverstripe-colorpicker` as `"dev-master as 5.0"` and declares
-`https://github.com/dynamic/silverstripe-colorpicker.git` in a top-level `repositories` block, so this
-module's own builds resolve that package from Dynamic's fork instead of from Packagist upstream.
+`composer.json` requires `tractorcow/silverstripe-colorpicker` as `"dev-master as 5.0"` and lists
+`https://github.com/dynamic/silverstripe-colorpicker.git` in a top-level `repositories` block. The block is
+what makes Dynamic's fork the declared source of that package when this module is built on its own.
 
-The `as 5.0` alias is load-bearing, not decorative. The fork has branches `3.0`/`4`/`master` and its tags
-top out at `4.2.1` — there is no `5` branch and no 5.x tag to require. The fork publishes under the upstream
-package name (`tractorcow/silverstripe-colorpicker`) and requires `silverstripe/framework: ^6`, and its
-`master` branch also declares `extra.branch-alias` `dev-master: 5.0.x-dev`, consistent with the alias used here.
-
-Two limits of this arrangement are worth stating plainly:
-
-- Composer reads `repositories` from the root package only. When this module is installed *as a dependency*,
-  this block is ignored — a consumer that needs the fork must declare the same VCS entry in its own root
-  `composer.json`.
-- The entry is unpinned: root-context builds (this module's CI and standalone checkouts) follow the fork's
-  `master` HEAD, and this module does not track a `composer.lock` in git. Because the fork keeps the upstream
-  package name, that substitution is not visible from the `require` block alone. The durable fix is to cut a
-  `5` branch and a `5.0.0` tag on the fork, then require `^5` with no alias, so builds resolve a fixed tag
-  instead of a moving branch. This `repositories` block stays either way unless the fork is registered on
-  Packagist in its own right — it is not today, which is why the VCS entry is what makes the fork discoverable
-  at all.
+- It changes provenance, not code. The fork and upstream `tractorcow/silverstripe-colorpicker` are at the
+  same commit (`1c52893`) right now, so both sources carry identical content. The fork keeps the upstream
+  package name and requires `silverstripe/framework: ^6`.
+- Composer consults `repositories` before Packagist for every version of that package name, so in this
+  module's root context the fork's branches (`3.0`, `4`, `master`) and tags (`3.0.0` through `4.2.1`) are
+  the ones considered, and resolution depends on the fork staying public and reachable.
+- Composer reads `repositories` from the root package only. Installed as a dependency, this block has no
+  effect on a consumer's resolution; a consumer that wants the fork declares the same VCS entry in its own
+  root `composer.json`.
+- The entry is unpinned and this module tracks no `composer.lock` in git, so root-context builds follow the
+  fork's `master` HEAD. Neither the fork nor upstream has a `5` branch or a 5.x tag, so nothing currently
+  narrows to a fixed release. Pinning that, by cutting a `5` branch and a `5.0.0` tag and requiring `^5`
+  with no alias, is the way to retire the moving ref.
 
 ## License
 

@@ -6,20 +6,7 @@ export class FilterEnhancements {
         this.initCollapsibleFilters();
     }
 
-    // No arrow-key field cycling lives here any more. It used to bind ArrowUp/ArrowDown to
-    // every focusable element in `.calendar-filter-form` and call preventDefault() before the
-    // browser could act, which swallowed the native option cycling of the DropdownField
-    // <select>s and the segment stepping of the DateField <input type="date">s - that is the
-    // bug this removes, see dynamic/silverstripe-calendar#158.
-    //
-    // Guarding it instead was tried and does not work on the form this module renders: every
-    // field in it is a <select>, a native date input, or a Choices.js widget that owns its own
-    // arrow keys, and submit buttons and links must stay out of any ring because landing on
-    // them makes the next Enter destructive. What is left is the search box alone, so a
-    // guarded ring is provably either a no-op or a key hog that steals caret movement from the
-    // only text field on the form. Tab already walks these fields. The wider question of
-    // whether the module should offer arrow navigation at all, and over what, is tracked in
-    // dynamic/silverstripe-calendar#219.
+    // Arrow-key field cycling is deliberately absent from this form: see #158 and #219.
 
     initCollapsibleFilters()
     {

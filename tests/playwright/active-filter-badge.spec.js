@@ -33,11 +33,11 @@ const path = require('path');
 
 const SOURCE = path.resolve(__dirname, '..', '..', 'client', 'src', 'js', 'components', 'FilterEnhancements.js');
 
-// Mirrors the shape CalendarFilterForm.ss and Calendar.ss render: the badge lives on the
-// toggle button, and SecurityID / action_doFilter are not filters. Choices.js itself is not
-// loaded here - the search_terms input below is hand-written to stand in for the clone
-// Choices injects over the categories control (see the comment on that input), which is all
-// the badge's code path can observe of it. #176 covers the real select having no [] suffix.
+// Mirrors the shape CalendarFilterForm.ss and Calendar.ss render, minus Choices.js: the
+// badge lives on the toggle button, and SecurityID / action_doFilter are not filters. In
+// production the categories control is wrapped by Choices.js (#176 covers its name having no
+// [] suffix), which does not change what FormData sees for this fixture. The search box that
+// wrapper injects arrives at runtime, not in the markup - see injectChoicesSearchBox().
 const FIXTURE = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Active filter badge fixture</title></head>
@@ -56,13 +56,6 @@ const FIXTURE = `<!DOCTYPE html>
       <option value="family">Family</option>
       <option value="music">Music</option>
     </select>
-    <!-- Stands in for the search box Choices.js injects INSIDE this form when it clones the
-         categories control: choices.js 10.2.0 templates.input gives that clone name=search_terms
-         and searchEnabled is on for .js-choice (CalendarFilterForm.php), so its input/change
-         events reach the form's delegated listeners like any real field's. Choices then empties
-         it through Input.prototype.clear, which assigns value directly and dispatches nothing -
-         so a tally that counted those keystrokes never gives the +1 back. -->
-    <input type="search" name="search_terms" class="choices__input" value="">
     <button type="submit" name="action_doFilter" value="1">Filter</button>
   </form>
   <script type="module" src="/FilterEnhancements.js"></script>
@@ -145,6 +138,29 @@ async function dispatchChange(page, selector, value)
   }, value);
 }
 
+// Reproduces, at the moment it happens in production, the search box Choices.js injects when
+// it wraps the categories control: CalendarFilterForm.php turns searchEnabled on for
+// .js-choice, and choices.js 10.2.0's templates.input gives the injected clone
+// name=search_terms inside the form, so its input/change events reach the badge's delegated
+// listeners like any real field's. It is created here rather than written into FIXTURE so
+// that it is ABSENT from the module's initial FormData snapshot, as it is in production -
+// calendar.bundle.js registers its DOMContentLoaded handler before the choices-security
+// customScript CalendarFilterForm.php emits, so the snapshot predates Choices. That ordering
+// is the whole point: pre-fix an absent key was inert, the #159 coalesce alone would read
+// this absent key as newly active and bank a +1 on the first keystroke, and Choices empties
+// the box through Input.prototype.clear - a direct value assignment that dispatches nothing -
+// so that +1 is never given back.
+async function injectChoicesSearchBox(page)
+{
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.name = 'search_terms';
+    input.className = 'choices__input';
+    document.querySelector('.calendar-filter-form').appendChild(input);
+  });
+}
+
 const badge = (page) => page.locator('.js-toggle-filters .badge');
 
 test('selecting the first category counts the filter it is the first of', async ({ page }) => {
@@ -206,13 +222,11 @@ test('non-filter fields stay out of the tally', async ({ page }) => {
   await expect(badge(page)).toHaveText('1');
 });
 
-// The #159 coalesce made every key absent from the snapshot read as newly active - correct for
-// the untouched multi-select, wrong for the search_terms clone, which is absent from the
-// snapshot too and is never emptied by an event of its own. So this spec passes on the pre-fix
-// source (where an absent key was inert) and only goes red if the guard is dropped from the
-// fix; it is a guard against this PR's own fix, not against the original bug.
 test('the search box Choices injects inside the form never counts as a filter', async ({ page }) => {
   await page.goto(`${origin}/`);
+  // After load, so the module's snapshot has already been taken without this control.
+  await injectChoicesSearchBox(page);
+  await expect(badge(page)).toHaveCount(0);
 
   await dispatchChange(page, 'input[name="search_terms"]', 'music');
   await expect(badge(page)).toHaveCount(0);

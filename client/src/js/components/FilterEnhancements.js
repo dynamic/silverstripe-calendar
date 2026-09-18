@@ -77,9 +77,6 @@ export class FilterEnhancements {
             }
 
             formData.set(fieldName, fieldValue);
-            // Clamped so a decrement this tally never earned cannot go negative and drop the
-            // badge while another filter is still applied. (#159)
-            activeCount = Math.max(0, activeCount);
             this.updateFilterBadge(activeCount);
         };
 

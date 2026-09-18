@@ -13,6 +13,10 @@
 // runtime, no external network - and imports the real client/src module, so the assertions
 // run against the shipped code path rather than a transcription of its arithmetic.
 //
+// Manual-only today: .github/workflows/ci.yml passes js: false to silverstripe/gha-ci, so no
+// job runs 'npm test'. Until that gate is opened (tracked as #174) these specs protect the fix
+// only when someone runs 'npx playwright test' locally.
+//
 // Only the 'change' listener is driven, deliberately: the sibling 'input' listener shares one
 // module-level debounce timer across every field, which is tracked separately as #175.
 
@@ -23,8 +27,10 @@ const path = require('path');
 
 const SOURCE = path.resolve(__dirname, '..', '..', 'client', 'src', 'js', 'components', 'FilterEnhancements.js');
 
-// Mirrors the shape CalendarFilterForm.ss and Calendar.ss render: the toggle button carries
-// the badge, the form carries the fields, SecurityID and action_doFilter are not filters.
+// Mirrors the shape CalendarFilterForm.ss and Calendar.ss render, minus Choices.js: the
+// badge lives on the toggle button, and SecurityID / action_doFilter are not filters. In
+// production the categories control is wrapped by Choices.js (#176 covers its name having no
+// [] suffix), which does not change what FormData sees for this fixture.
 const FIXTURE = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Active filter badge fixture</title></head>
@@ -53,102 +59,120 @@ let server = null;
 let origin = '';
 
 test.beforeAll(async () => {
-    server = http.createServer((request, response) => {
-        if (request.url && request.url.startsWith('/FilterEnhancements.js')) {
-            response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-            response.end(fs.readFileSync(SOURCE));
-            return;
-        }
-        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        response.end(FIXTURE);
-    });
-    await new Promise((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(0, '127.0.0.1', resolve);
-    });
-    origin = `http://127.0.0.1:${server.address().port}`;
+  server = http.createServer((request, response) => {
+    if (request.url && request.url.split('?')[0] === '/FilterEnhancements.js') {
+      try {
+        response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+        response.end(fs.readFileSync(SOURCE));
+      } catch (error) {
+        // A moved or renamed module must read as a failed assertion, not a dead server.
+        response.writeHead(500, { 'Content-Type': 'text/plain' });
+        response.end(`/* ${SOURCE} unreadable: ${error.message} */`);
+      }
+      return;
+    }
+    if (request.url && request.url.split('?')[0] !== '/') {
+      response.writeHead(404, { 'Content-Type': 'text/plain' });
+      response.end('not found');
+      return;
+    }
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    response.end(FIXTURE);
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  origin = `http://127.0.0.1:${server.address().port}`;
 });
 
 test.afterAll(async () => {
-    await new Promise((resolve) => server.close(resolve));
+  // If beforeAll never bound a socket, its own error is the one worth seeing.
+  if (!server) {
+    return;
+  }
+  const pending = server;
+  server = null;
+  await new Promise((resolve) => pending.close(resolve));
 });
 
-// Selects options and fires one change event, so the badge is driven by exactly one event
-// per interaction instead of the change+input pair a real click produces.
+// Selects options and fires one change event, so the badge is driven by exactly one event per
+// interaction instead of the change+input pair a real click produces.
 async function setSelection(page, selector, values)
 {
-    await page.locator(selector).evaluate((element, selected) => {
-        Array.from(element.options).forEach((option) => {
-            option.selected = selected.includes(option.value);
-        });
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-    }, values);
+  await page.locator(selector).evaluate((element, selected) => {
+    Array.from(element.options).forEach((option) => {
+      option.selected = selected.includes(option.value);
+    });
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }, values);
 }
 
 async function dispatchChange(page, selector, value)
 {
-    await page.locator(selector).evaluate((element, next) => {
-        element.value = next;
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-    }, value);
+  await page.locator(selector).evaluate((element, next) => {
+    element.value = next;
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
 }
 
 const badge = (page) => page.locator('.js-toggle-filters .badge');
 
 test('selecting the first category counts the filter it is the first of', async ({ page }) => {
-    await page.goto(`${origin}/`);
-    // An untouched multi-select is absent from the snapshot, so nothing is active yet.
-    await expect(badge(page)).toHaveCount(0);
+  await page.goto(`${origin}/`);
+  // An untouched multi-select is absent from the snapshot, so nothing is active yet.
+  await expect(badge(page)).toHaveCount(0);
 
-    await setSelection(page, 'select[name="categories"]', ['arts']);
+  await setSelection(page, 'select[name="categories"]', ['arts']);
 
-    await expect(badge(page)).toHaveText('1');
+  await expect(badge(page)).toHaveText('1');
 });
 
 test('clearing a never-counted field cannot drive the tally negative', async ({ page }) => {
-    await page.goto(`${origin}/`);
+  await page.goto(`${origin}/`);
 
-    // Deselecting every option of a multi-select that was already empty used to decrement a
-    // count of 0 to -1; the badge then stayed gone through the next real filter too.
-    await setSelection(page, 'select[name="categories"]', []);
-    await expect(badge(page)).toHaveCount(0);
+  // Deselecting every option of a multi-select that was already empty used to take the tally
+  // to -1, and because the badge is rendered only for a count above zero the next real filter
+  // then landed on 0 and stayed invisible.
+  await setSelection(page, 'select[name="categories"]', []);
+  await expect(badge(page)).toHaveCount(0);
 
-    await setSelection(page, 'select[name="categories"]', ['music']);
+  await setSelection(page, 'select[name="categories"]', ['music']);
 
-    await expect(badge(page)).toHaveText('1');
+  await expect(badge(page)).toHaveText('1');
 });
 
 test('re-pointing an already-counted filter does not double count it', async ({ page }) => {
-    await page.goto(`${origin}/`);
+  await page.goto(`${origin}/`);
 
-    await setSelection(page, 'select[name="eventType"]', ['course']);
-    await expect(badge(page)).toHaveText('1');
+  await setSelection(page, 'select[name="eventType"]', ['course']);
+  await expect(badge(page)).toHaveText('1');
 
-    await setSelection(page, 'select[name="eventType"]', ['event']);
+  await setSelection(page, 'select[name="eventType"]', ['event']);
 
-    await expect(badge(page)).toHaveText('1');
+  await expect(badge(page)).toHaveText('1');
 });
 
 test('clearing a counted filter removes the badge again', async ({ page }) => {
-    await page.goto(`${origin}/`);
+  await page.goto(`${origin}/`);
 
-    await setSelection(page, 'select[name="eventType"]', ['event']);
-    await expect(badge(page)).toHaveText('1');
+  await setSelection(page, 'select[name="eventType"]', ['event']);
+  await expect(badge(page)).toHaveText('1');
 
-    await setSelection(page, 'select[name="eventType"]', ['']);
+  await setSelection(page, 'select[name="eventType"]', ['']);
 
-    await expect(badge(page)).toHaveCount(0);
+  await expect(badge(page)).toHaveCount(0);
 });
 
 test('non-filter fields stay out of the tally', async ({ page }) => {
-    await page.goto(`${origin}/`);
+  await page.goto(`${origin}/`);
 
-    await dispatchChange(page, 'input[name="SecurityID"]', 'rotated-token');
-    await expect(badge(page)).toHaveCount(0);
+  await dispatchChange(page, 'input[name="SecurityID"]', 'rotated-token');
+  await expect(badge(page)).toHaveCount(0);
 
-    await dispatchChange(page, 'input[name="search"]', '   ');
-    await expect(badge(page)).toHaveCount(0);
+  await dispatchChange(page, 'input[name="search"]', '   ');
+  await expect(badge(page)).toHaveCount(0);
 
-    await dispatchChange(page, 'input[name="search"]', 'workshop');
-    await expect(badge(page)).toHaveText('1');
+  await dispatchChange(page, 'input[name="search"]', 'workshop');
+  await expect(badge(page)).toHaveText('1');
 });

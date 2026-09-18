@@ -19,6 +19,12 @@
 //
 // Only the 'change' listener is driven, deliberately: the sibling 'input' listener shares one
 // module-level debounce timer across every field, which is tracked separately as #175.
+//
+// Also known, unfixed, and outside what these specs can see: the initial tally iterates
+// formData.entries(), so a <select multiple> that arrives with two options pre-selected counts
+// as two filters, and formData.set() later hands back only one of them - leaving the badge
+// stuck at 1 on a form with nothing applied. Tracked as #228; this fixture's categories control
+// starts with nothing selected, so it never reaches that state.
 
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
@@ -61,14 +67,19 @@ let origin = '';
 test.beforeAll(async () => {
   server = http.createServer((request, response) => {
     if (request.url && request.url.split('?')[0] === '/FilterEnhancements.js') {
+      let body;
       try {
-        response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-        response.end(fs.readFileSync(SOURCE));
+        body = fs.readFileSync(SOURCE);
       } catch (error) {
         // A moved or renamed module must read as a failed assertion, not a dead server.
+        // Headers are written only after the read: calling writeHead twice is
+        // ERR_HTTP_HEADERS_SENT, which escapes this listener uncaught and kills the worker.
         response.writeHead(500, { 'Content-Type': 'text/plain' });
         response.end(`/* ${SOURCE} unreadable: ${error.message} */`);
+        return;
       }
+      response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+      response.end(body);
       return;
     }
     if (request.url && request.url.split('?')[0] !== '/') {
@@ -83,6 +94,12 @@ test.beforeAll(async () => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
   });
+  // Once bound, beforeAll can no longer answer a server error, so swap the settling listener
+  // for one that surfaces it instead of leaving a settled reject to swallow it.
+  server.removeAllListeners('error');
+  server.on('error', (error) => {
+    console.error(`filter-badge fixture server error after bind: ${error.message}`);
+  });
   origin = `http://127.0.0.1:${server.address().port}`;
 });
 
@@ -93,6 +110,10 @@ test.afterAll(async () => {
   }
   const pending = server;
   server = null;
+  // keep-alive sockets would otherwise hold close() open on Node < 19.
+  if (typeof pending.closeAllConnections === 'function') {
+    pending.closeAllConnections();
+  }
   await new Promise((resolve) => pending.close(resolve));
 });
 

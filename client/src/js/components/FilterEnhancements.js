@@ -65,7 +65,10 @@ export class FilterEnhancements {
             }
 
             const isActive = fieldValue && fieldValue.trim() !== '';
-            const fieldPreviouslyActive = formData.get(fieldName)?.trim() !== '';
+            // A key absent from the snapshot - an untouched <select multiple>, an unchecked
+            // checkbox - yields null from get(), and null?.trim() is undefined, which compares
+            // unequal to '' forever: the field reads as "already counted". Coalesce first. (#159)
+            const fieldPreviouslyActive = (formData.get(fieldName) ?? '').trim() !== '';
 
             if (isActive && !fieldPreviouslyActive) {
                 activeCount++;
@@ -74,6 +77,9 @@ export class FilterEnhancements {
             }
 
             formData.set(fieldName, fieldValue);
+            // Clamped so a decrement this tally never earned cannot go negative and drop the
+            // badge while another filter is still applied. (#159)
+            activeCount = Math.max(0, activeCount);
             this.updateFilterBadge(activeCount);
         };
 

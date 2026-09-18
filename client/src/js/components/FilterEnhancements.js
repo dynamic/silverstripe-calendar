@@ -60,14 +60,22 @@ export class FilterEnhancements {
         this.updateFilterBadge(activeCount);
 
         const updateActiveFiltersBadge = (fieldName, fieldValue) => {
-            if (fieldName === 'SecurityID' || fieldName === 'action_doFilter') {
+            // search_terms is not a filter field either: Choices.js clones the .js-choice
+            // multi-select into a container inside this form, and the clone it injects as the
+            // search box carries that name (choices.js 10.2.0, templates.input), so its
+            // input/change events bubble to the handlers below just like a real field's.
+            if (fieldName === 'SecurityID' || fieldName === 'action_doFilter' || fieldName === 'search_terms') {
                 return;
             }
 
             const isActive = fieldValue && fieldValue.trim() !== '';
-            // A key absent from the snapshot - an untouched <select multiple>, an unchecked
-            // checkbox - yields null from get(), and null?.trim() is undefined, which compares
-            // unequal to '' forever: the field reads as "already counted". Coalesce first. (#159)
+            // A key absent from the snapshot - an untouched <select multiple> is the case this
+            // form actually renders - yields null from get(), and null?.trim() is undefined,
+            // which compares unequal to '' forever: the field reads as "already counted".
+            // Coalescing fixes that, and coalescing is all it fixes: a checkbox would need
+            // more, because event.target.value reads "on" whether or not the box is checked,
+            // so isActive would hold permanently and unticking it would never decrement.
+            // CalendarFilterForm renders no checkbox today. (#159)
             const fieldPreviouslyActive = (formData.get(fieldName) ?? '').trim() !== '';
 
             if (isActive && !fieldPreviouslyActive) {

@@ -33,10 +33,11 @@ const path = require('path');
 
 const SOURCE = path.resolve(__dirname, '..', '..', 'client', 'src', 'js', 'components', 'FilterEnhancements.js');
 
-// Mirrors the shape CalendarFilterForm.ss and Calendar.ss render, minus Choices.js: the
-// badge lives on the toggle button, and SecurityID / action_doFilter are not filters. In
-// production the categories control is wrapped by Choices.js (#176 covers its name having no
-// [] suffix), which does not change what FormData sees for this fixture.
+// Mirrors the shape CalendarFilterForm.ss and Calendar.ss render: the badge lives on the
+// toggle button, and SecurityID / action_doFilter are not filters. Choices.js itself is not
+// loaded here - the search_terms input below is hand-written to stand in for the clone
+// Choices injects over the categories control (see the comment on that input), which is all
+// the badge's code path can observe of it. #176 covers the real select having no [] suffix.
 const FIXTURE = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Active filter badge fixture</title></head>
@@ -55,6 +56,13 @@ const FIXTURE = `<!DOCTYPE html>
       <option value="family">Family</option>
       <option value="music">Music</option>
     </select>
+    <!-- Stands in for the search box Choices.js injects INSIDE this form when it clones the
+         categories control: choices.js 10.2.0 templates.input gives that clone name=search_terms
+         and searchEnabled is on for .js-choice (CalendarFilterForm.php), so its input/change
+         events reach the form's delegated listeners like any real field's. Choices then empties
+         it through Input.prototype.clear, which assigns value directly and dispatches nothing -
+         so a tally that counted those keystrokes never gives the +1 back. -->
+    <input type="search" name="search_terms" class="choices__input" value="">
     <button type="submit" name="action_doFilter" value="1">Filter</button>
   </form>
   <script type="module" src="/FilterEnhancements.js"></script>
@@ -195,5 +203,25 @@ test('non-filter fields stay out of the tally', async ({ page }) => {
   await expect(badge(page)).toHaveCount(0);
 
   await dispatchChange(page, 'input[name="search"]', 'workshop');
+  await expect(badge(page)).toHaveText('1');
+});
+
+// The #159 coalesce made every key absent from the snapshot read as newly active - correct for
+// the untouched multi-select, wrong for the search_terms clone, which is absent from the
+// snapshot too and is never emptied by an event of its own. So this spec passes on the pre-fix
+// source (where an absent key was inert) and only goes red if the guard is dropped from the
+// fix; it is a guard against this PR's own fix, not against the original bug.
+test('the search box Choices injects inside the form never counts as a filter', async ({ page }) => {
+  await page.goto(`${origin}/`);
+
+  await dispatchChange(page, 'input[name="search_terms"]', 'music');
+  await expect(badge(page)).toHaveCount(0);
+
+  await dispatchChange(page, 'input[name="search_terms"]', 'music festival');
+  await expect(badge(page)).toHaveCount(0);
+
+  // The real filter behind that search box still counts, exactly once.
+  await setSelection(page, 'select[name="categories"]', ['music']);
+
   await expect(badge(page)).toHaveText('1');
 });

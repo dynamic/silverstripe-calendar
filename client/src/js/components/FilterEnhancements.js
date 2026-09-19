@@ -1,4 +1,12 @@
 // Enhanced Filter Experience
+// Names that never stand for an active filter, shared by the opening tally and every later
+// update: SecurityID is the CSRF token, action_doFilter is the submit button's own name, and
+// search_terms is the search box Choices.js injects inside this form when it clones the
+// .js-choice multi-select (choices.js 10.2.0, templates.input), so its input/change events
+// reach the delegated handlers below just like a real field's. One list rather than two, so a
+// fourth non-filter name cannot land in one place and not the other.
+const NON_FILTER_FIELDS = ['SecurityID', 'action_doFilter', 'search_terms'];
+
 export class FilterEnhancements {
     constructor()
     {
@@ -49,7 +57,7 @@ export class FilterEnhancements {
 
       // Initialize active count
         for (let [key, value] of formData.entries()) {
-            if (key === 'SecurityID' || key === 'action_doFilter') {
+            if (NON_FILTER_FIELDS.includes(key)) {
                 continue;
             }
             if (value && value.trim() !== '') {
@@ -60,11 +68,7 @@ export class FilterEnhancements {
         this.updateFilterBadge(activeCount);
 
         const updateActiveFiltersBadge = (fieldName, fieldValue) => {
-            // search_terms is not a filter field either: Choices.js clones the .js-choice
-            // multi-select into a container inside this form, and the clone it injects as the
-            // search box carries that name (choices.js 10.2.0, templates.input), so its
-            // input/change events bubble to the handlers below just like a real field's.
-            if (fieldName === 'SecurityID' || fieldName === 'action_doFilter' || fieldName === 'search_terms') {
+            if (NON_FILTER_FIELDS.includes(fieldName)) {
                 return;
             }
 

@@ -10,8 +10,10 @@
 // Why a browser spec and not a unit test: this module has no JS unit runner (no jest/vitest,
 // nothing in devDependencies that can give a DOM to a module that reads document). The page
 // below is served from an ephemeral loopback port by the spec itself - no SilverStripe
-// runtime, no external network - and imports the real client/src module, so the assertions
-// run against the shipped code path rather than a transcription of its arithmetic.
+// runtime, no external network. Five specs below import the real client/src module; the last
+// one loads client/dist/js/calendar.bundle.js instead, the artifact CalendarFilterForm.php
+// actually hands the browser, so a bundle that has drifted out of sync with its source goes
+// red here too instead of passing on the source module's behaviour.
 //
 // Manual-only today: .github/workflows/ci.yml passes js: false to silverstripe/gha-ci, so no
 // job runs 'npm test'. Until that gate is opened (tracked as #174) these specs protect the fix
@@ -32,6 +34,8 @@ const http = require('http');
 const path = require('path');
 
 const SOURCE = path.resolve(__dirname, '..', '..', 'client', 'src', 'js', 'components', 'FilterEnhancements.js');
+const VENDORS = path.resolve(__dirname, '..', '..', 'client', 'dist', 'js', 'vendors.bundle.js');
+const BUNDLE = path.resolve(__dirname, '..', '..', 'client', 'dist', 'js', 'calendar.bundle.js');
 
 // Mirrors the shape CalendarFilterForm.ss and Calendar.ss render, minus Choices.js: the
 // badge lives on the toggle button, and SecurityID / action_doFilter are not filters. In
@@ -62,34 +66,58 @@ const FIXTURE = `<!DOCTYPE html>
 </body>
 </html>`;
 
+// The same markup served with the built bundle in place of the loose module. Both tags are
+// load-bearing, and in this order: CalendarFrontendExtension.php:68-69 requires
+// vendors.bundle.js and then calendar.bundle.js, and webpack's splitChunks leaves
+// calendar.bundle.js deferring its entry factory on the vendors chunk - served on its own it
+// parses, evaluates nothing, and fails silently, with no pageerror to show for it.
+// Requirements::javascript emits plain <script> tags, not modules. The equality check is not
+// decoration: String.replace misses silently and returns the original, which would have this
+// page serve the source module and let the bundle spec pass without ever touching a bundle.
+const BUNDLE_FIXTURE = FIXTURE.replace(
+  '<script type="module" src="/FilterEnhancements.js"></script>',
+  '<script src="/vendors.bundle.js"></script>\n  <script src="/calendar.bundle.js"></script>'
+);
+if (BUNDLE_FIXTURE === FIXTURE) {
+  throw new Error('script tag not substituted: the bundle spec would be serving the source module');
+}
+
+const SCRIPT_ROUTES = {
+  '/FilterEnhancements.js': SOURCE,
+  '/vendors.bundle.js': VENDORS,
+  '/calendar.bundle.js': BUNDLE
+};
+
 let server = null;
 let origin = '';
 
 test.beforeAll(async () => {
   server = http.createServer((request, response) => {
-    if (request.url && request.url.split('?')[0] === '/FilterEnhancements.js') {
+    const route = request.url ? request.url.split('?')[0] : '';
+    const file = SCRIPT_ROUTES[route];
+    if (file) {
       let body;
       try {
-        body = fs.readFileSync(SOURCE);
+        body = fs.readFileSync(file);
       } catch (error) {
         // A moved or renamed module must read as a failed assertion, not a dead server.
         // Headers are written only after the read: calling writeHead twice is
         // ERR_HTTP_HEADERS_SENT, which escapes this listener uncaught and kills the worker.
         response.writeHead(500, { 'Content-Type': 'text/plain' });
-        response.end(`/* ${SOURCE} unreadable: ${error.message} */`);
+        response.end(`/* ${file} unreadable: ${error.message} */`);
         return;
       }
       response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       response.end(body);
       return;
     }
-    if (request.url && request.url.split('?')[0] !== '/') {
+    if (route !== '/' && route !== '/bundle') {
       response.writeHead(404, { 'Content-Type': 'text/plain' });
       response.end('not found');
       return;
     }
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    response.end(FIXTURE);
+    response.end(route === '/bundle' ? BUNDLE_FIXTURE : FIXTURE);
   });
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -238,4 +266,30 @@ test('the search box Choices injects inside the form never counts as a filter', 
   await setSelection(page, 'select[name="categories"]', ['music']);
 
   await expect(badge(page)).toHaveText('1');
+});
+
+// The artifact SilverStripe loads is the bundle (CalendarFilterForm.php:72), not the module the
+// specs above drive, so one spec drives the built file: a bundle that was not rebuilt, or was
+// rebuilt from other source, cannot ride along on the source module's green. Choices itself is
+// not initialised here - on a real page the choices-security customScript does that - so the
+// search box is injected by hand, which is also how the #159 coalesce first meets it in
+// production: after the module's DOMContentLoaded snapshot, and absent from it.
+test('the built bundle counts the first category and still ignores the search box', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto(`${origin}/bundle`);
+  await expect(badge(page)).toHaveCount(0);
+
+  await injectChoicesSearchBox(page);
+  await dispatchChange(page, 'input[name="search_terms"]', 'music');
+  await expect(badge(page)).toHaveCount(0);
+
+  await setSelection(page, 'select[name="categories"]', ['music']);
+  await expect(badge(page)).toHaveText('1');
+
+  await setSelection(page, 'select[name="categories"]', []);
+  await expect(badge(page)).toHaveCount(0);
+
+  expect(pageErrors).toEqual([]);
 });

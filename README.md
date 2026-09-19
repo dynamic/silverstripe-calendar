@@ -29,6 +29,31 @@ composer require dynamic/silverstripe-calendar
 
 After installation, run `/dev/build?flush=all` to update your database.
 
+### Color picker dependency source
+
+`composer.json` requires `tractorcow/silverstripe-colorpicker` as `"dev-master as 5.0"` and declares the
+Dynamic fork, `https://github.com/dynamic/silverstripe-colorpicker.git`, in a top-level `repositories`
+block. The fork publishes under the upstream package name, with the same `silverstripe/framework: ^6`
+requirement and the same `dev-master` branch alias as upstream, so the block changes which repository this
+module's builds name as the source rather than which package is being asked for.
+
+Both entries are read from the root package only, so they shape this module's builds and not a consumer's:
+
+- Composer prefers a declared `repositories` entry over Packagist for the whole package name, so every
+  version this module resolves comes from the fork. That makes the fork the thing to keep in step: an
+  upstream tag or security fix stays invisible here until the fork's `master` carries it, and a build
+  fails if the fork stops being public.
+- Consumers resolve the package from Packagist, that is, from upstream. There is no stable `5.0` under
+  that name yet, so a root with the default `minimum-stability: stable` cannot install this module; a
+  root that sets `minimum-stability: dev` installs `dev-master`.
+
+The fork already aliases `dev-master` to `5.0.x-dev` in its own `composer.json`, so the inline `as 5.0`
+serves to present that version as stable. This module tracks no `composer.lock` in git, so its builds
+follow the fork's `master` HEAD. Cutting a `5` branch and a `5.0.0` tag on the fork is what lets this
+module drop the alias and closes the upstream drift noted above; making the module installable at stable
+stability is a separate matter, needing an upstream `5.0.0` tag or the fork republished under its own
+`dynamic/silverstripe-colorpicker` name and required by that name instead.
+
 ## License
 
 See [License](LICENSE.md)

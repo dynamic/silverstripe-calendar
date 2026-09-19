@@ -40,6 +40,12 @@
         "silverstripe/recipe-testing": "^4",
         "squizlabs/php_codesniffer": "^3.7"
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/dynamic/silverstripe-colorpicker.git"
+        }
+    ],
     "minimum-stability": "dev",
     "prefer-stable": true,
     "autoload": {

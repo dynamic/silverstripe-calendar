@@ -23,9 +23,12 @@ use SilverStripe\Dev\SapphireTest;
  *
  * Also covers the two properties that make the signal safe to emit at all: the
  * in-request memory cache is populated whatever the backend answers, so a failed
- * persistent write cannot degrade the request in flight; and emission is bounded to
- * once per request, because setCachedInstances() is reached once per recurring event
- * from Calendar::getEventsFeed() via CarbonRecursion::getCachedOccurrences().
+ * persistent write cannot degrade the request in flight; and emission is bounded by a
+ * per-process static flag. That flag is what keeps the volume down - it is bounded
+ * because setCachedInstances() is reached once per recurring event from
+ * Calendar::getEventsFeed() via CarbonRecursion::getCachedOccurrences(), so without
+ * it a single dead backend would emit N warnings. It only looks like a per-request
+ * bound because PHP-FPM statics die at request end; see the source docblock.
  *
  * @package Dynamic\Calendar\Tests\Model
  */
@@ -398,11 +401,13 @@ class EventInstanceCacheTest extends SapphireTest
     }
 
     /**
-     * Test 4: repeated failures across distinct events collapse to one warning per
-     * request, and clearAllCache() re-arms the guard.
+     * Test 4: repeated failures across distinct events collapse to one warning, and
+     * clearAllCache() re-arms the guard.
      *
-     * Without the bound this is N warnings per request - one per recurring event -
-     * which is what stopped the previous attempt on this issue at review.
+     * The bound is a per-process static flag, not a per-request one - it only looks
+     * per-request because PHP-FPM statics die at request end. Without it, these three
+     * distinct events would emit three separate warnings, which is the volume finding
+     * that stopped the previous attempt on this issue at review.
      *
      * @return void
      */

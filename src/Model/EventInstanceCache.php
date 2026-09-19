@@ -37,7 +37,7 @@ class EventInstanceCache
     private static int $default_ttl = 3600;
 
     /**
-     * Whether a cache-write failure has already been reported this request.
+     * Whether a cache-write failure has already been reported this PHP process.
      *
      * Volume bound, not a suppression policy: see logCacheWriteFailure().
      *
@@ -160,15 +160,24 @@ class EventInstanceCache
      * whose message wording this mirrors).
      *
      * Emission is bounded to once per request by $write_failure_logged, reset only
-     * by clearAllCache(). The bound is load-bearing rather than cosmetic:
-     * setCachedInstances() is reached once per recurring event from
-     * Calendar::getEventsFeed() via CarbonRecursion::getCachedOccurrences(), so an
-     * unbounded call would cost N synchronous logger calls - and, when the logger
-     * service itself throws, N inline error_log() writes - on the response path for
-     * a single dead backend. The first failure names its own key; later distinct
-     * keys in the same request are not individually named, because the defect is
-     * the shared backend, not any one key. A wider suppression policy across the
-     * module is #179's to decide, not this method's.
+     * Emission is bounded by $write_failure_logged, and the honest scope of that
+     * bound is one per PHP process, not one per request: the flag is reset only by
+     * clearAllCache(), which nothing in this module calls in production - the
+     * production invalidation path is clearEventCache(), called from EventPage and
+     * EventException. On the module's own caller set the distinction is invisible,
+     * because PHP-FPM statics die at request end: setCachedInstances() is reached
+     * once per recurring event from Calendar::getEventsFeed() via
+     * CarbonRecursion::getCachedOccurrences(), and getEventsFeed() is only reached
+     * from CalendarController, i.e. a web request. It is not invisible to a consuming
+     * project, though: getEventsFeed() is public module API, and calling it from a
+     * queued job or a dev/task would get one warning for the whole process, with no
+     * in-band way to re-arm. The bound is still load-bearing rather than cosmetic -
+     * an unbounded call would cost N synchronous logger calls, and when the logger
+     * itself throws N inline error_log() writes, for a single dead backend - and the
+     * first failure still names its own key while later distinct keys in the same
+     * process do not, because the defect is the shared backend rather than any one
+     * key. A wider suppression policy across the module is #179's to decide, as is
+     * whether a re-arm hook belongs on clearEventCache().
      *
      * The logger lookup and the write to it are both guarded, via LoggerFallback,
      * so a missing or throwing logger cannot turn a cache-write failure into a fatal

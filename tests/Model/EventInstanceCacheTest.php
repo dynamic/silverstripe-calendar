@@ -129,12 +129,14 @@ class EventInstanceCacheTest extends SapphireTest
         $reflection->getProperty('cache_instance')->setValue(null, null);
         $reflection->getProperty('memory_cache')->setValue(null, []);
 
-        // Guarded rather than assumed: $write_failure_logged is introduced by this
-        // fix, so the pre-fix implementation this suite is also run against, to
-        // prove the tests discriminate, has no such property. An unguarded reset
-        // would then throw in setUp() - a structural error that would be reported
-        // alongside the real failures and make the falsifiability run ambiguous
-        // about whether it detected the missing warning at all.
+        // Guarded, but not silently: $write_failure_logged is introduced by this fix,
+        // so the pre-fix implementation this suite is also run against, to prove the
+        // tests discriminate, has no such property - an unguarded reset would throw in
+        // setUp() there and turn four attributable behavioural failures into six
+        // structural ones. That openness is a real cost, so the property is pinned
+        // explicitly by testWriteFailureGuardPropertyStillExists() below: renaming it
+        // fails at a named site instead of quietly turning this reset into a no-op
+        // and surfacing later as order-dependent flakiness in another test.
         if ($reflection->hasProperty('write_failure_logged')) {
             $reflection->getProperty('write_failure_logged')->setValue(null, false);
         }
@@ -207,17 +209,64 @@ class EventInstanceCacheTest extends SapphireTest
     }
 
     /**
-     * Test 1: a successful write logs nothing, and the instances are readable.
+     * Array-backed CacheInterface double that really records what it is given.
      *
-     * The control case - the new guard must not turn a working cache into noise.
+     * Needed wherever a test asserts the persistent backend actually received the
+     * write. A createStub() whose get() returns null unconditionally cannot make that
+     * distinction at all, because getCachedInstances() answers from the in-request
+     * memory cache before it ever consults the backend - so an unconditional-null
+     * double would pass unchanged against an implementation whose set() was a no-op.
+     *
+     * @param array<string,mixed> $store Passed by reference; holds what was written.
+     * @return CacheInterface
+     */
+    protected function arrayBackedCache(array &$store): CacheInterface
+    {
+        $cache = $this->createStub(CacheInterface::class);
+        $cache->method('get')->willReturnCallback(
+            function (string $key) use (&$store) {
+                return $store[$key] ?? null;
+            }
+        );
+        $cache->method('set')->willReturnCallback(
+            function (string $key, $value, $ttl = null) use (&$store): bool {
+                $store[$key] = $value;
+
+                return true;
+            }
+        );
+
+        return $cache;
+    }
+
+    /**
+     * Drop only the in-request memory cache, leaving the memoised backend in place,
+     * so the next read is forced out through the persistent backend.
      *
      * @return void
      */
-    public function testSuccessfulWriteLogsNothingAndStaysReadable()
+    protected function dropMemoryCacheOnly(): void
     {
-        $workingCache = $this->createStub(CacheInterface::class);
-        $workingCache->method('get')->willReturn(null);
-        $workingCache->method('set')->willReturn(true);
+        (new ReflectionClass(EventInstanceCache::class))
+            ->getProperty('memory_cache')
+            ->setValue(null, []);
+    }
+
+    /**
+     * Test 1: a successful write reaches the persistent backend, logs nothing, and
+     * the instances are readable - from memory first, then through the backend.
+     *
+     * The control case: the new guard must not turn a working cache into noise, and
+     * must not break either read path. The read-through half matters specifically
+     * because getCachedInstances() short-circuits on the memory cache, so a read
+     * asserted without dropping it would never touch the backend at all.
+     *
+     * @return void
+     */
+    public function testSuccessfulWriteReachesBackendLogsNothingAndReadsBack()
+    {
+        $store = [];
+        $workingCache = $this->arrayBackedCache($store);
 
         $warnings = [];
         $logger = $this->recordingLogger($warnings);
@@ -232,12 +281,31 @@ class EventInstanceCacheTest extends SapphireTest
 
             $instances = [['title' => 'Occurrence One']];
             EventInstanceCache::setCachedInstances($this->event, '2026-04-01', '2026-04-30', $instances);
+            $cacheKey = $this->generateCacheKey($this->event, '2026-04-01', '2026-04-30');
 
             $this->assertSame([], $warnings, 'A successful cache write must not log a warning');
+            $this->assertArrayHasKey(
+                $cacheKey,
+                $store,
+                'The persistent backend must actually have received the write'
+            );
+            $this->assertSame(
+                $instances,
+                $store[$cacheKey],
+                'The value persisted must be the value handed to setCachedInstances()'
+            );
+
             $this->assertSame(
                 $instances,
                 EventInstanceCache::getCachedInstances($this->event, '2026-04-01', '2026-04-30'),
-                'Written instances must be readable back'
+                'Instances must be readable - served from the in-request memory cache, which is consulted first'
+            );
+
+            $this->dropMemoryCacheOnly();
+            $this->assertSame(
+                $instances,
+                EventInstanceCache::getCachedInstances($this->event, '2026-04-01', '2026-04-30'),
+                'With the memory cache dropped the read must come back through the persistent backend'
             );
         } finally {
             Injector::unnest();
@@ -438,18 +506,51 @@ class EventInstanceCacheTest extends SapphireTest
     }
 
     /**
-     * Test 6: an empty instance list is a normal write, not an error.
+     * Test: the volume-bound property this suite resets still exists.
      *
-     * An event with no occurrences in range is the common case, and must produce
-     * neither a warning nor an exception.
+     * Companion to resetInstanceCacheState(), whose guard has to tolerate the
+     * property's absence so the pre-fix falsifiability run stays attributable. This
+     * is where a rename or removal of $write_failure_logged fails, loudly and by
+     * name, rather than silently dearming every later test in the file.
      *
      * @return void
      */
-    public function testEmptyInstanceListWritesCleanly()
+    public function testWriteFailureGuardPropertyStillExists()
     {
-        $workingCache = $this->createStub(CacheInterface::class);
-        $workingCache->method('get')->willReturn(null);
-        $workingCache->method('set')->willReturn(true);
+        $reflection = new ReflectionClass(EventInstanceCache::class);
+
+        $this->assertTrue(
+            $reflection->hasProperty('write_failure_logged'),
+            'EventInstanceCache::$write_failure_logged is the volume bound for the '
+            . 'issue #160 warning. If this fails, resetInstanceCacheState() has been '
+            . 'silently resetting nothing and the bound is untested.'
+        );
+
+        $property = $reflection->getProperty('write_failure_logged');
+        $property->setValue(null, true);
+        $this->assertTrue(
+            $property->getValue(null),
+            'The guard must be reachable by reflection, otherwise the suite is not '
+            . 'resetting the state it claims to reset.'
+        );
+        $property->setValue(null, false);
+    }
+
+    /**
+     * Test 6: an empty instance list is a normal write, persisted as empty rather
+     * than skipped, and reads back as empty rather than as a miss.
+     *
+     * An event with no occurrences in range is the common case. It must produce
+     * neither a warning nor an exception, and - the part the memory cache would
+     * otherwise hide - it must be written to the backend, so a later process reads
+     * "nothing happened" instead of recomputing the recursion every time.
+     *
+     * @return void
+     */
+    public function testEmptyInstanceListIsPersistedAndReadsBackEmpty()
+    {
+        $store = [];
+        $workingCache = $this->arrayBackedCache($store);
 
         $warnings = [];
         $logger = $this->recordingLogger($warnings);
@@ -463,12 +564,21 @@ class EventInstanceCacheTest extends SapphireTest
             Injector::inst()->registerService($logger, LoggerInterface::class);
 
             EventInstanceCache::setCachedInstances($this->event, '2026-04-01', '2026-04-30', []);
+            $cacheKey = $this->generateCacheKey($this->event, '2026-04-01', '2026-04-30');
 
             $this->assertSame([], $warnings, 'An empty instance list is not a failure');
+            $this->assertArrayHasKey(
+                $cacheKey,
+                $store,
+                'An empty list must still reach the backend - this is what separates '
+                . '"cached that there are no occurrences" from "cached nothing"'
+            );
+
+            $this->dropMemoryCacheOnly();
             $this->assertSame(
                 [],
                 EventInstanceCache::getCachedInstances($this->event, '2026-04-01', '2026-04-30'),
-                'An empty cached list must read back empty, not null'
+                'A persisted empty list must read back empty through the backend, not as a null miss'
             );
         } finally {
             Injector::unnest();

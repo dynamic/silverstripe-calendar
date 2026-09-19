@@ -302,8 +302,11 @@ class LoggerFallbackTest extends SapphireTest
     }
 
     /**
-     * logWithFallback() is protected by design - its consumers are a Page and a Controller,
-     * whose public surface should not widen - so the subject exposes it.
+     * logWithFallback() is protected by design - its consumers are a Page, a Controller
+     * and, since #160, the static EventInstanceCache - whose public surface should not
+     * widen - so the subject exposes it. EventInstanceCache reaches the method by
+     * constructing a throwaway instance rather than by widening the trait, because
+     * promoting it to static is #200's decision and not that call site's.
      *
      * @return object
      */

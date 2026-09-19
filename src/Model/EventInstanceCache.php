@@ -159,7 +159,6 @@ class EventInstanceCache
      * for the events JSON cache in CalendarController::logCacheWriteFailure(),
      * whose message wording this mirrors).
      *
-     * Emission is bounded to once per request by $write_failure_logged, reset only
      * Emission is bounded by $write_failure_logged, and the honest scope of that
      * bound is one per PHP process, not one per request: the flag is reset only by
      * clearAllCache(), which nothing in this module calls in production - the

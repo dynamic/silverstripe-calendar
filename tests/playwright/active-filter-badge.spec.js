@@ -1,0 +1,295 @@
+// Active-filter badge regression specs - issue #159.
+//
+// updateActiveFiltersBadge() decided "was this field already counted?" with
+// formData.get(fieldName)?.trim() !== ''. A control that contributes nothing to the initial
+// FormData snapshot - an untouched <select multiple>, an unchecked checkbox - returns null
+// from get(), so the comparison became undefined !== '', i.e. permanently true. Selecting the
+// first category therefore never incremented the badge, and clearing such a field decremented
+// a tally it had never contributed to.
+//
+// Why a browser spec and not a unit test: this module has no JS unit runner (no jest/vitest,
+// nothing in devDependencies that can give a DOM to a module that reads document). The page
+// below is served from an ephemeral loopback port by the spec itself - no SilverStripe
+// runtime, no external network. Five specs below import the real client/src module; the last
+// one loads client/dist/js/calendar.bundle.js instead, the artifact CalendarFilterForm.php
+// actually hands the browser, so a bundle that has drifted out of sync with its source goes
+// red here too instead of passing on the source module's behaviour.
+//
+// Manual-only today: .github/workflows/ci.yml passes js: false to silverstripe/gha-ci, so no
+// job runs 'npm test'. Until that gate is opened (tracked as #174) these specs protect the fix
+// only when someone runs 'npx playwright test' locally.
+//
+// Only the 'change' listener is driven, deliberately: the sibling 'input' listener shares one
+// module-level debounce timer across every field, which is tracked separately as #175.
+//
+// Also known, unfixed, and outside what these specs can see: the initial tally iterates
+// formData.entries(), so a <select multiple> that arrives with two options pre-selected counts
+// as two filters, and formData.set() later hands back only one of them - leaving the badge
+// stuck at 1 on a form with nothing applied. Tracked as #228; this fixture's categories control
+// starts with nothing selected, so it never reaches that state.
+
+const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const http = require('http');
+const path = require('path');
+
+const SOURCE = path.resolve(__dirname, '..', '..', 'client', 'src', 'js', 'components', 'FilterEnhancements.js');
+const VENDORS = path.resolve(__dirname, '..', '..', 'client', 'dist', 'js', 'vendors.bundle.js');
+const BUNDLE = path.resolve(__dirname, '..', '..', 'client', 'dist', 'js', 'calendar.bundle.js');
+
+// Mirrors the shape CalendarFilterForm.ss and Calendar.ss render, minus Choices.js: the
+// badge lives on the toggle button, and SecurityID / action_doFilter are not filters. In
+// production the categories control is wrapped by Choices.js (#176 covers its name having no
+// [] suffix), which does not change what FormData sees for this fixture. The search box that
+// wrapper injects arrives at runtime, not in the markup - see injectChoicesSearchBox().
+const FIXTURE = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Active filter badge fixture</title></head>
+<body>
+  <button type="button" class="js-toggle-filters" aria-expanded="false">Filter Events</button>
+  <form class="calendar-filter-form" aria-label="Filter calendar events">
+    <input type="hidden" name="SecurityID" value="8a1c0f4b">
+    <input type="text" name="search" value="">
+    <select name="eventType">
+      <option value="">(All)</option>
+      <option value="course">Course</option>
+      <option value="event">Event</option>
+    </select>
+    <select name="categories" multiple size="3">
+      <option value="arts">Arts</option>
+      <option value="family">Family</option>
+      <option value="music">Music</option>
+    </select>
+    <button type="submit" name="action_doFilter" value="1">Filter</button>
+  </form>
+  <script type="module" src="/FilterEnhancements.js"></script>
+</body>
+</html>`;
+
+// The same markup served with the built bundle in place of the loose module. Both tags are
+// load-bearing, and in this order: CalendarFrontendExtension.php:68-69 requires
+// vendors.bundle.js and then calendar.bundle.js, and webpack's splitChunks leaves
+// calendar.bundle.js deferring its entry factory on the vendors chunk - served on its own it
+// parses, evaluates nothing, and fails silently, with no pageerror to show for it.
+// Requirements::javascript emits plain <script> tags, not modules. The equality check is not
+// decoration: String.replace misses silently and returns the original, which would have this
+// page serve the source module and let the bundle spec pass without ever touching a bundle.
+const BUNDLE_FIXTURE = FIXTURE.replace(
+  '<script type="module" src="/FilterEnhancements.js"></script>',
+  '<script src="/vendors.bundle.js"></script>\n  <script src="/calendar.bundle.js"></script>'
+);
+if (BUNDLE_FIXTURE === FIXTURE) {
+  throw new Error('script tag not substituted: the bundle spec would be serving the source module');
+}
+
+const SCRIPT_ROUTES = {
+  '/FilterEnhancements.js': SOURCE,
+  '/vendors.bundle.js': VENDORS,
+  '/calendar.bundle.js': BUNDLE
+};
+
+let server = null;
+let origin = '';
+
+test.beforeAll(async () => {
+  server = http.createServer((request, response) => {
+    const route = request.url ? request.url.split('?')[0] : '';
+    const file = SCRIPT_ROUTES[route];
+    if (file) {
+      let body;
+      try {
+        body = fs.readFileSync(file);
+      } catch (error) {
+        // A moved or renamed module must read as a failed assertion, not a dead server.
+        // Headers are written only after the read: calling writeHead twice is
+        // ERR_HTTP_HEADERS_SENT, which escapes this listener uncaught and kills the worker.
+        response.writeHead(500, { 'Content-Type': 'text/plain' });
+        response.end(`/* ${file} unreadable: ${error.message} */`);
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+      response.end(body);
+      return;
+    }
+    if (route !== '/' && route !== '/bundle') {
+      response.writeHead(404, { 'Content-Type': 'text/plain' });
+      response.end('not found');
+      return;
+    }
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    response.end(route === '/bundle' ? BUNDLE_FIXTURE : FIXTURE);
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  // Once bound, beforeAll can no longer answer a server error, so swap the settling listener
+  // for one that surfaces it instead of leaving a settled reject to swallow it.
+  server.removeAllListeners('error');
+  server.on('error', (error) => {
+    console.error(`filter-badge fixture server error after bind: ${error.message}`);
+  });
+  origin = `http://127.0.0.1:${server.address().port}`;
+});
+
+test.afterAll(async () => {
+  // If beforeAll never bound a socket, its own error is the one worth seeing.
+  if (!server) {
+    return;
+  }
+  const pending = server;
+  server = null;
+  // keep-alive sockets would otherwise hold close() open on Node < 19.
+  if (typeof pending.closeAllConnections === 'function') {
+    pending.closeAllConnections();
+  }
+  await new Promise((resolve) => pending.close(resolve));
+});
+
+// Selects options and fires one change event, so the badge is driven by exactly one event per
+// interaction instead of the change+input pair a real click produces.
+async function setSelection(page, selector, values)
+{
+  await page.locator(selector).evaluate((element, selected) => {
+    Array.from(element.options).forEach((option) => {
+      option.selected = selected.includes(option.value);
+    });
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }, values);
+}
+
+async function dispatchChange(page, selector, value)
+{
+  await page.locator(selector).evaluate((element, next) => {
+    element.value = next;
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}
+
+// Reproduces, at the moment it happens in production, the search box Choices.js injects when
+// it wraps the categories control: CalendarFilterForm.php turns searchEnabled on for
+// .js-choice, and choices.js 10.2.0's templates.input gives the injected clone
+// name=search_terms inside the form, so its input/change events reach the badge's delegated
+// listeners like any real field's. It is created here rather than written into FIXTURE so
+// that it is ABSENT from the module's initial FormData snapshot, as it is in production -
+// calendar.bundle.js registers its DOMContentLoaded handler before the choices-security
+// customScript CalendarFilterForm.php emits, so the snapshot predates Choices. That ordering
+// is the whole point: pre-fix an absent key was inert, the #159 coalesce alone would read
+// this absent key as newly active and bank a +1 on the first keystroke, and Choices empties
+// the box through Input.prototype.clear - a direct value assignment that dispatches nothing -
+// so that +1 is never given back.
+async function injectChoicesSearchBox(page)
+{
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.name = 'search_terms';
+    input.className = 'choices__input';
+    document.querySelector('.calendar-filter-form').appendChild(input);
+  });
+}
+
+const badge = (page) => page.locator('.js-toggle-filters .badge');
+
+test('selecting the first category counts the filter it is the first of', async ({ page }) => {
+  await page.goto(`${origin}/`);
+  // An untouched multi-select is absent from the snapshot, so nothing is active yet.
+  await expect(badge(page)).toHaveCount(0);
+
+  await setSelection(page, 'select[name="categories"]', ['arts']);
+
+  await expect(badge(page)).toHaveText('1');
+});
+
+test('clearing a never-counted field cannot drive the tally negative', async ({ page }) => {
+  await page.goto(`${origin}/`);
+
+  // Deselecting every option of a multi-select that was already empty used to take the tally
+  // to -1, and because the badge is rendered only for a count above zero the next real filter
+  // then landed on 0 and stayed invisible.
+  await setSelection(page, 'select[name="categories"]', []);
+  await expect(badge(page)).toHaveCount(0);
+
+  await setSelection(page, 'select[name="categories"]', ['music']);
+
+  await expect(badge(page)).toHaveText('1');
+});
+
+test('re-pointing an already-counted filter does not double count it', async ({ page }) => {
+  await page.goto(`${origin}/`);
+
+  await setSelection(page, 'select[name="eventType"]', ['course']);
+  await expect(badge(page)).toHaveText('1');
+
+  await setSelection(page, 'select[name="eventType"]', ['event']);
+
+  await expect(badge(page)).toHaveText('1');
+});
+
+test('clearing a counted filter removes the badge again', async ({ page }) => {
+  await page.goto(`${origin}/`);
+
+  await setSelection(page, 'select[name="eventType"]', ['event']);
+  await expect(badge(page)).toHaveText('1');
+
+  await setSelection(page, 'select[name="eventType"]', ['']);
+
+  await expect(badge(page)).toHaveCount(0);
+});
+
+test('non-filter fields stay out of the tally', async ({ page }) => {
+  await page.goto(`${origin}/`);
+
+  await dispatchChange(page, 'input[name="SecurityID"]', 'rotated-token');
+  await expect(badge(page)).toHaveCount(0);
+
+  await dispatchChange(page, 'input[name="search"]', '   ');
+  await expect(badge(page)).toHaveCount(0);
+
+  await dispatchChange(page, 'input[name="search"]', 'workshop');
+  await expect(badge(page)).toHaveText('1');
+});
+
+test('the search box Choices injects inside the form never counts as a filter', async ({ page }) => {
+  await page.goto(`${origin}/`);
+  // After load, so the module's snapshot has already been taken without this control.
+  await injectChoicesSearchBox(page);
+  await expect(badge(page)).toHaveCount(0);
+
+  await dispatchChange(page, 'input[name="search_terms"]', 'music');
+  await expect(badge(page)).toHaveCount(0);
+
+  await dispatchChange(page, 'input[name="search_terms"]', 'music festival');
+  await expect(badge(page)).toHaveCount(0);
+
+  // The real filter behind that search box still counts, exactly once.
+  await setSelection(page, 'select[name="categories"]', ['music']);
+
+  await expect(badge(page)).toHaveText('1');
+});
+
+// The artifact SilverStripe loads is the bundle (CalendarFilterForm.php:72), not the module the
+// specs above drive, so one spec drives the built file: a bundle that was not rebuilt, or was
+// rebuilt from other source, cannot ride along on the source module's green. Choices itself is
+// not initialised here - on a real page the choices-security customScript does that - so the
+// search box is injected by hand, which is also how the #159 coalesce first meets it in
+// production: after the module's DOMContentLoaded snapshot, and absent from it.
+test('the built bundle counts the first category and still ignores the search box', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto(`${origin}/bundle`);
+  await expect(badge(page)).toHaveCount(0);
+
+  await injectChoicesSearchBox(page);
+  await dispatchChange(page, 'input[name="search_terms"]', 'music');
+  await expect(badge(page)).toHaveCount(0);
+
+  await setSelection(page, 'select[name="categories"]', ['music']);
+  await expect(badge(page)).toHaveText('1');
+
+  await setSelection(page, 'select[name="categories"]', []);
+  await expect(badge(page)).toHaveCount(0);
+
+  expect(pageErrors).toEqual([]);
+});

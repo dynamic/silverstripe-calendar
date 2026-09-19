@@ -1,4 +1,12 @@
 // Enhanced Filter Experience
+// Names that never stand for an active filter, shared by the opening tally and every later
+// update: SecurityID is the CSRF token, action_doFilter is the submit button's own name, and
+// search_terms is the search box Choices.js injects inside this form when it clones the
+// .js-choice multi-select (choices.js 10.2.0, templates.input), so its input/change events
+// reach the delegated handlers below just like a real field's. One list rather than two, so a
+// fourth non-filter name cannot land in one place and not the other.
+const NON_FILTER_FIELDS = ['SecurityID', 'action_doFilter', 'search_terms'];
+
 export class FilterEnhancements {
     constructor()
     {
@@ -49,7 +57,7 @@ export class FilterEnhancements {
 
       // Initialize active count
         for (let [key, value] of formData.entries()) {
-            if (key === 'SecurityID' || key === 'action_doFilter') {
+            if (NON_FILTER_FIELDS.includes(key)) {
                 continue;
             }
             if (value && value.trim() !== '') {
@@ -60,12 +68,19 @@ export class FilterEnhancements {
         this.updateFilterBadge(activeCount);
 
         const updateActiveFiltersBadge = (fieldName, fieldValue) => {
-            if (fieldName === 'SecurityID' || fieldName === 'action_doFilter') {
+            if (NON_FILTER_FIELDS.includes(fieldName)) {
                 return;
             }
 
             const isActive = fieldValue && fieldValue.trim() !== '';
-            const fieldPreviouslyActive = formData.get(fieldName)?.trim() !== '';
+            // A key absent from the snapshot - an untouched <select multiple> is the case this
+            // form actually renders - yields null from get(), and null?.trim() is undefined,
+            // which compares unequal to '' forever: the field reads as "already counted".
+            // Coalescing fixes that, and coalescing is all it fixes: a checkbox would need
+            // more, because event.target.value reads "on" whether or not the box is checked,
+            // so isActive would hold permanently and unticking it would never decrement.
+            // CalendarFilterForm renders no checkbox today. (#159)
+            const fieldPreviouslyActive = (formData.get(fieldName) ?? '').trim() !== '';
 
             if (isActive && !fieldPreviouslyActive) {
                 activeCount++;

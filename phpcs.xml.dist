@@ -10,4 +10,10 @@
         <!-- You may need to use this exclusion if you override some core methods -->
         <exclude name="PSR1.Methods.CamelCapsMethodName.NotCamelCaps" />
     </rule>
+
+    <!-- PHP_CodeSniffer 3's default extension list is php,inc,js,css, so PSR12 - a PHP
+         standard - is otherwise applied to the browser specs under tests/playwright, and
+         reports hundreds of errors on the one that has content. There is no .inc or .css
+         under src/ or tests/, so scoping to php only ever drops those specs. -->
+    <arg name="extensions" value="php" />
 </ruleset>

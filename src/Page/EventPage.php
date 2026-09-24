@@ -608,12 +608,21 @@ class EventPage extends \Page
     }
 
     /**
+     * Whether this event generates recurring occurrences.
+     *
+     * EventPage subclasses recur like EventPage itself. A record with an obsolete ClassName
+     * does not: that is how a leftover RecursiveEvent row from the pre-Carbon RRule system
+     * loads (the class is gone, the stored value is not). Each one is a copy of its parent,
+     * Recursion value included, so letting it recur would duplicate the parent's occurrences.
+     * $this->ClassName can't detect it, since getClassName() reports an obsolete class as
+     * EventPage; ObsoleteClassName is the stored value (dynamic/silverstripe-calendar#234).
+     *
      * @return bool
      */
     public function eventRecurs()
     {
         return $this->config()->get('recursion')
-            && $this->ClassName == EventPage::class
+            && !$this->ObsoleteClassName
             && $this->Recursion != 'NONE';
     }
 

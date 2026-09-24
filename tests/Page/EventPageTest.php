@@ -9,6 +9,7 @@ use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
+use SilverStripe\ORM\DataObject;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Versioned\Versioned;
 use ReflectionClass;
@@ -193,6 +194,50 @@ class EventPageTest extends SapphireTest
         $event->Recursion = 'WEEKLY';
 
         $this->assertSame('Does not repeat', $event->getHasRecurringEvents());
+    }
+
+    /**
+     * An EventPage subclass recurs like EventPage itself. eventRecurs() used to require
+     * ClassName == EventPage::class exactly, which silently made every subclass a one-off
+     * event (dynamic/silverstripe-calendar#234).
+     */
+    public function testEventRecursForSubclass()
+    {
+        Config::modify()->set(EventPage::class, 'recursion', true);
+
+        $event = new class extends EventPage {
+        };
+        $event->StartDate = '2025-06-20';
+        $event->Recursion = 'DAILY';
+
+        $this->assertNotSame(EventPage::class, $event->ClassName);
+        $this->assertTrue($event->eventRecurs());
+        $this->assertCount(3, iterator_to_array($event->getOccurrences('2025-06-20', '2025-06-22')));
+    }
+
+    /**
+     * A leftover RecursiveEvent row from the pre-Carbon RRule system loads with its obsolete
+     * ClassName and a copy of its parent's Recursion value. It must not recur, or it would
+     * duplicate the parent's occurrences (dynamic/silverstripe-calendar#234).
+     */
+    public function testEventDoesNotRecurForLegacyRecursiveEventRecord()
+    {
+        Config::modify()->set(EventPage::class, 'recursion', true);
+
+        $legacyClass = 'Dynamic\\Calendar\\Page\\RecursiveEvent';
+        // Hydrate the way DataList::createDataObject() does for a row whose class no
+        // longer exists: instantiated as EventPage, with the stored ClassName kept.
+        /** @var EventPage $event */
+        $event = EventPage::create([
+            'ID' => 999,
+            'ClassName' => $legacyClass,
+            'RecordClassName' => $legacyClass,
+            'StartDate' => '2025-06-20',
+            'Recursion' => 'DAILY',
+        ], DataObject::CREATE_HYDRATED);
+
+        $this->assertSame($legacyClass, $event->ObsoleteClassName);
+        $this->assertFalse($event->eventRecurs());
     }
 
     /**

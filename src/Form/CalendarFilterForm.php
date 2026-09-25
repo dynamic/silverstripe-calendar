@@ -179,9 +179,12 @@ class CalendarFilterForm extends Form
                 // on, which rendered `name="categories"` and silently dropped
                 // every selection but one before the controller ran (issue #176).
                 //
-                // A legacy bookmarked `?categories=3` arrives as a scalar; wrap
-                // it so it still pre-selects, matching the scalar-or-array
-                // normalisation every server-side reader already does
+                // A legacy bookmarked `?categories=3` arrives as a scalar. The
+                // field already copes with that (SelectField::getListValues()
+                // wraps a scalar into a one-element array), so this wrap is
+                // explicit rather than load-bearing - it states here that
+                // scalar-or-array is the accepted input shape, which is what
+                // every server-side reader of this param already assumes
                 // (resolveCategoryIDs(), getFilterSummary()).
                 $selectedCategories = $request->getVar('categories');
                 if ($selectedCategories !== null && !is_array($selectedCategories)) {

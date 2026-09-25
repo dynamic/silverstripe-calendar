@@ -4,12 +4,15 @@ namespace Dynamic\Calendar\Tests\Form;
 
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Form\CalendarFilterForm;
+use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Page\Calendar;
+use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\Controller;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Control\Session;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\Form;
+use SilverStripe\Forms\FormField;
 
 /**
  * Tests for CalendarFilterForm
@@ -18,6 +21,8 @@ use SilverStripe\Forms\Form;
  */
 class CalendarFilterFormTest extends SapphireTest
 {
+    protected $usesDatabase = true;
+
     // Remove problematic fixture to avoid database issues
     // protected static $fixture_file = '../Fixtures/CalendarFixtures.yml';
 
@@ -461,5 +466,165 @@ class CalendarFilterFormTest extends SapphireTest
         $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
 
         $this->assertNull($form->Fields()->dataFieldByName('allDay'));
+    }
+
+    /**
+     * Build a calendar whose events use two distinct categories, so both
+     * ShowCategoryFilter and getAvailableCategories() (which only offers
+     * categories actually used by events in this calendar) are satisfied.
+     *
+     * @return array{0: Calendar, 1: array<int, int>} The calendar and its category IDs
+     */
+    private function createCalendarWithCategories(): array
+    {
+        $uid = substr(md5(uniqid('', true)), 0, 8);
+
+        $calendar = Calendar::create();
+        $calendar->Title = 'Category Filter Calendar ' . $uid;
+        $calendar->URLSegment = 'category-filter-calendar-' . $uid;
+        $calendar->ShowCategoryFilter = 1;
+        $calendar->write();
+
+        $categoryIDs = [];
+        $slugs = ['arts', 'music'];
+        foreach ($slugs as $index => $slug) {
+            $category = Category::create();
+            $category->Title = ucfirst($slug) . ' ' . $uid;
+            $category->write();
+            $categoryIDs[] = (int)$category->ID;
+
+            $event = EventPage::create();
+            $event->Title = ucfirst($slug) . ' event ' . $uid;
+            $event->ParentID = (int)$calendar->ID;
+            $event->StartDate = '2025-06-1' . ($index + 1);
+            $event->StartTime = '10:00:00';
+            $event->Recursion = 'NONE';
+            $event->write();
+            $event->Categories()->add($category);
+        }
+
+        return [$calendar, $categoryIDs];
+    }
+
+    /**
+     * Render the categories data field for a request carrying $vars.
+     *
+     * @param array<string, mixed> $vars
+     */
+    private function categoriesField(Calendar $calendar, array $vars): FormField
+    {
+        $request = new HTTPRequest('GET', '/calendar', $vars);
+        $request->setSession(new Session([]));
+        $controller = Controller::create();
+        $controller->setRequest($request);
+
+        $form = CalendarFilterForm::create($controller, 'FilterForm', $calendar, $request);
+
+        $field = $form->Fields()->dataFieldByName('categories');
+        $this->assertNotNull(
+            $field,
+            'categories must render while ShowCategoryFilter is on and the calendar has categorised events'
+        );
+
+        return $field;
+    }
+
+    /**
+     * The categories control is a <select multiple>, so the browser submits one
+     * value per selection under the same key: `?categories=1&categories=2`. PHP
+     * keeps only the LAST occurrence of a repeated key with no `[]` suffix, so
+     * every selection but one collapsed before the controller ran - which is why
+     * every server-side reader of this param already expects an array (#176).
+     *
+     * The control must therefore be named `categories[]` and must carry over
+     * every submitted id as selected.
+     */
+    public function testCategoriesFieldSubmitsBracketedNameAndKeepsEverySelection(): void
+    {
+        [$calendar, $categoryIDs] = $this->createCalendarWithCategories();
+
+        $field = $this->categoriesField(
+            $calendar,
+            ['categories' => [strval($categoryIDs[0]), strval($categoryIDs[1])]]
+        );
+        $html = $field->forTemplate();
+
+        // The field is still addressed as `categories` - both
+        // CalendarFilterForm.ss's `$Fields.find('Name', 'categories')` and
+        // CalendarController::getVar('categories') depend on that name.
+        $this->assertSame('categories', $field->getName());
+        $this->assertStringContainsString('name="categories[]"', $html);
+        $this->assertStringContainsString('multiple', $html);
+
+        foreach ($categoryIDs as $id) {
+            $this->assertMatchesRegularExpression(
+                '/value="' . $id . '"[^>]*selected="selected"/',
+                $html,
+                'Selection ' . $id . ' must survive in the rendered control'
+            );
+        }
+    }
+
+    /**
+     * Bookmarked/shared links written before the fix carry a bare
+     * `?categories=3`. The control must still pre-select that single category.
+     */
+    public function testCategoriesFieldPreselectsLegacyScalarValue(): void
+    {
+        [$calendar, $categoryIDs] = $this->createCalendarWithCategories();
+
+        $field = $this->categoriesField($calendar, ['categories' => strval($categoryIDs[1])]);
+        $html = $field->forTemplate();
+
+        $this->assertStringContainsString('name="categories[]"', $html);
+        $this->assertMatchesRegularExpression(
+            '/value="' . $categoryIDs[1] . '"[^>]*selected="selected"/',
+            $html,
+            'A scalar ?categories=N must still pre-select option N'
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/value="' . $categoryIDs[0] . '"[^>]*selected="selected"/',
+            $html,
+            'The untouched category must not be rendered as selected'
+        );
+    }
+
+    /**
+     * Absent param: the control still renders (bracketed, multi) with nothing
+     * selected - no error, no phantom selection.
+     */
+    public function testCategoriesFieldRendersWithNoCategoriesParam(): void
+    {
+        [$calendar, $categoryIDs] = $this->createCalendarWithCategories();
+
+        $field = $this->categoriesField($calendar, []);
+        $html = $field->forTemplate();
+
+        $this->assertStringContainsString('name="categories[]"', $html);
+        $this->assertStringContainsString('multiple', $html);
+        $this->assertStringNotContainsString('selected="selected"', $html);
+    }
+
+    /**
+     * Non-numeric input is a "select nothing" answer, not a fatal: the
+     * controller resolves ids against Category::byIDs() and ignores misses, so
+     * the rendered form must come back intact with nothing selected.
+     */
+    public function testCategoriesFieldRendersNonNumericParamWithNothingSelected(): void
+    {
+        [$calendar, $categoryIDs] = $this->createCalendarWithCategories();
+
+        $field = $this->categoriesField($calendar, ['categories' => ['abc']]);
+        $html = $field->forTemplate();
+
+        $this->assertStringContainsString('name="categories[]"', $html);
+        $this->assertStringContainsString('multiple', $html);
+        foreach ($categoryIDs as $id) {
+            $this->assertDoesNotMatchRegularExpression(
+                '/value="' . $id . '"[^>]*selected="selected"/',
+                $html,
+                'category id ' . $id . ' must not be selected by a non-numeric param'
+            );
+        }
     }
 }

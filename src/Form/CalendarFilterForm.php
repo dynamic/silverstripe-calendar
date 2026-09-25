@@ -15,6 +15,7 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\Form;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\Forms\LiteralField;
+use SilverStripe\Forms\ListboxField;
 use SilverStripe\Forms\OptionsetField;
 use SilverStripe\Forms\TextField;
 use SilverStripe\View\Requirements;
@@ -116,6 +117,7 @@ class CalendarFilterForm extends Form
                 // Add Clear Filters button if URL has search parameters (indicating active filters)
                 const urlParams = new URLSearchParams(window.location.search);
                 const hasFilters = urlParams.has("search") || urlParams.has("categories") ||
+                                 urlParams.has("categories[]") ||
                                  urlParams.has("from") || urlParams.has("to") ||
                                  urlParams.has("eventType") || urlParams.has("allDay");
 
@@ -168,10 +170,27 @@ class CalendarFilterForm extends Form
         if ($this->calendar->ShowCategoryFilter) {
             $availableCategories = $this->getAvailableCategories();
             if ($availableCategories->count()) {
-                $fields->push(DropdownField::create('categories', 'Categories')
+                // A <select multiple> submits one value per selection under the
+                // same key, and PHP only merges repeated keys into an array when
+                // the key carries a `[]` suffix - otherwise it keeps the LAST
+                // occurrence. So the control must be named `categories[]`, which
+                // is what ListboxField::getAttributes() emits (along with
+                // `multiple`) instead of a DropdownField with `multiple` bolted
+                // on, which rendered `name="categories"` and silently dropped
+                // every selection but one before the controller ran (issue #176).
+                //
+                // A legacy bookmarked `?categories=3` arrives as a scalar; wrap
+                // it so it still pre-selects, matching the scalar-or-array
+                // normalisation every server-side reader already does
+                // (resolveCategoryIDs(), getFilterSummary()).
+                $selectedCategories = $request->getVar('categories');
+                if ($selectedCategories !== null && !is_array($selectedCategories)) {
+                    $selectedCategories = [$selectedCategories];
+                }
+
+                $fields->push(ListboxField::create('categories', 'Categories')
                     ->setSource($availableCategories->map('ID', 'Title')->toArray())
-                    ->setValue($request->getVar('categories'))
-                    ->setAttribute('multiple', 'multiple')
+                    ->setValue($selectedCategories)
                     ->addExtraClass('js-choice col-md-3 mb-3'));
             }
         }

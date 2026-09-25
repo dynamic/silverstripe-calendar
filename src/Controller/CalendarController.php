@@ -743,7 +743,8 @@ class CalendarController extends \PageController
                 // For recurring event instances, include the instance date in the ID
                 $uniqueId .= '-' . $event->getInstanceDate()->format('Ymd');
             }
-            $ics[] = 'UID:' . $uniqueId . '@' . $_SERVER['HTTP_HOST'] ?? 'calendar.local';
+            $host = $_SERVER['HTTP_HOST'] ?? 'calendar.local';
+            $ics[] = 'UID:' . $uniqueId . '@' . $host;
 
             // Add timestamp
             $ics[] = 'DTSTAMP:' . gmdate('Ymd\THis\Z');

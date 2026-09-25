@@ -394,10 +394,7 @@ class CalendarControllerICSTest extends FunctionalTest
 
         // transformEventToICS() reads $_SERVER['HTTP_HOST'] directly when building the UID,
         // and this test drives the generator by reflection rather than through a request, so
-        // the key is set here to keep the test independent of bootstrap side effects. Note
-        // that the 'calendar.local' default on that line is currently unreachable - the
-        // concatenation binds tighter than the ?? - which is tracked as
-        // dynamic/silverstripe-calendar#185 and is not what this test covers.
+        // the key is set here to pin a deterministic host in the output.
         $hadHost = array_key_exists('HTTP_HOST', $_SERVER);
         $previousHost = $_SERVER['HTTP_HOST'] ?? null;
         $_SERVER['HTTP_HOST'] = 'localhost';
@@ -438,6 +435,149 @@ class CalendarControllerICSTest extends FunctionalTest
             }
             if ($errorLogFile !== false && is_file($errorLogFile)) {
                 unlink($errorLogFile);
+            }
+        }
+    }
+
+    /**
+     * When HTTP_HOST is absent the UID must fall back to 'calendar.local' instead of
+     * ending in a bare '@'. This regression was tracked as
+     * dynamic/silverstripe-calendar#185: concatenation binds tighter than ?? so the
+     * fallback literal was never reachable.
+     *
+     * The double has no getInstanceDate() method so the ID portion is just the integer ID
+     * with no instance-date suffix, making the assertion on the UID straightforward.
+     */
+    public function testICSUidFallsBackToCalendarLocalWhenHostUnset()
+    {
+        // Save and restore HTTP_HOST in a finally block
+        $hadHost = array_key_exists('HTTP_HOST', $_SERVER);
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+
+        $broken = new class {
+            public function hasMethod(string $method): bool
+            {
+                return false;
+            }
+
+            /**
+             * @param string $property
+             * @return mixed
+             */
+            public function __get(string $property)
+            {
+                switch ($property) {
+                    case 'ID':
+                        return 42;
+                    case 'Title':
+                        return 'X';
+                    case 'Content':
+                    case 'Location':
+                    case 'StartDate':
+                    case 'EndDate':
+                    case 'StartTime':
+                    case 'EndTime':
+                    case 'AllDay':
+                        return null;
+                    default:
+                        return null;
+                }
+            }
+
+            public function Categories()
+            {
+                return new ArrayList();
+            }
+
+            public function AbsoluteLink()
+            {
+                return '';
+            }
+        };
+
+        try {
+            // Remove HTTP_HOST to exercise the fallback
+            unset($_SERVER['HTTP_HOST']);
+
+            $generate = new \ReflectionMethod(CalendarController::class, 'generateICSContent');
+            $ics = $generate->invoke($this->controller, ArrayList::create([$broken]));
+
+            // The UID must contain the fallback host, not end in a bare '@'
+            $this->assertStringContainsString('UID:42@calendar.local', $ics);
+            $this->assertStringNotContainsString("UID:42@\r\n", $ics);
+        } finally {
+            if ($hadHost) {
+                $_SERVER['HTTP_HOST'] = $previousHost;
+            } else {
+                unset($_SERVER['HTTP_HOST']);
+            }
+        }
+    }
+
+    /**
+     * When HTTP_HOST is present the UID must use it verbatim - the happy path must
+     * not be affected by the #185 fix.
+     */
+    public function testICSUidUsesHttpHostWhenSet()
+    {
+        // Save and restore HTTP_HOST
+        $hadHost = array_key_exists('HTTP_HOST', $_SERVER);
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+
+        $broken = new class {
+            public function hasMethod(string $method): bool
+            {
+                return false;
+            }
+
+            /**
+             * @param string $property
+             * @return mixed
+             */
+            public function __get(string $property)
+            {
+                switch ($property) {
+                    case 'ID':
+                        return 42;
+                    case 'Title':
+                        return 'X';
+                    case 'Content':
+                    case 'Location':
+                    case 'StartDate':
+                    case 'EndDate':
+                    case 'StartTime':
+                    case 'EndTime':
+                    case 'AllDay':
+                        return null;
+                    default:
+                        return null;
+                }
+            }
+
+            public function Categories()
+            {
+                return new ArrayList();
+            }
+
+            public function AbsoluteLink()
+            {
+                return '';
+            }
+        };
+
+        try {
+            $_SERVER['HTTP_HOST'] = 'example.test';
+
+            $generate = new \ReflectionMethod(CalendarController::class, 'generateICSContent');
+            $ics = $generate->invoke($this->controller, ArrayList::create([$broken]));
+
+            $this->assertStringContainsString('UID:42@example.test', $ics);
+            $this->assertStringNotContainsString('UID:42@calendar.local', $ics);
+        } finally {
+            if ($hadHost) {
+                $_SERVER['HTTP_HOST'] = $previousHost;
+            } else {
+                unset($_SERVER['HTTP_HOST']);
             }
         }
     }

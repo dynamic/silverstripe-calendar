@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Model;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Page\EventPage;
+use SilverStripe\Control\Director;
 use SilverStripe\Core\Injector\Injectable;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\Model\ModelData;
@@ -297,12 +298,17 @@ class EventInstance extends ModelData
     /**
      * Get the absolute link
      *
+     * Built from this occurrence's own relative link, the same way SiteTree::AbsoluteLink()
+     * builds one for a page. Passing $this->Link($action) to the parent's AbsoluteLink() as
+     * $action appended an already complete path to the event's own path, so every occurrence
+     * url in the feed contained the event path twice (issue #189).
+     *
      * @param string|null $action
      * @return string
      */
     public function AbsoluteLink($action = null): string
     {
-        return $this->originalEvent->AbsoluteLink($this->Link($action));
+        return Director::absoluteURL($this->Link($action));
     }
 
     /**

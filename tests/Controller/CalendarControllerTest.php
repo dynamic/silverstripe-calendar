@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Controller\CalendarController;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Model\EventException;
+use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\DB;
@@ -497,6 +498,117 @@ class CalendarControllerTest extends FunctionalTest
             '2027-08-10T11:00:00',
             $timedSiblings[0]['end'],
             'A timed occurrence must serialise a composite end built from the derived EndTime'
+        );
+    }
+
+    /**
+     * A recurring occurrence's feed url is the parent event's absolute link plus the
+     * instance parameter. EventInstance::AbsoluteLink() used to hand its own fully built
+     * link to the parent's AbsoluteLink() as $action, which emitted the event's path twice
+     * ("/calendar/my-event/calendar/my-event?instance=..."). Assert the exact url rather
+     * than the substring the pre-existing assertions match on, which any doubled prefix
+     * satisfies (issue #189).
+     */
+    public function testRecurringOccurrenceUrlDoesNotDuplicateTheEventPath(): void
+    {
+        $recurring = EventPage::create([
+            'Title' => 'Friday Standup',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => '2027-10-01',
+            'StartTime' => '09:30:00',
+            'AllDay' => 0,
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2027-10-29',
+        ]);
+        $recurring->write();
+        $recurring->publishRecursive();
+
+        // A non-recurring row travels the same serializer line ('url' => AbsoluteLink())
+        // through a different class, so pin that it is untouched by the occurrence fix.
+        $single = $this->createFeedEvent('One Off Review', '2027-10-06', '13:00:00', 0);
+
+        $feed = $this->fetchFeed('2027-10-01', '2027-10-31');
+
+        $occurrences = array_values(array_filter(
+            $feed,
+            static fn(array $item): bool => str_contains((string) $item['url'], 'instance=2027-10-08')
+        ));
+        $this->assertCount(1, $occurrences, 'The occurrence must appear in the feed');
+
+        $url = (string) $occurrences[0]['url'];
+        $this->assertSame(
+            $recurring->AbsoluteLink() . '?instance=2027-10-08',
+            $url,
+            'The occurrence url must be the parent absolute link plus the instance parameter'
+        );
+        // Name the reported symptom in its own assertion, so a regression reads as a doubled
+        // path rather than as an opaque string mismatch.
+        $this->assertSame(
+            1,
+            substr_count($url, '/' . ltrim((string) $recurring->RelativeLink(), '/')),
+            'The event path must occur exactly once in the occurrence url'
+        );
+
+        $singleItems = array_values(array_filter(
+            $feed,
+            static fn(array $item): bool => (string) $item['id'] === (string) $single->ID
+        ));
+        $this->assertCount(1, $singleItems, 'The non-recurring event must appear in the feed');
+        $this->assertSame(
+            $single->AbsoluteLink(),
+            (string) $singleItems[0]['url'],
+            'A non-recurring event url is the page absolute link with no instance parameter'
+        );
+        $this->assertStringNotContainsString(
+            'instance=',
+            (string) $singleItems[0]['url'],
+            'Only occurrences of a recurring event carry an instance parameter'
+        );
+    }
+
+    /**
+     * The $action argument of the occurrence link survives the fix, and an underlying link
+     * that already carries a query string is extended with '&instance=' rather than a
+     * second '?'.
+     */
+    public function testOccurrenceLinkAppendsInstanceParameterToAPassedAction(): void
+    {
+        $recurring = EventPage::create([
+            'Title' => 'Monday Sync',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => '2027-11-01',
+            'AllDay' => 1,
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2027-11-29',
+        ]);
+        $recurring->write();
+        $recurring->publishRecursive();
+
+        $instance = EventInstance::create($recurring, Carbon::parse('2027-11-08'));
+
+        $this->assertSame(
+            $recurring->Link('ics') . '?instance=2027-11-08',
+            $instance->Link('ics'),
+            'An action is appended to the event path before the instance parameter'
+        );
+        $this->assertSame(
+            $recurring->AbsoluteLink('ics') . '?instance=2027-11-08',
+            $instance->AbsoluteLink('ics'),
+            'The absolute occurrence link keeps the action and adds the instance parameter once'
+        );
+
+        $queryLink = $instance->Link('print?format=1');
+        $this->assertStringContainsString(
+            '&instance=2027-11-08',
+            $queryLink,
+            'A link already carrying a query string gets &instance=, not a second ?'
+        );
+        $this->assertSame(
+            1,
+            substr_count($queryLink, '?'),
+            'The occurrence link must contain exactly one query separator'
         );
     }
 }

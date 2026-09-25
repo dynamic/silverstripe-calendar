@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Tests\Controller;
 
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Core\Extension;
+use SilverStripe\Dev\TestOnly;
 
 /**
  * Stands in for the extension silverstripe/subsites puts on SiteTree: it replaces a page's
@@ -16,10 +17,13 @@ use SilverStripe\Core\Extension;
  *
  * Named without a trailing "Test" so PHPUnit's testsuite (suffix "Test.php") does not try to
  * run it as a test case, and kept out of the test file so PSR-1's one-class-per-file rule holds.
+ * Implements TestOnly, the SilverStripe convention for a helper class under tests/, so it stays
+ * out of the module's normal class list. It is the only such class in this module's tests so
+ * far.
  *
  * @package Dynamic\Calendar\Tests\Controller
  */
-class AlternateAbsoluteLinkTestExtension extends Extension
+class AlternateAbsoluteLinkTestExtension extends Extension implements TestOnly
 {
     /**
      * @param string|null $action
@@ -27,7 +31,7 @@ class AlternateAbsoluteLinkTestExtension extends Extension
      */
     public function alternateAbsoluteLink($action = null)
     {
-        $owner = $this->owner;
+        $owner = $this->getOwner();
         if (!$owner instanceof EventPage) {
             return null;
         }

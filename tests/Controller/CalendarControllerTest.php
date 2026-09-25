@@ -542,13 +542,6 @@ class CalendarControllerTest extends FunctionalTest
             $url,
             'The occurrence url must be the parent absolute link plus the instance parameter'
         );
-        // Name the reported symptom in its own assertion, so a regression reads as a doubled
-        // path rather than as an opaque string mismatch.
-        $this->assertSame(
-            1,
-            substr_count($url, '/' . ltrim((string) $recurring->RelativeLink(), '/')),
-            'The event path must occur exactly once in the occurrence url'
-        );
 
         $singleItems = array_values(array_filter(
             $feed,
@@ -600,15 +593,116 @@ class CalendarControllerTest extends FunctionalTest
         );
 
         $queryLink = $instance->Link('print?format=1');
-        $this->assertStringContainsString(
-            '&instance=2027-11-08',
+        $this->assertSame(
+            $recurring->Link('print?format=1') . '&instance=2027-11-08',
             $queryLink,
             'A link already carrying a query string gets &instance=, not a second ?'
         );
+        $this->assertStringEndsWith(
+            '&instance=2027-11-08',
+            $queryLink,
+            'The instance parameter must be the only value added to the existing query string'
+        );
+
+        $queryAbsolute = $instance->AbsoluteLink('print?format=1');
+        $this->assertSame(
+            $recurring->AbsoluteLink('print?format=1') . '&instance=2027-11-08',
+            $queryAbsolute,
+            'The absolute occurrence link also extends an existing query string with &'
+        );
+        $this->assertStringEndsWith(
+            '&instance=2027-11-08',
+            $queryAbsolute,
+            'The absolute occurrence link must not gain a second query separator'
+        );
+    }
+
+    /**
+     * The reported symptom on its own: the occurrence url must never contain the event's own
+     * path twice, and the instance parameter must sit directly after the parent absolute link.
+     * Both assertions are positive and both fail on the pre-fix code, which emitted
+     * "http://host/calendar/my-event/calendar/my-event?instance=YYYY-MM-DD" (issue #189).
+     */
+    public function testOccurrenceUrlNeverRepeatsTheEventPath(): void
+    {
+        $recurring = EventPage::create([
+            'Title' => 'Saturday Market',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => '2027-12-04',
+            'AllDay' => 1,
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2027-12-31',
+        ]);
+        $recurring->write();
+        $recurring->publishRecursive();
+
+        $instance = EventInstance::create($recurring, Carbon::parse('2027-12-11'));
+        $url = $instance->AbsoluteLink();
+        $path = '/' . ltrim((string) $recurring->RelativeLink(), '/');
+
         $this->assertSame(
             1,
-            substr_count($queryLink, '?'),
-            'The occurrence link must contain exactly one query separator'
+            substr_count($url, $path),
+            'The event path must occur exactly once in the occurrence url'
         );
+        $this->assertSame(
+            strlen((string) $recurring->AbsoluteLink()),
+            strpos($url, '?instance='),
+            'The instance parameter must begin immediately after the parent absolute link'
+        );
+        $this->assertSame(
+            $recurring->AbsoluteLink() . '?instance=2027-12-11',
+            $url,
+            'The occurrence url must be the parent absolute link plus the instance parameter'
+        );
+    }
+
+    /**
+     * An EventPage can redirect its absolute link through alternateAbsoluteLink(), which
+     * SiteTree::AbsoluteLink() checks before building a URL (silverstripe/subsites uses it to
+     * emit the subsite's own host). The occurrence url must inherit it rather than resolve the
+     * host itself, or an occurrence's link would lose the host its parent event has.
+     */
+    public function testOccurrenceUrlInheritsAlternateAbsoluteLink(): void
+    {
+        // Registered before the page exists: a class-level extension is read when the object
+        // is constructed, so an extension added afterwards would not be on the page.
+        EventPage::add_extension(AlternateAbsoluteLinkTestExtension::class);
+
+        try {
+            $recurring = EventPage::create([
+                'Title' => 'Regional Fair',
+                'ParentID' => $this->calendar->ID,
+                'StartDate' => '2028-01-05',
+                'AllDay' => 1,
+                'Recursion' => 'WEEKLY',
+                'Interval' => 1,
+                'RecursionEndDate' => '2028-02-02',
+            ]);
+            $recurring->write();
+            $recurring->publishRecursive();
+
+            $instance = EventInstance::create($recurring, Carbon::parse('2028-01-12'));
+            $relative = ltrim((string) $recurring->RelativeLink(), '/');
+
+            $this->assertSame(
+                'https://alternate.example.com/' . $relative . '?instance=2028-01-12',
+                $instance->AbsoluteLink(),
+                'The occurrence url must be built on the alternate absolute link'
+            );
+            $this->assertSame(
+                1,
+                substr_count($instance->AbsoluteLink(), $relative),
+                'Inheriting the hook must not reintroduce the doubled path'
+            );
+            $this->assertSame(
+                'https://alternate.example.com/' . $relative . '/ics?instance=2028-01-12',
+                $instance->AbsoluteLink('ics'),
+                'An action must still resolve through the alternate absolute link'
+            );
+        } finally {
+            EventPage::remove_extension(AlternateAbsoluteLinkTestExtension::class);
+        }
     }
 }

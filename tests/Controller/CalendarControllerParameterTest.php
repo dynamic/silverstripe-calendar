@@ -353,7 +353,7 @@ class CalendarControllerParameterTest extends SapphireTest
 
         // ?categories[][]=1 ...: two nested arrays around one real scalar ID.
         $sanitised = $controller->ical(new HTTPRequest('GET', '/ical', [
-            'categories' => [[[ 'nested' => 1 ]], (string)$wanted->ID, [[424242]]],
+            'categories' => [[['nested' => 1]], (string)$wanted->ID, [[424242]]],
         ]))->getBody();
         $scalarOnly = $controller->ical(new HTTPRequest('GET', '/ical', [
             'categories' => [(string)$wanted->ID],
@@ -577,7 +577,7 @@ class CalendarControllerParameterTest extends SapphireTest
         $method->setAccessible(true);
 
         $sanitised = $method->invoke($controller, new HTTPRequest('GET', '/', [
-            'categories' => [[[ 'nested' => 1 ]], (string)$selected->ID, [[424242]]],
+            'categories' => [[['nested' => 1]], (string)$selected->ID, [[424242]]],
         ]));
         $scalarOnly = $method->invoke($controller, new HTTPRequest('GET', '/', [
             'categories' => [(string)$selected->ID],

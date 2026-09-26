@@ -607,14 +607,31 @@ class CalendarControllerParameterTest extends SapphireTest
      * Issue #204 guard against over-reach: an absent (or falsy) categories param
      * must stay "no category filter", exactly as before - the two endpoints must
      * not pick up events()' default-category fallback.
+     *
+     * The calendar is given a DefaultCategories entry that NO event uses, which
+     * is what makes this a test rather than a tautology: were the fallback ever
+     * added here, the no-param feed would shrink to that category's (empty) set
+     * and these assertions would fail. On a fixture with no default categories
+     * the fallback would be invisible to it.
      */
     public function testIcalWithoutCategoriesParamStaysUnfiltered()
     {
-        $controller = CalendarController::create($this->objFromFixture(Calendar::class, 'calendar1'));
+        $calendar = $this->objFromFixture(Calendar::class, 'calendar1');
+        $controller = CalendarController::create($calendar);
 
         $category = $this->createCategory('Uncategorised Feed Category');
         $this->createFeedEvent('Categorised Feed Event', $category);
         $this->createFeedEvent('Plain Feed Event');
+
+        $defaultOnly = $this->createCategory('Default Category No Event Uses');
+        $calendar->DefaultCategories()->add($defaultOnly);
+        $calendar->write();
+        $calendar->publishRecursive();
+
+        $this->assertTrue(
+            $calendar->DefaultCategories()->exists(),
+            'the fixture must actually attach a default category, or this test cannot see the fallback'
+        );
 
         $body = $controller->ical(new HTTPRequest('GET', '/ical'))->getBody();
         $titles = $this->titlesFrom($body);
@@ -622,15 +639,66 @@ class CalendarControllerParameterTest extends SapphireTest
         $this->assertContains('Categorised Feed Event', $titles);
         $this->assertContains('Plain Feed Event', $titles);
 
-        // A falsy submission behaves the same way: an empty array, and an array
-        // of empty strings (which resolves to "present but matched nothing", the
-        // same unfiltered state these endpoints already had for no param).
-        foreach ([[], ['', '']] as $falsy) {
-            $falsyBody = $controller->ical(new HTTPRequest('GET', '/ical', ['categories' => $falsy]))->getBody();
+        // Two more submissions that must behave the same way: an empty array, and
+        // an array of empty strings. Both are "present but matched nothing" (the
+        // second is a non-empty, therefore truthy, array - it reaches the resolver
+        // and is dropped by the non-empty-value filter), which these endpoints
+        // already treated as unfiltered, exactly like no param at all.
+        foreach ([[], ['', '']] as $emptyValued) {
+            $emptyBody = $controller->ical(new HTTPRequest('GET', '/ical', ['categories' => $emptyValued]))->getBody();
             $this->assertSame(
                 $titles,
-                $this->titlesFrom($falsyBody),
-                'a falsy categories submission (' . json_encode($falsy) . ') must stay unfiltered'
+                $this->titlesFrom($emptyBody),
+                'an empty-valued categories submission (' . json_encode($emptyValued) . ') must stay unfiltered'
+            );
+        }
+    }
+
+    /**
+     * Issue #204, same guard on the other endpoint: renderCalendar() must not
+     * pick up events()' default-category fallback either. Asserted with a
+     * default category attached that no event uses, so a fallback appearing here
+     * would empty the rendered list rather than pass unnoticed.
+     */
+    public function testRenderCalendarWithoutCategoriesParamStaysUnfiltered()
+    {
+        $calendar = $this->objFromFixture(Calendar::class, 'calendar1');
+        $controller = CalendarController::create($calendar);
+
+        $category = $this->createCategory('Render Uncategorised Category');
+        $this->createFeedEvent('Render Categorised No Param Event', $category);
+        $this->createFeedEvent('Render Plain No Param Event');
+
+        $defaultOnly = $this->createCategory('Render Default Category No Event Uses');
+        $calendar->DefaultCategories()->add($defaultOnly);
+        $calendar->write();
+        $calendar->publishRecursive();
+
+        $this->assertTrue(
+            $calendar->DefaultCategories()->exists(),
+            'the fixture must actually attach a default category, or this test cannot see the fallback'
+        );
+
+        $reflection = new \ReflectionClass($controller);
+        $method = $reflection->getMethod('renderCalendar');
+        $method->setAccessible(true);
+
+        foreach ([null, [], ['', '']] as $submission) {
+            $request = $submission === null
+                ? new HTTPRequest('GET', '/')
+                : new HTTPRequest('GET', '/', ['categories' => $submission]);
+            $titles = $this->titlesFrom($method->invoke($controller, $request)['Events']);
+
+            $this->assertContains(
+                'Render Categorised No Param Event',
+                $titles,
+                'renderCalendar() must stay unfiltered for ' . json_encode($submission) .
+                    ' even though the calendar has a default category'
+            );
+            $this->assertContains(
+                'Render Plain No Param Event',
+                $titles,
+                'the uncategorised event must survive too for ' . json_encode($submission)
             );
         }
     }

@@ -907,8 +907,12 @@ class CalendarController extends \PageController
      * MAX_SUBMITTED_CATEGORIES or filtered for non-scalar values - `?categories[][]=1`
      * reached byIDs() unsanitised there, and a 10,000-value list built an
      * unbounded IN() list on /ical. They resolve through resolveCategoryIDs()
-     * now, the single place that already applies both guards, so there is one
-     * definition of the guard rather than four.
+     * now, the single place that already applies both guards, so the four reads
+     * this class made of the raw param are down to one. `CalendarFilterForm::
+     * getFilterSummary()` is a reader outside this class that still has its own
+     * uncapped read of the same param (advisory dynamic/silverstripe-calendar#243);
+     * this helper cannot serve it as it stands, because that method is static and
+     * this one is not.
      *
      * The three-state mapping keeps the behaviour these paths had before:
      *  - an absent param stays null, which getEventsFeed() reads as "no category

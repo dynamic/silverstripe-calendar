@@ -476,6 +476,134 @@ class CalendarControllerParameterTest extends SapphireTest
     }
 
     /**
+     * Titles of the categories getAvailableCategoriesForTemplate() flagged
+     * IsSelected, keyed by the category ID it reported.
+     *
+     * @return array<int, string>
+     */
+    private function selectedCategories($available): array
+    {
+        $selected = [];
+        foreach ($available as $category) {
+            if ($category->IsSelected) {
+                $selected[(int)$category->ID] = $category->Title;
+            }
+        }
+        return $selected;
+    }
+
+    /**
+     * Titles of every category the template exposes, whether selected or not.
+     *
+     * @return string[]
+     */
+    private function availableCategoryTitles($available): array
+    {
+        $titles = [];
+        foreach ($available as $category) {
+            $titles[] = $category->Title;
+        }
+        return $titles;
+    }
+
+    /**
+     * Issue #224 / #204: getAvailableCategoriesForTemplate() also read the raw
+     * `categories` param, so its IsSelected flag was driven by an unbounded,
+     * unsanitised submission. Asserted directly on the method (not only through
+     * renderCalendar() calling it) for the over-cap case: the category at index 0
+     * stays selected and a real category one past MAX_SUBMITTED_CATEGORIES does
+     * not - if this fails, the filter UI is still reading the raw submission.
+     */
+    public function testAvailableCategoriesSelectionAppliesSubmissionCap()
+    {
+        $controller = CalendarController::create($this->objFromFixture(Calendar::class, 'calendar1'));
+
+        $kept = $this->createCategory('Template Kept Category');
+        $this->createFeedEvent('Template Kept Category Event', $kept);
+        $truncated = $this->createCategory('Template Truncated Category');
+        $this->createFeedEvent('Template Truncated Category Event', $truncated);
+
+        $submitted = $this->buildOverCapSubmission($kept, $truncated);
+
+        $reflection = new \ReflectionClass($controller);
+        $method = $reflection->getMethod('getAvailableCategoriesForTemplate');
+        $method->setAccessible(true);
+        $available = $method->invoke($controller, new HTTPRequest('GET', '/', ['categories' => $submitted]));
+
+        // Both must be exposed at all, or the "not selected" assertion below
+        // would pass vacuously.
+        $this->assertContains(
+            $kept->Title,
+            $this->availableCategoryTitles($available),
+            'the index-0 category must appear in AvailableCategories'
+        );
+        $this->assertContains(
+            $truncated->Title,
+            $this->availableCategoryTitles($available),
+            'the past-the-cap category must appear in AvailableCategories - it is used by a real '
+                . 'event on this calendar, so a missing entry here means the fixture stopped proving anything'
+        );
+
+        $selected = $this->selectedCategories($available);
+        $this->assertContains(
+            $kept->Title,
+            $selected,
+            'the category at submission index 0 must stay selected through the cap'
+        );
+        $this->assertNotContains(
+            $truncated->Title,
+            $selected,
+            'a real category one past the cap must not be marked IsSelected - if this fails, '
+                . 'getAvailableCategoriesForTemplate() is still selecting from the raw submission'
+        );
+    }
+
+    /**
+     * Issue #224 / #204: non-scalar values in the submission must not influence
+     * IsSelected on this call site either. Mixed WITHIN the cap, so it is the
+     * is_scalar filter being tested and not the cap.
+     */
+    public function testAvailableCategoriesSelectionIgnoresNonScalarValues()
+    {
+        $controller = CalendarController::create($this->objFromFixture(Calendar::class, 'calendar1'));
+
+        $selected = $this->createCategory('Template Selected Category');
+        $this->createFeedEvent('Template Selected Category Event', $selected);
+        $unselected = $this->createCategory('Template Unselected Category');
+        $this->createFeedEvent('Template Unselected Category Event', $unselected);
+
+        $reflection = new \ReflectionClass($controller);
+        $method = $reflection->getMethod('getAvailableCategoriesForTemplate');
+        $method->setAccessible(true);
+
+        $sanitised = $method->invoke($controller, new HTTPRequest('GET', '/', [
+            'categories' => [[[ 'nested' => 1 ]], (string)$selected->ID, [[424242]]],
+        ]));
+        $scalarOnly = $method->invoke($controller, new HTTPRequest('GET', '/', [
+            'categories' => [(string)$selected->ID],
+        ]));
+
+        $this->assertSame(
+            [(int)$selected->ID => $selected->Title],
+            $this->selectedCategories($sanitised),
+            'exactly the one scalar ID in the submission may be selected - the nested arrays must '
+                . 'neither select a category of their own nor switch the filter off'
+        );
+        $this->assertSame(
+            $this->selectedCategories($scalarOnly),
+            $this->selectedCategories($sanitised),
+            'a submission with non-scalar values mixed in must select the same categories as the '
+                . 'identical scalar-only submission'
+        );
+        $this->assertContains(
+            $unselected->Title,
+            $this->availableCategoryTitles($sanitised),
+            'the unselected category must be exposed unselected rather than dropped, or the '
+                . 'equality assertion above could pass on an empty list'
+        );
+    }
+
+    /**
      * Issue #204 guard against over-reach: an absent (or falsy) categories param
      * must stay "no category filter", exactly as before - the two endpoints must
      * not pick up events()' default-category fallback.
@@ -494,10 +622,15 @@ class CalendarControllerParameterTest extends SapphireTest
         $this->assertContains('Categorised Feed Event', $titles);
         $this->assertContains('Plain Feed Event', $titles);
 
-        // A falsy submission (empty array, empty strings) behaves the same way.
-        $falsyTitles = $this->titlesFrom(
-            $controller->ical(new HTTPRequest('GET', '/ical', ['categories' => []]))->getBody()
-        );
-        $this->assertSame($titles, $falsyTitles, 'an empty submission must stay unfiltered');
+        // A falsy submission behaves the same way: an empty array, and an array
+        // of empty strings (which resolves to "present but matched nothing", the
+        // same unfiltered state these endpoints already had for no param).
+        foreach ([[], ['', '']] as $falsy) {
+            $this->assertSame(
+                $titles,
+                $this->titlesFrom($controller->ical(new HTTPRequest('GET', '/ical', ['categories' => $falsy]))->getBody()),
+                'a falsy categories submission (' . json_encode($falsy) . ') must stay unfiltered'
+            );
+        }
     }
 }

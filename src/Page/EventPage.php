@@ -572,7 +572,7 @@ class EventPage extends \Page
                         "EventPage: Failed to parse StartTime '{$this->StartTime}' as DBTime in onBeforeWrite."
                     );
                 }
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $this->logWithFallback(
                     "EventPage: Exception parsing StartTime '{$this->StartTime}' in onBeforeWrite: " .
                     $e->getMessage()

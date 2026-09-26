@@ -581,4 +581,93 @@ class CalendarControllerICSTest extends FunctionalTest
             }
         }
     }
+
+    /**
+     * An event that raises an \Error - not an \Exception - while being transformed must be
+     * skipped like any other bad event, so the rest of the feed still renders.
+     *
+     * This is the dynamic/silverstripe-calendar#184 regression: the call site advertised
+     * 'Log error and continue with other events' but caught only \Exception, so the Error
+     * escaped generateICSContent() and aborted the whole feed. The double below hands
+     * escapeICSValue() a non-string Title, so the TypeError comes from PHP's own parameter
+     * check rather than from a hand-thrown exception - which is precisely the failure the
+     * narrow catch was blind to.
+     */
+    public function testUntransformableEventRaisingErrorIsSkippedAndFeedSurvives()
+    {
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())
+            ->method('error')
+            ->with($this->logicalAnd(
+                $this->stringContains('Error transforming event 123 to ICS'),
+                $this->stringContains('must be of type string')
+            ));
+        $logger->expects($this->never())->method('warning');
+
+        $errorRaiser = new class {
+            public function hasMethod(string $method): bool
+            {
+                return false;
+            }
+
+            /**
+             * @param string $property
+             * @return mixed
+             */
+            public function __get(string $property)
+            {
+                switch ($property) {
+                    case 'ID':
+                        return 123;
+                    case 'Title':
+                        // Not a string: escapeICSValue(string $value) raises a TypeError.
+                        return new \stdClass();
+                    default:
+                        return null;
+                }
+            }
+        };
+
+        // transformEventToICS() reads $_SERVER['HTTP_HOST'] directly when building the UID,
+        // and this test drives the generator by reflection rather than through a request.
+        $hadHost = array_key_exists('HTTP_HOST', $_SERVER);
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+        $_SERVER['HTTP_HOST'] = 'localhost';
+
+        $errorLogFile = tempnam(sys_get_temp_dir(), 'ics-error-log-');
+        $previousErrorLog = (string) ini_get('error_log');
+        ini_set('error_log', $errorLogFile !== false ? $errorLogFile : '/dev/null');
+
+        Injector::nest();
+
+        try {
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+
+            $generate = new \ReflectionMethod(CalendarController::class, 'generateICSContent');
+            // The healthy event trails the raiser: the loop must carry on to it.
+            $ics = $generate->invoke($this->controller, ArrayList::create([$errorRaiser, $this->testEvent]));
+
+            // The feed renders, without the failing event and with the one behind it.
+            $this->assertStringContainsString('BEGIN:VCALENDAR', $ics);
+            $this->assertStringNotContainsString('Broken', $ics);
+            $this->assertStringContainsString('SUMMARY:Test ICS Event', $ics);
+
+            // The injected logger must be the only sink.
+            $logged = is_file($errorLogFile) ? (string) file_get_contents($errorLogFile) : '';
+            $this->assertStringNotContainsString('logging failed', $logged);
+            $this->assertStringNotContainsString('logger service unavailable', $logged);
+            $this->assertStringNotContainsString('Error transforming event 123 to ICS', $logged);
+        } finally {
+            Injector::unnest();
+            ini_set('error_log', $previousErrorLog);
+            if ($hadHost) {
+                $_SERVER['HTTP_HOST'] = $previousHost;
+            } else {
+                unset($_SERVER['HTTP_HOST']);
+            }
+            if ($errorLogFile !== false && is_file($errorLogFile)) {
+                unlink($errorLogFile);
+            }
+        }
+    }
 }

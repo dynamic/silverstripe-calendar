@@ -5,11 +5,14 @@ namespace Dynamic\Calendar\Tests\Page;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Model\EventInstance;
+use Psr\Log\LoggerInterface;
 use SilverStripe\Core\Config\Config;
+use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\FieldList;
 use SilverStripe\ORM\DataObject;
+use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Versioned\Versioned;
 use ReflectionClass;
@@ -602,5 +605,91 @@ class EventPageTest extends SapphireTest
         $stored = EventPage::get()->byID($event->ID);
         $this->assertSame('09:00:00', $stored->StartTime);
         $this->assertSame('10:00:00', $stored->EndTime, 'The 1-hour default must still apply to timed events');
+    }
+
+    /**
+     * An \Error raised inside the StartTime derivation must be logged and survived, not
+     * allowed to abort the save: dynamic/silverstripe-calendar#184. The catch advertised a
+     * log-and-continue guard but caught only \Exception, so an \Error escaped onBeforeWrite().
+     *
+     * The double is reached the same way #165's trait proof reaches one: SilverStripe's
+     * Injector performs no type check on registerService(), so DBTime::create_field() inside
+     * the derivation resolves to a service whose getValue() hands back a non-string, and it
+     * is new \DateTime() that fails - a TypeError, which is an \Error and so invisible to the
+     * narrow catch. Proving the guard fires is the point of the test, not the shape of the
+     * misconfiguration.
+     */
+    public function testStartTimeDerivationErrorIsLoggedAndSaveSurvives(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Erroring derivation';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2025-09-04';
+        $event->AllDay = 0;
+        $event->write();
+
+        // StartTime is set in memory only: writing it would derive EndTime on the healthy
+        // path and the derivation under test is guarded by EndTime being empty.
+        $event->StartTime = '09:00:00';
+        $event->EndDate = null;
+
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())
+            ->method('warning')
+            ->with($this->logicalAnd(
+                $this->stringContains("parsing StartTime '09:00:00'"),
+                $this->stringContains('must be of type string')
+            ));
+        $logger->expects($this->never())->method('error');
+
+        // Pin error_log() so a fallback write is visible rather than lost to the SAPI.
+        $errorLogFile = tempnam(sys_get_temp_dir(), 'eventpage-error-log-');
+        $previousErrorLog = (string)ini_get('error_log');
+        ini_set('error_log', $errorLogFile !== false ? $errorLogFile : '/dev/null');
+
+        Injector::nest();
+
+        try {
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+            Injector::inst()->registerService(
+                new class extends DBTime {
+                    /**
+                     * @return mixed
+                     */
+                    public function getValue(): mixed
+                    {
+                        return ['not', 'a', 'time'];
+                    }
+                },
+                DBTime::class
+            );
+
+            $event->onBeforeWrite();
+
+            $this->assertNull($event->EndTime, 'A derivation that failed must not invent an EndTime');
+            // The guard logs and continues: the derivation below the try block still runs.
+            $this->assertSame('2025-09-04', $event->EndDate, 'Derivation after the guarded block must still run');
+        } finally {
+            Injector::unnest();
+            ini_set('error_log', $previousErrorLog);
+        }
+
+        // The injected logger is the only sink; the fallback stayed clean.
+        $logged = is_file($errorLogFile) ? (string)file_get_contents($errorLogFile) : '';
+        if ($errorLogFile !== false && is_file($errorLogFile)) {
+            unlink($errorLogFile);
+        }
+        $this->assertStringNotContainsString('logging failed', $logged);
+        $this->assertStringNotContainsString('logger service unavailable', $logged);
+
+        // And the record itself is still writable afterwards, once the healthy DBTime service
+        // is back: the 1-hour default derives normally.
+        $event->write();
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertSame('09:00:00', $stored->StartTime);
+        $this->assertSame('10:00:00', $stored->EndTime);
     }
 }

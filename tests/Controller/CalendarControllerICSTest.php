@@ -648,8 +648,12 @@ class CalendarControllerICSTest extends FunctionalTest
             $ics = $generate->invoke($this->controller, ArrayList::create([$errorRaiser, $this->testEvent]));
 
             // The feed renders, without the failing event and with the one behind it.
+            // 'UID:123@' is what the raiser itself would have emitted, so its absence is a
+            // statement about the skipped event; the VEVENT count pins that exactly the one
+            // healthy event made it through.
             $this->assertStringContainsString('BEGIN:VCALENDAR', $ics);
-            $this->assertStringNotContainsString('Broken', $ics);
+            $this->assertStringNotContainsString('UID:123@', $ics);
+            $this->assertSame(1, substr_count($ics, 'BEGIN:VEVENT'));
             $this->assertStringContainsString('SUMMARY:Test ICS Event', $ics);
 
             // The injected logger must be the only sink.

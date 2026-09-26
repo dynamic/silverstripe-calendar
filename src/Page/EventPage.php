@@ -530,11 +530,17 @@ class EventPage extends \Page
      * default is correctable by the editor, unlike the user-visible output the ICS transform
      * loses - and the derivation is not aborted: EndTime is simply left unset.
      *
-     * Both reports are defensive rather than the primary guard, and neither is exercised by
-     * the suite: for a bad StartTime the throw comes from DBTime::setValue() while
-     * DataObject::validate() builds this record's field objects, before onBeforeWrite() is
-     * entered at all. dynamic/silverstripe-calendar#183 holds the traces and the decision on
-     * what a bad StartTime should do instead.
+     * Both reports are defensive rather than the primary guard. The unparseable-StartTime
+     * report above is not exercised by the suite: for a bad StartTime the throw comes from
+     * DBTime::setValue() while DataObject::validate() builds this record's field objects,
+     * before onBeforeWrite() is entered at all, and
+     * dynamic/silverstripe-calendar#183 holds the traces and the decision on what a bad
+     * StartTime should do instead. The catch-block report is exercised by
+     * EventPageTest::testStartTimeDerivationErrorIsLoggedAndSaveSurvives, which reaches it
+     * through a misconfigured DBTime service. That catch takes \Throwable deliberately
+     * (dynamic/silverstripe-calendar#184): a non-string time reaching new \DateTime() is an
+     * \Error, and the guard exists to log it and leave EndTime unset rather than abort the
+     * save.
      *
      * @return void
      */
@@ -572,7 +578,7 @@ class EventPage extends \Page
                         "EventPage: Failed to parse StartTime '{$this->StartTime}' as DBTime in onBeforeWrite."
                     );
                 }
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $this->logWithFallback(
                     "EventPage: Exception parsing StartTime '{$this->StartTime}' in onBeforeWrite: " .
                     $e->getMessage()

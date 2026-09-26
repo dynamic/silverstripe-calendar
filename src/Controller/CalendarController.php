@@ -807,7 +807,7 @@ class CalendarController extends \PageController
             $ics[] = 'END:VEVENT';
 
             return $ics;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Log error and continue with other events
             $this->logWithFallback(
                 "Error transforming event {$event->ID} to ICS: " . $e->getMessage(),

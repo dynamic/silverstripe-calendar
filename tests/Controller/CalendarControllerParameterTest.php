@@ -626,9 +626,10 @@ class CalendarControllerParameterTest extends SapphireTest
         // of empty strings (which resolves to "present but matched nothing", the
         // same unfiltered state these endpoints already had for no param).
         foreach ([[], ['', '']] as $falsy) {
+            $falsyBody = $controller->ical(new HTTPRequest('GET', '/ical', ['categories' => $falsy]))->getBody();
             $this->assertSame(
                 $titles,
-                $this->titlesFrom($controller->ical(new HTTPRequest('GET', '/ical', ['categories' => $falsy]))->getBody()),
+                $this->titlesFrom($falsyBody),
                 'a falsy categories submission (' . json_encode($falsy) . ') must stay unfiltered'
             );
         }

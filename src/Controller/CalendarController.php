@@ -10,6 +10,7 @@ use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Form\CalendarFilterForm;
 use Dynamic\Calendar\Traits\LoggerFallback;
 use SilverStripe\Control\HTTPRequest;
+use SilverStripe\ORM\DataList;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Model\List\PaginatedList;
 use SilverStripe\Model\ArrayData;
@@ -340,16 +341,9 @@ class CalendarController extends \PageController
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
-        // Get category filter
-        $categoryIDs = $request->getVar('categories');
-        $categories = null;
-
-        if ($categoryIDs) {
-            if (!is_array($categoryIDs)) {
-                $categoryIDs = [$categoryIDs];
-            }
-            $categories = Category::get()->byIDs($categoryIDs);
-        }
+        // Get category filter - bounded and sanitised the same way events() does
+        // it (issue #204).
+        $categories = $this->resolveCategoryList($request);
 
         // Use the Calendar page's getEventsFeed method with category filtering
         $events = $this->calendar->getEventsFeed(
@@ -573,10 +567,11 @@ class CalendarController extends \PageController
      */
     protected function getAvailableCategoriesForTemplate(HTTPRequest $request): ArrayList
     {
-        $selectedCategoryIDs = $request->getVar('categories') ?: [];
-        if (!is_array($selectedCategoryIDs)) {
-            $selectedCategoryIDs = [$selectedCategoryIDs];
-        }
+        // Which categories the visitor selected - same bounded, sanitised
+        // resolution the feed query uses (issue #204). Only ever used for the
+        // IsSelected flag below, but the raw param could be an unbounded list of
+        // nested arrays here, which the scalar-only resolution drops.
+        $selectedCategoryIDs = $this->resolveCategoryIDs($request) ?? [];
 
         // Get categories that are actually used by events in this calendar
         // Use efficient join query to avoid N+1 problem
@@ -661,16 +656,9 @@ class CalendarController extends \PageController
         $fromDate = $this->getFromDate($request);
         $toDate = $this->getToDate($request);
 
-        // Get category filter - reuse existing logic
-        $categoryIDs = $request->getVar('categories');
-        $categories = null;
-
-        if ($categoryIDs) {
-            if (!is_array($categoryIDs)) {
-                $categoryIDs = [$categoryIDs];
-            }
-            $categories = Category::get()->byIDs($categoryIDs);
-        }
+        // Get category filter - bounded and sanitised the same way events() does
+        // it (issue #204).
+        $categories = $this->resolveCategoryList($request);
 
         // Use the existing Calendar page's getEventsFeed method
         $events = $this->calendar->getEventsFeed(
@@ -909,6 +897,41 @@ class CalendarController extends \PageController
         $matched = Category::get()->byIDs($submitted)->column('ID');
 
         return array_map('intval', $matched);
+    }
+
+    /**
+     * The `categories` request param as the category list getEventsFeed() wants.
+     *
+     * Issue #204: renderCalendar(), ical() and getAvailableCategoriesForTemplate()
+     * each re-read the raw param independently, so none of them was bounded by
+     * MAX_SUBMITTED_CATEGORIES or filtered for non-scalar values - `?categories[][]=1`
+     * reached byIDs() unsanitised there, and a 10,000-value list built an
+     * unbounded IN() list on /ical. They resolve through resolveCategoryIDs()
+     * now, the single place that already applies both guards, so there is one
+     * definition of the guard rather than four.
+     *
+     * The three-state mapping keeps the behaviour these paths had before:
+     *  - an absent param stays null, which getEventsFeed() reads as "no category
+     *    filter". The default-category fallback belongs to events() only, so it
+     *    is deliberately not applied here;
+     *  - a param that matched nothing also becomes null. getEventsFeed() tests
+     *    `$categories && $categories->exists()`, so an empty byIDs() DataList and
+     *    null are indistinguishable to it - and byIDs([]) would throw
+     *    InvalidArgumentException in this framework version rather than returning
+     *    an empty list;
+     *  - a present, matched param becomes the filtered DataList.
+     *
+     * @return DataList<Category>|null
+     */
+    private function resolveCategoryList(HTTPRequest $request): ?DataList
+    {
+        $resolved = $this->resolveCategoryIDs($request);
+
+        if ($resolved === null || $resolved === []) {
+            return null;
+        }
+
+        return Category::get()->byIDs($resolved);
     }
 
     /**

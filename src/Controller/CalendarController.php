@@ -568,9 +568,11 @@ class CalendarController extends \PageController
     protected function getAvailableCategoriesForTemplate(HTTPRequest $request): ArrayList
     {
         // Which categories the visitor selected - same bounded, sanitised
-        // resolution the feed query uses (issue #204). Only ever used for the
-        // IsSelected flag below, but the raw param could be an unbounded list of
-        // nested arrays here, which the scalar-only resolution drops.
+        // resolution the feed query uses (issue #204). The cap is the part that
+        // changed behaviour here: the flag has always been an in_array() over
+        // this list, so a nested-array value never matched an int and the
+        // is_scalar filter only keeps the list this method reports in step with
+        // the list the feed actually filtered on.
         $selectedCategoryIDs = $this->resolveCategoryIDs($request) ?? [];
 
         // Get categories that are actually used by events in this calendar
@@ -911,9 +913,10 @@ class CalendarController extends \PageController
      * this class made of the raw param are down to one. Two readers of the same
      * param live outside this class and still have their own uncapped read:
      * `CalendarFilterForm::getFilterSummary()` (queries it) and the
-     * `ListboxField::setValue()` in `CalendarFilterForm` (echoes it back into the
-     * form, no query). None can route through this helper as it stands, because
-     * those are static/no-instance contexts and this method is not - tracked as
+     * `ListboxField::setValue()` call in that form's own field-building code
+     * (echoes it back into the form, no query). Neither can route through this
+     * helper as it stands, because the guard it delegates to,
+     * `resolveCategoryIDs()`, is private to `CalendarController` - tracked as
      * advisory dynamic/silverstripe-calendar#243.
      *
      * The three-state mapping keeps the behaviour these paths had before:

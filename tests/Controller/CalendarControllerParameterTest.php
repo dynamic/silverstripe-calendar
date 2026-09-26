@@ -560,8 +560,19 @@ class CalendarControllerParameterTest extends SapphireTest
 
     /**
      * Issue #224 / #204: non-scalar values in the submission must not influence
-     * IsSelected on this call site either. Mixed WITHIN the cap, so it is the
-     * is_scalar filter being tested and not the cap.
+     * IsSelected on this call site.
+     *
+     * This one is a CONSISTENCY LOCK, not a regression reproduction: it also
+     * passes on the pre-fix code, because the old loose in_array() never matched
+     * an int category ID against a nested array either. The real behaviour change
+     * on this call site is the cap, which
+     * testAvailableCategoriesSelectionAppliesSubmissionCap() does fail pre-fix.
+     * What this test pins is the property added here - IsSelected is now derived
+     * from the same sanitised, capped list the feed filtered on, so the filter UI
+     * and the feed can no longer disagree - which the pre-fix code could not
+     * guarantee in general even though this particular input happened to agree.
+     * The non-scalar values are inside the cap, so the cap is not what is being
+     * measured here.
      */
     public function testAvailableCategoriesSelectionIgnoresNonScalarValues()
     {

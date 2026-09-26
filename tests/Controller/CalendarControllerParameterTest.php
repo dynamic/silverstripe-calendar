@@ -395,7 +395,7 @@ class CalendarControllerParameterTest extends SapphireTest
      * Issue #204: renderCalendar() (the HTML calendar / index action) reads the
      * same param and was likewise uncapped and unsanitised.
      */
-    public function testRenderCalendarAppliesCategoryCapAndSanitisation()
+    public function testRenderCalendarAppliesCategoryCap()
     {
         $controller = CalendarController::create($this->objFromFixture(Calendar::class, 'calendar1'));
 
@@ -404,11 +404,11 @@ class CalendarControllerParameterTest extends SapphireTest
         $truncated = $this->createCategory('Render Truncated Category');
         $this->createFeedEvent('Render Truncated Category Event', $truncated);
 
-        // Over the cap, plus a nested array appended past it: the cap must
-        // truncate before the query, and the non-scalar value must be dropped
-        // rather than reaching byIDs().
+        // One real category past the cap. Nothing non-scalar is mixed in here on
+        // purpose: a value appended after the cap would be dropped by the cap
+        // alone, which would leave the is_scalar filter untested. That case has
+        // its own test below.
         $submitted = $this->buildOverCapSubmission($kept, $truncated);
-        $submitted[] = [['nested' => 1]];
 
         $reflection = new \ReflectionClass($controller);
         $method = $reflection->getMethod('renderCalendar');
@@ -428,6 +428,50 @@ class CalendarControllerParameterTest extends SapphireTest
             $titles,
             'a real category one past the cap must not reach the rendered calendar - if this '
                 . 'fails, renderCalendar() is still querying the raw submission'
+        );
+    }
+
+    /**
+     * Issue #204: the is_scalar filter has to bite on renderCalendar() too. The
+     * non-scalar values are deliberately kept WITHIN the cap here - a value
+     * appended past MAX_SUBMITTED_CATEGORIES would be dropped by the cap alone,
+     * which would leave this guard untested (the mistake the separate cap test
+     * above would have made).
+     */
+    public function testRenderCalendarDropsNonScalarCategoryValues()
+    {
+        $controller = CalendarController::create($this->objFromFixture(Calendar::class, 'calendar1'));
+
+        $selected = $this->createCategory('Render Selected Category');
+        $this->createFeedEvent('Render Selected Category Event', $selected);
+        $this->createFeedEvent('Render Unselected Category Event', $this->createCategory('Render Unselected Category'));
+
+        $reflection = new \ReflectionClass($controller);
+        $method = $reflection->getMethod('renderCalendar');
+        $method->setAccessible(true);
+
+        $sanitised = $method->invoke($controller, new HTTPRequest('GET', '/', [
+            'categories' => [[['nested' => 1]], (string)$selected->ID, [[424242]]],
+        ]));
+        $scalarOnly = $method->invoke($controller, new HTTPRequest('GET', '/', [
+            'categories' => [(string)$selected->ID],
+        ]));
+
+        $this->assertContains(
+            'Render Selected Category Event',
+            $this->titlesFrom($sanitised['Events']),
+            'the one scalar ID in the submission must still filter the rendered calendar'
+        );
+        $this->assertNotContains(
+            'Render Unselected Category Event',
+            $this->titlesFrom($sanitised['Events']),
+            'the nested arrays must not turn the category filter off'
+        );
+        $this->assertSame(
+            $this->titlesFrom($scalarOnly['Events']),
+            $this->titlesFrom($sanitised['Events']),
+            'a submission with non-scalar values mixed in must render the same events as the '
+                . 'identical scalar-only submission'
         );
     }
 

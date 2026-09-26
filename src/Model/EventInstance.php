@@ -285,24 +285,42 @@ class EventInstance extends ModelData
      */
     public function Link($action = null): string
     {
-        $link = $this->originalEvent->Link($action);
-
-        // Add instance date parameter to distinguish this occurrence
-        $separator = strpos($link, '?') !== false ? '&' : '?';
-        $link .= $separator . 'instance=' . $this->instanceDate->format('Y-m-d');
-
-        return $link;
+        return $this->appendInstanceParam($this->originalEvent->Link($action));
     }
 
     /**
      * Get the absolute link
+     *
+     * The instance parameter is appended to the parent's own absolute link, not passed to it
+     * as $action: handing over an already complete link made the parent append that path to
+     * the event's own path, so every occurrence url in the feed contained the event path
+     * twice (issue #189).
+     *
+     * Going through EventPage::AbsoluteLink() rather than calling Director::absoluteURL()
+     * here keeps the hooks a page's absolute link goes through, including
+     * alternateAbsoluteLink() (used by subsites to put the subsite's own host in the link).
      *
      * @param string|null $action
      * @return string
      */
     public function AbsoluteLink($action = null): string
     {
-        return $this->originalEvent->AbsoluteLink($this->Link($action));
+        return $this->appendInstanceParam((string) $this->originalEvent->AbsoluteLink($action));
+    }
+
+    /**
+     * Append this occurrence's instance parameter to a link, choosing the query separator the
+     * link itself still needs.
+     *
+     * @param string $link
+     * @return string
+     */
+    private function appendInstanceParam(string $link): string
+    {
+        // Add instance date parameter to distinguish this occurrence
+        $separator = strpos($link, '?') !== false ? '&' : '?';
+
+        return $link . $separator . 'instance=' . $this->instanceDate->format('Y-m-d');
     }
 
     /**

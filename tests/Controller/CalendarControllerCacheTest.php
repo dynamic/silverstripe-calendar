@@ -2089,40 +2089,46 @@ class CalendarControllerCacheTest extends FunctionalTest
         // testOccurrenceUrlInheritsAlternateAbsoluteLink(), met here by rebuilding the
         // page and controller instead of registering before setUp()'s write.
         Calendar::add_extension(LegacyUtf8TitleTestExtension::class);
-
-        $this->calendar = Calendar::create([
-            'Title' => 'Encode Failure Calendar',
-            'URLSegment' => 'encode-failure-calendar',
-        ]);
-        $this->calendar->write();
-        $this->calendar->publishRecursive();
-        $this->controller = CalendarController::create($this->calendar);
-
-        $event = EventPage::create([
-            'Title' => 'Legacy Import Event',
-            'ParentID' => $this->calendar->ID,
-            'StartDate' => Carbon::now()->format('Y-m-d'),
-            'Recursion' => 'NONE',
-        ]);
-        $event->write();
-        $event->publishRecursive();
-
-        // Armed only now: the corruption is a feed-path fault, so writing bytes MySQL
-        // would reject is neither needed nor possible - and arming before the write
-        // would corrupt the very row being saved.
-        LegacyUtf8TitleTestExtension::$corruptTitleAfter = 'Legacy Import Event';
-
-        $cache = $this->createMock(CacheInterface::class);
-        $cache->method('get')->willReturn(null);
-        $cache->expects($this->never())->method('set');
-
-        $logger = $this->createMock(LoggerInterface::class);
-        $logger->expects($this->once())
-            ->method('warning')
-            ->with($this->stringContains('json_encode failed'));
-
         Injector::nest();
+
         try {
+            $this->calendar = Calendar::create([
+                'Title' => 'Encode Failure Calendar',
+                'URLSegment' => 'encode-failure-calendar',
+            ]);
+            $this->calendar->write();
+            $this->calendar->publishRecursive();
+            $this->controller = CalendarController::create($this->calendar);
+
+            $event = EventPage::create([
+                'Title' => 'Legacy Import Event',
+                'ParentID' => $this->calendar->ID,
+                'StartDate' => Carbon::now()->format('Y-m-d'),
+                'Recursion' => 'NONE',
+            ]);
+            $event->write();
+            $event->publishRecursive();
+
+            // Armed only now: the corruption is a feed-path fault, so writing bytes
+            // MySQL would reject is neither needed nor possible - and arming before the
+            // write would corrupt the very row being saved.
+            LegacyUtf8TitleTestExtension::$corruptTitleAfter = 'Legacy Import Event';
+
+            $cache = $this->createMock(CacheInterface::class);
+            $cache->method('get')->willReturn(null);
+            $cache->expects($this->never())->method('set');
+
+            // Captured rather than matched inline: the message has to carry the id of
+            // the row to fix, because one unencodable row fails the whole feed on every
+            // request (nothing is cached) and 'Malformed UTF-8 characters' alone does
+            // not say which row to repair.
+            $logged = [];
+            $logger = $this->createMock(LoggerInterface::class);
+            $logger->method('warning')
+                ->willReturnCallback(function (string $message) use (&$logged): void {
+                    $logged[] = $message;
+                });
+
             Injector::inst()->registerService(
                 $this->makeCacheFactoryReturning($cache),
                 CacheFactory::class
@@ -2137,7 +2143,18 @@ class CalendarControllerCacheTest extends FunctionalTest
                 'An unencodable feed must come back as valid empty JSON, not an empty string'
             );
             $this->assertEquals('MISS', $snapshot['cache']);
+
+            $this->assertCount(1, $logged, 'An unencodable feed must be logged exactly once');
+            $this->assertStringContainsString('json_encode failed', $logged[0]);
+            $this->assertStringContainsString(
+                'unencodable event id(s): ' . $event->ID,
+                $logged[0],
+                'The warning must name the row that json_encode refused, not just the error'
+            );
         } finally {
+            // Everything from add_extension() is inside the try, so a throwing write
+            // still unarms the helper, drops the extension and unwinds Injector rather
+            // than leaking the corruption into the next test in the process.
             LegacyUtf8TitleTestExtension::$corruptTitleAfter = '';
             Calendar::remove_extension(LegacyUtf8TitleTestExtension::class);
             Injector::unnest();

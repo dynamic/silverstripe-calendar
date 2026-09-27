@@ -165,12 +165,13 @@ class CalendarController extends \PageController
             $cache = $this->getEventsCache();
             $cachedJson = $cache->get($cacheKey);
 
-            // is_string() rather than `!== null`: a cache backend that reports a
-            // failed read as `false` (PSR-16 allows get() to return false on
-            // failure, and a `false` written by pre-#226 code can still be sitting
-            // in a live pool for the remainder of its TTL) must count as a miss.
-            // Anything else served here reaches setBody() with a non-string and
-            // reads as an empty feed behind a HIT header.
+            // is_string() rather than `!== null`: a non-string read must count as a
+            // miss. PSR-16 has get() return the stored value or the caller's default,
+            // so a `false` here is either a value the pre-#226 code above stored (it
+            // handed json_encode()'s false straight to set()) or a non-compliant
+            // backend reporting a failed read that way - and either one served here
+            // reaches setBody() with a non-string and reads as an empty feed behind a
+            // HIT header, for the remainder of the entry's TTL.
             if (is_string($cachedJson)) {
                 $response = $this->getResponse();
                 $response->addHeader('Content-Type', 'application/json');

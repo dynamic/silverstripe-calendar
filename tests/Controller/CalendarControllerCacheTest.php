@@ -2000,10 +2000,12 @@ class CalendarControllerCacheTest extends FunctionalTest
      * Test 21 (#226): a cache read that returns `false` is a miss, not an
      * empty-body HIT.
      *
-     * PSR-16 lets get() return false for a failed read, and pre-#226 code could
-     * itself have written `false` into a live pool (a failed json_encode was
-     * cached as-is). The read guard only excluded null, so both cases came back
-     * as `X-Calendar-Cache: HIT` over an empty body - a feed that reads fine to
+     * The reported chain starts further up, but this covers the state it leaves
+     * behind: PSR-16 has get() return the stored value or the caller's default, so a
+     * `false` read is either a value pre-#226 code stored (it handed a failed
+     * json_encode() straight to set()) or a non-compliant backend reporting a failed
+     * read that way. Either one used to come back as
+     * `X-Calendar-Cache: HIT` over an empty body - a feed that reads fine to
      * monitoring and is blank for every visitor until the TTL expires.
      *
      * The rebuild must also be a real write: asserting the value handed to set()

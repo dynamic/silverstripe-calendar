@@ -18,6 +18,32 @@ class CalendarControllerParameterTest extends SapphireTest
 {
     protected static $fixture_file = '../fixtures.yml';
 
+    /**
+     * Wall clock used by the issue #207 tests: an evening time, so a bound that
+     * inherits the current time of day lands well after midnight and the bug is
+     * visible instead of accidentally passing at 00:0x.
+     */
+    private const EVENING_NOW = '2026-10-05 21:45:00';
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
+
+    /**
+     * Call a protected date accessor on the controller for a request.
+     */
+    private function resolveDate(string $method, HTTPRequest $request): ?Carbon
+    {
+        $reflection = new \ReflectionClass(CalendarController::class);
+        $callable = $reflection->getMethod($method);
+        $callable->setAccessible(true);
+        $controller = CalendarController::create($this->objFromFixture(Calendar::class, 'calendar1'));
+
+        return $callable->invoke($controller, $request);
+    }
+
     public function testGetFromDateAcceptsFromParameter()
     {
         $calendar = $this->objFromFixture(Calendar::class, 'calendar1');
@@ -218,6 +244,129 @@ class CalendarControllerParameterTest extends SapphireTest
 
         $this->assertNull($fromMethod->invoke($controller, $request));
         $this->assertNull($toMethod->invoke($controller, $request));
+    }
+
+    /**
+     * Issue #207: the lower bound must be midnight, not the request's time of day.
+     *
+     * Carbon::createFromFormat('Y-m-d', ...) fills unspecified time fields from
+     * the wall clock, so '?start=2026-10-01' resolved to 2026-10-01 21:45:00 here
+     * and the recursion window silently excluded the window's first day.
+     */
+    public function testGetFromDatePinsToStartOfDayRegardlessOfWallClock()
+    {
+        Carbon::setTestNow(self::EVENING_NOW);
+
+        $result = $this->resolveDate('getFromDate', new HTTPRequest('GET', '/', ['start' => '2026-10-01']));
+
+        $this->assertNotNull($result);
+        $this->assertEquals(
+            '2026-10-01 00:00:00',
+            $result->format('Y-m-d H:i:s'),
+            'the lower bound must be midnight of the requested day, not the current time of day'
+        );
+    }
+
+    /**
+     * Issue #207: the upper bound must cover the whole requested day. It is
+     * compared inclusively (CarbonRecursion's between(..., true)), so end of day
+     * is what makes the last day of the window selectable in full.
+     */
+    public function testGetToDatePinsToEndOfDayRegardlessOfWallClock()
+    {
+        Carbon::setTestNow(self::EVENING_NOW);
+
+        $result = $this->resolveDate('getToDate', new HTTPRequest('GET', '/', ['end' => '2026-10-06']));
+
+        $this->assertNotNull($result);
+        $this->assertEquals(
+            '2026-10-06 23:59:59',
+            $result->format('Y-m-d H:i:s'),
+            'the upper bound must be the end of the requested day, not the current time of day'
+        );
+    }
+
+    /**
+     * Issue #207: the legacy parameter names take the same parsing path, so they
+     * must gain the same time-of-day pinning - otherwise a FullCalendar request
+     * and a scraper request would resolve different windows from the same days.
+     */
+    public function testLegacyFromAndToParamsAlsoPinTimeOfDay()
+    {
+        Carbon::setTestNow(self::EVENING_NOW);
+
+        $from = $this->resolveDate('getFromDate', new HTTPRequest('GET', '/', ['from' => '2026-10-01']));
+        $to = $this->resolveDate('getToDate', new HTTPRequest('GET', '/', ['to' => '2026-10-06']));
+
+        $this->assertNotNull($from);
+        $this->assertNotNull($to);
+        $this->assertEquals('2026-10-01 00:00:00', $from->format('Y-m-d H:i:s'));
+        $this->assertEquals('2026-10-06 23:59:59', $to->format('Y-m-d H:i:s'));
+    }
+
+    /**
+     * Issue #207 end to end: a DAILY event starting on the window's first day,
+     * queried in the evening, must still yield that first occurrence. This is
+     * the reviewer's probe from the issue - pre-fix it returned 5 occurrences
+     * starting 2026-10-02 and dropped the 2026-10-01 one.
+     */
+    public function testRecurringWindowIncludesFirstDayOccurrenceWhenQueriedInEvening()
+    {
+        Carbon::setTestNow(self::EVENING_NOW);
+
+        $calendar = $this->objFromFixture(Calendar::class, 'calendar1');
+        $event = EventPage::create([
+            'Title' => 'Every Day Event',
+            'ParentID' => $calendar->ID,
+            'StartDate' => '2026-10-01',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2026-10-10',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $fromDate = $this->resolveDate('getFromDate', new HTTPRequest('GET', '/', ['start' => '2026-10-01']));
+        $toDate = $this->resolveDate('getToDate', new HTTPRequest('GET', '/', ['end' => '2026-10-06']));
+        $this->assertNotNull($fromDate);
+        $this->assertNotNull($toDate);
+
+        $dates = [];
+        foreach ($event->getOccurrences($fromDate, $toDate) as $occurrence) {
+            $dates[] = (string)$occurrence->StartDate;
+        }
+
+        $this->assertEquals(
+            ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06'],
+            $dates,
+            'the whole six-day window must be returned - a list starting 2026-10-02 means the '
+                . 'lower bound still carries the request time of day'
+        );
+    }
+
+    /**
+     * Issue #207: the empty, absent, malformed and array-typed cases must keep
+     * resolving to "no bound" after the parsing change.
+     *
+     * This one is a CONSISTENCY LOCK, not a regression reproduction: it also
+     * passes on the pre-fix code, because none of these inputs reached
+     * createFromFormat() before or after the change.
+     */
+    public function testUnusableDateParamsStillResolveToNoBound()
+    {
+        Carbon::setTestNow(self::EVENING_NOW);
+
+        $requests = [
+            'no params at all' => new HTTPRequest('GET', '/'),
+            'empty start' => new HTTPRequest('GET', '/', ['start' => '']),
+            'impossible date' => new HTTPRequest('GET', '/', ['start' => '2026-13-45', 'end' => '2026-13-45']),
+            'array typed' => new HTTPRequest('GET', '/', ['start' => ['x'], 'end' => ['x']]),
+        ];
+
+        foreach ($requests as $label => $request) {
+            $this->assertNull($this->resolveDate('getFromDate', $request), 'lower bound for ' . $label);
+            $this->assertNull($this->resolveDate('getToDate', $request), 'upper bound for ' . $label);
+        }
     }
 
     /**

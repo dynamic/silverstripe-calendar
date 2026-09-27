@@ -475,7 +475,13 @@ class CalendarController extends \PageController
         // TypeError, and since the cache key now resolves dates through this
         // accessor it fires on the cache path too, ahead of the cache read.
         if (is_string($from) && Carbon::hasFormat($from, 'Y-m-d')) {
-            return Carbon::createFromFormat('Y-m-d', $from);
+            // The leading '!' resets every unset time field to midnight. Without
+            // it Carbon fills them from the current wall clock, so a window that
+            // starts on the first day of a month was compared against
+            // 'first-of-month <current time>' and the recursion's inclusive
+            // between() (CarbonRecursion) dropped that day's occurrences
+            // (issue #207).
+            return Carbon::createFromFormat('!Y-m-d', $from);
         }
 
         // Return null when no date filter is applied - this will show all events
@@ -501,7 +507,13 @@ class CalendarController extends \PageController
 
         // See getFromDate() - array-typed params must not reach hasFormat().
         if (is_string($to) && Carbon::hasFormat($to, 'Y-m-d')) {
-            return Carbon::createFromFormat('Y-m-d', $to);
+            // See getFromDate() for the '!' modifier. The upper bound is also
+            // pushed to the end of the day, because the recursion compares it
+            // inclusively ($date->between($rangeStart, $rangeEnd, true)) against
+            // occurrences at midnight, and the SQL path formats it back to
+            // Y-m-d - so end of day includes the last day in full without
+            // changing which rows that clause matches (issue #207).
+            return Carbon::createFromFormat('!Y-m-d', $to)->endOfDay();
         }
 
         // Return null when no date filter is applied
@@ -985,6 +997,14 @@ class CalendarController extends \PageController
         // as Ymd (no separator) rather than Y-m-d, since $filterPart below
         // joins its own parts with '-' and a dash-free date avoids adding a
         // second source of the same collision risk to this key.
+        //
+        // Ymd is a complete description of the window only because the
+        // accessors below pin time of day (issue #207). Before that, a bound
+        // carried the request's H:i:s while the key discarded it, so two
+        // requests for the same days minted one entry and got two different
+        // bodies from it - whichever variant was computed first won for the
+        // whole json_cache_ttl. If a bound ever starts varying by time again,
+        // this key has to grow that component rather than keep truncating it.
         $fromDate = $this->getFromDate($request);
         $start = $fromDate ? $fromDate->format('Ymd') : 'no-start';
         $toDate = $this->getToDate($request);

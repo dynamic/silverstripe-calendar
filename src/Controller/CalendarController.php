@@ -165,7 +165,13 @@ class CalendarController extends \PageController
             $cache = $this->getEventsCache();
             $cachedJson = $cache->get($cacheKey);
 
-            if ($cachedJson !== null) {
+            // is_string() rather than `!== null`: a cache backend that reports a
+            // failed read as `false` (PSR-16 allows get() to return false on
+            // failure, and a `false` written by pre-#226 code can still be sitting
+            // in a live pool for the remainder of its TTL) must count as a miss.
+            // Anything else served here reaches setBody() with a non-string and
+            // reads as an empty feed behind a HIT header.
+            if (is_string($cachedJson)) {
                 $response = $this->getResponse();
                 $response->addHeader('Content-Type', 'application/json');
                 $response->addHeader('X-Calendar-Cache', 'HIT');
@@ -301,7 +307,19 @@ class CalendarController extends \PageController
             // described by any key that omits `search`, so writing it would
             // leak those results to other filter combinations, and mint one
             // entry per term.
-            if ($cacheKey !== null) {
+            //
+            // json_encode() returns false rather than throwing when a value holds
+            // malformed UTF-8 - reachable from a Title, Summary or Category title
+            // carrying an invalid byte sequence (issue #226). Storing that `false`
+            // succeeds as a cache write, so logCacheWriteFailure() never fires and
+            // every later request for the key is served the empty body behind a
+            // `X-Calendar-Cache: HIT` header for the whole TTL. Log the encode
+            // failure, answer with a valid empty feed, and skip the write so the
+            // pool never holds a non-string as if it were a serialised feed.
+            if ($json === false) {
+                $this->logWithFallback('CalendarController: json_encode failed - ' . json_last_error_msg());
+                $json = '[]';
+            } elseif ($cacheKey !== null) {
                 if (!$cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'))) {
                     $this->logCacheWriteFailure($cacheKey);
                 }

@@ -1995,4 +1995,150 @@ class CalendarControllerCacheTest extends FunctionalTest
 
         return $request;
     }
+
+    /**
+     * Test 21 (#226): a cache read that returns `false` is a miss, not an
+     * empty-body HIT.
+     *
+     * PSR-16 lets get() return false for a failed read, and pre-#226 code could
+     * itself have written `false` into a live pool (a failed json_encode was
+     * cached as-is). The read guard only excluded null, so both cases came back
+     * as `X-Calendar-Cache: HIT` over an empty body - a feed that reads fine to
+     * monitoring and is blank for every visitor until the TTL expires.
+     *
+     * The rebuild must also be a real write: asserting the value handed to set()
+     * pins the other half of the fix, that the pool is repaired with a string
+     * rather than left poisoned for the next request.
+     */
+    public function testCachedFalseIsTreatedAsMissAndRebuilt(): void
+    {
+        $event = EventPage::create([
+            'Title' => 'False Cache Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $written = [];
+        $cache = $this->createMock(CacheInterface::class);
+        $cache->method('get')->willReturn(false);
+        $cache->method('set')->willReturnCallback(
+            function (string $key, $value) use (&$written): bool {
+                $written[] = $value;
+                return true;
+            }
+        );
+
+        Injector::nest();
+        try {
+            Injector::inst()->registerService(
+                $this->makeCacheFactoryReturning($cache),
+                CacheFactory::class
+            );
+
+            $snapshot = $this->snapshotResponse($this->createAjaxRequest());
+
+            $this->assertEquals(
+                'MISS',
+                $snapshot['cache'],
+                'A false read is a failed read, so it must not be reported as a HIT'
+            );
+            $this->assertIsArray(
+                json_decode($snapshot['body'], true),
+                'A false read must not be passed through as the response body'
+            );
+            $this->assertContains(
+                'False Cache Event',
+                $this->titlesFrom($snapshot['body']),
+                'The feed must be rebuilt from the database on a false read'
+            );
+
+            $this->assertCount(1, $written, 'The rebuilt feed must be written back');
+            $this->assertIsString($written[0], 'Only an encoded feed may be stored');
+            $this->assertContains(
+                'False Cache Event',
+                $this->titlesFrom((string) $written[0]),
+                'The value written back must be the rebuilt feed, not a sentinel'
+            );
+        } finally {
+            Injector::unnest();
+        }
+    }
+
+    /**
+     * Test 22 (#226): a failed json_encode() is neither cached nor silent.
+     *
+     * The reported chain is: malformed UTF-8 in a Title makes json_encode()
+     * return false; false is a legal cache value, so set() succeeds and
+     * logCacheWriteFailure() never fires; the next request reads it back and
+     * serves an empty body behind a HIT header. This test reproduces the first
+     * link with LegacyUtf8TitleTestExtension and asserts the three things the
+     * fix owes: nothing poisoned reaches the cache, the failure is logged, and
+     * the response is valid (empty) JSON rather than an empty string.
+     */
+    public function testJsonEncodeFailureIsNotCachedAndLogs(): void
+    {
+        // Registered before the calendar the request runs on is built: a class-level
+        // extension is read the first time the object extends, and setUp() has already
+        // written and published $this->calendar by now - so its extension set is
+        // resolved. Same constraint CalendarControllerTest documents at
+        // testOccurrenceUrlInheritsAlternateAbsoluteLink(), met here by rebuilding the
+        // page and controller instead of registering before setUp()'s write.
+        Calendar::add_extension(LegacyUtf8TitleTestExtension::class);
+
+        $this->calendar = Calendar::create([
+            'Title' => 'Encode Failure Calendar',
+            'URLSegment' => 'encode-failure-calendar',
+        ]);
+        $this->calendar->write();
+        $this->calendar->publishRecursive();
+        $this->controller = CalendarController::create($this->calendar);
+
+        $event = EventPage::create([
+            'Title' => 'Legacy Import Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        // Armed only now: the corruption is a feed-path fault, so writing bytes MySQL
+        // would reject is neither needed nor possible - and arming before the write
+        // would corrupt the very row being saved.
+        LegacyUtf8TitleTestExtension::$corruptTitleAfter = 'Legacy Import Event';
+
+        $cache = $this->createMock(CacheInterface::class);
+        $cache->method('get')->willReturn(null);
+        $cache->expects($this->never())->method('set');
+
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())
+            ->method('warning')
+            ->with($this->stringContains('json_encode failed'));
+
+        Injector::nest();
+        try {
+            Injector::inst()->registerService(
+                $this->makeCacheFactoryReturning($cache),
+                CacheFactory::class
+            );
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+
+            $snapshot = $this->snapshotResponse($this->createAjaxRequest());
+
+            $this->assertSame(
+                '[]',
+                $snapshot['body'],
+                'An unencodable feed must come back as valid empty JSON, not an empty string'
+            );
+            $this->assertEquals('MISS', $snapshot['cache']);
+        } finally {
+            LegacyUtf8TitleTestExtension::$corruptTitleAfter = '';
+            Calendar::remove_extension(LegacyUtf8TitleTestExtension::class);
+            Injector::unnest();
+        }
+    }
 }

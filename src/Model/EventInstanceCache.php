@@ -3,6 +3,7 @@
 namespace Dynamic\Calendar\Model;
 
 use Dynamic\Calendar\Page\EventPage;
+use Dynamic\Calendar\Traits\LoggerFallback;
 use SilverStripe\Core\Cache\CacheFactory;
 use SilverStripe\Core\Injector\Injector;
 use Psr\SimpleCache\CacheInterface;
@@ -15,6 +16,8 @@ use Psr\SimpleCache\CacheInterface;
  */
 class EventInstanceCache
 {
+    use LoggerFallback;
+
     /**
      * Memory cache for the current request
      * @var array
@@ -32,6 +35,15 @@ class EventInstanceCache
      * @var int
      */
     private static int $default_ttl = 3600;
+
+    /**
+     * Whether a cache-write failure has already been reported this PHP process.
+     *
+     * Volume bound, not a suppression policy: see logCacheWriteFailure().
+     *
+     * @var bool
+     */
+    private static bool $write_failure_logged = false;
 
     /**
      * Get cached event instances
@@ -74,7 +86,10 @@ class EventInstanceCache
 
         // Store in both memory and persistent cache
         self::$memory_cache[$cacheKey] = $instances;
-        self::getCache()->set($cacheKey, $instances, $ttl);
+        $written = self::getCache()->set($cacheKey, $instances, $ttl);
+        if (!$written) {
+            self::logCacheWriteFailure($cacheKey);
+        }
     }
 
     /**
@@ -101,6 +116,7 @@ class EventInstanceCache
     public static function clearAllCache(): void
     {
         self::$memory_cache = [];
+        self::$write_failure_logged = false;
         self::getCache()->clear();
     }
 
@@ -134,6 +150,55 @@ class EventInstanceCache
         }
 
         return self::$cache_instance;
+    }
+
+    /**
+     * What it does: emits one warning naming this class and the cache key, so that a
+     * false-returning set() is not mistaken for ordinary cache misses (issue #160;
+     * the wording mirrors CalendarController::logCacheWriteFailure(), which fixed the
+     * same invisibility for the events JSON cache).
+     *
+     * The bound: $write_failure_logged suppresses every later emission in the same
+     * PHP process, so only the first failure names its key - the defect is the shared
+     * backend, not any one key, and an unbounded call would cost one synchronous
+     * logger call (or, when the logger itself throws, one inline error_log() write)
+     * per recurring event for a single dead backend. The scope is per process, not
+     * per request; PHP-FPM statics die at request end, which is why the distinction
+     * is invisible on this module's own caller set and why a long-lived caller of the
+     * public getEventsFeed() - a queued job, a dev/task - gets one warning for its
+     * whole run.
+     *
+     * How it resets: clearAllCache() is the only in-band reset, and it is not a
+     * targeted re-arm - it also wipes every cached instance. clearEventCache(), the
+     * method event saves actually call, never re-arms the flag; it also does not
+     * invalidate anything as written, because the key patterns it matches are ones
+     * generateCacheKey() never produces. What invalidates a stale entry is the
+     * LastEdited/recursion hash inside the key, which points the next read at a new
+     * key. Whether a targeted re-arm hook should exist at all is a module-wide
+     * suppression policy decision, not this call site's.
+     *
+     * The guard: the logger lookup and the write to it both go through
+     * LoggerFallback, so a missing or throwing logger cannot escalate a cache-write
+     * failure into a fatal error. That guarantee covers the logger path only - a
+     * set() that throws rather than returning false is still unguarded here, and is
+     * tracked separately. The throwaway instance exists only because
+     * logWithFallback() is a protected non-static method.
+     *
+     * @param string $cacheKey
+     * @return void
+     */
+    private static function logCacheWriteFailure(string $cacheKey): void
+    {
+        if (self::$write_failure_logged) {
+            return;
+        }
+        // Flag before emitting, not after: if the emit path ever throws, the next
+        // failure in the same process must not repeat it.
+        self::$write_failure_logged = true;
+
+        (new self())->logWithFallback(
+            'EventInstanceCache: failed to write event instances cache entry - ' . $cacheKey
+        );
     }
 
     /**

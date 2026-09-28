@@ -590,4 +590,55 @@ class EventInstanceCacheTest extends SapphireTest
             Injector::unnest();
         }
     }
+
+    /**
+     * Test 7: clearEventCache() does not re-arm the volume bound.
+     *
+     * clearAllCache() is the only reset. A per-event invalidation must not quietly
+     * become the second re-arm the source docblock says does not exist, so the
+     * warning stays at one per process across it.
+     *
+     * @return void
+     */
+    public function testClearEventCacheDoesNotReArmTheBound()
+    {
+        $brokenCache = $this->createStub(CacheInterface::class);
+        $brokenCache->method('get')->willReturn(null);
+        $brokenCache->method('set')->willReturn(false);
+
+        // Same reason as test 4: the fixture writes resolve and memoise the real
+        // backend, which would answer underneath the double.
+        $this->resetInstanceCacheState();
+
+        $warnings = [];
+        $logger = $this->recordingLogger($warnings);
+
+        Injector::nest();
+        try {
+            Injector::inst()->registerService(
+                $this->makeCacheFactoryReturning($brokenCache),
+                CacheFactory::class
+            );
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+
+            EventInstanceCache::setCachedInstances($this->event, '2026-04-01', '2026-04-30', []);
+            $this->assertCount(
+                1,
+                $warnings,
+                'A failed write must be reported once before the invalidation is exercised'
+            );
+
+            EventInstanceCache::clearEventCache($this->event);
+
+            EventInstanceCache::setCachedInstances($this->event, '2026-04-01', '2026-04-30', []);
+
+            $this->assertCount(
+                1,
+                $warnings,
+                'clearEventCache() must not re-arm the guard - clearAllCache() is the only reset'
+            );
+        } finally {
+            Injector::unnest();
+        }
+    }
 }

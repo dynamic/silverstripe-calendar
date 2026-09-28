@@ -133,17 +133,14 @@ class EventInstanceCacheTest extends SapphireTest
         $reflection->getProperty('cache_instance')->setValue(null, null);
         $reflection->getProperty('memory_cache')->setValue(null, []);
 
-        // Guarded, but not silently: $write_failure_logged is introduced by this fix,
-        // so the pre-fix implementation this suite is also run against, to prove the
-        // tests discriminate, has no such property - an unguarded reset would throw in
-        // setUp() there and turn the attributable behavioural failures below into a
-        // structural error in every test in the file. Counts are deliberately not
-        // stated here: they rot the next time a test is added, and this comment had
-        // already outlived its own. That openness is a real cost, so the property is
-        // pinned explicitly by testWriteFailureGuardPropertyStillExists() below:
-        // renaming it fails at a named site instead of quietly turning this reset
-        // into a no-op and surfacing later as order-dependent flakiness in another
-        // test.
+        // Guarded, but not silently: the pre-fix implementation this suite is also
+        // run against, to prove the tests discriminate, has no $write_failure_logged
+        // property, so an unguarded reset would throw in setUp() there and turn the
+        // attributable behavioural failures below into a structural error in every
+        // test in the file. That openness is a real cost, so the property is pinned
+        // explicitly by testWriteFailureGuardPropertyStillExists() below: renaming it
+        // fails at a named site instead of quietly turning this reset into a no-op
+        // and surfacing later as order-dependent flakiness in another test.
         if ($reflection->hasProperty('write_failure_logged')) {
             $reflection->getProperty('write_failure_logged')->setValue(null, false);
         }
@@ -410,8 +407,8 @@ class EventInstanceCacheTest extends SapphireTest
      *
      * The bound is a per-process static flag, not a per-request one - it only looks
      * per-request because PHP-FPM statics die at request end. Without it, these three
-     * distinct events would emit three separate warnings, which is the volume finding
-     * that stopped the previous attempt on this issue at review.
+     * distinct events would emit three separate warnings, which is the volume the
+     * bound exists to prevent.
      *
      * @return void
      */

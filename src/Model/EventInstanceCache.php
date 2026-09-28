@@ -169,10 +169,13 @@ class EventInstanceCache
      * whole run.
      *
      * How it resets: clearAllCache() is the only in-band reset, and it is not a
-     * targeted re-arm - it also wipes every cached instance. The production
-     * invalidation path, clearEventCache(), does not re-arm at all. Whether a
-     * targeted re-arm hook belongs there is a module-wide suppression policy
-     * decision, not this call site's.
+     * targeted re-arm - it also wipes every cached instance. clearEventCache(), the
+     * method event saves actually call, never re-arms the flag; it also does not
+     * invalidate anything as written, because the key patterns it matches are ones
+     * generateCacheKey() never produces. What invalidates a stale entry is the
+     * LastEdited/recursion hash inside the key, which points the next read at a new
+     * key. Whether a targeted re-arm hook should exist at all is a module-wide
+     * suppression policy decision, not this call site's.
      *
      * The guard: the logger lookup and the write to it both go through
      * LoggerFallback, so a missing or throwing logger cannot escalate a cache-write

@@ -165,7 +165,14 @@ class CalendarController extends \PageController
             $cache = $this->getEventsCache();
             $cachedJson = $cache->get($cacheKey);
 
-            if ($cachedJson !== null) {
+            // is_string() rather than `!== null`: a non-string read must count as a
+            // miss. PSR-16 has get() return the stored value or the caller's default,
+            // so a `false` here is either a value the pre-#226 code above stored (it
+            // handed json_encode()'s false straight to set()) or a non-compliant
+            // backend reporting a failed read that way - and either one served here
+            // reaches setBody() with a non-string and reads as an empty feed behind a
+            // HIT header, for the remainder of the entry's TTL.
+            if (is_string($cachedJson)) {
                 $response = $this->getResponse();
                 $response->addHeader('Content-Type', 'application/json');
                 $response->addHeader('X-Calendar-Cache', 'HIT');
@@ -301,7 +308,22 @@ class CalendarController extends \PageController
             // described by any key that omits `search`, so writing it would
             // leak those results to other filter combinations, and mint one
             // entry per term.
-            if ($cacheKey !== null) {
+            //
+            // json_encode() returns false rather than throwing when a value holds
+            // malformed UTF-8 - reachable from a Title, Summary or Category title
+            // carrying an invalid byte sequence (issue #226). Storing that `false`
+            // succeeds as a cache write, so logCacheWriteFailure() never fires and
+            // every later request for the key is served the empty body behind a
+            // `X-Calendar-Cache: HIT` header for the whole TTL. Log the encode
+            // failure, answer with a valid empty feed, and skip the write so the
+            // pool never holds a non-string as if it were a serialised feed.
+            if ($json === false) {
+                $this->logWithFallback(
+                    'CalendarController: json_encode failed - ' . json_last_error_msg()
+                        . $this->describeUnencodableEvents($eventsData)
+                );
+                $json = '[]';
+            } elseif ($cacheKey !== null) {
                 if (!$cache->set($cacheKey, $json, $this->config()->get('json_cache_ttl'))) {
                     $this->logCacheWriteFailure($cacheKey);
                 }
@@ -1115,5 +1137,40 @@ class CalendarController extends \PageController
     {
         $message = 'CalendarController: failed to write events cache entry - ' . $cacheKey;
         $this->logWithFallback($message);
+    }
+
+    /**
+     * Name the events json_encode() refused, so one log line points at a row to fix.
+     *
+     * json_encode() fails for the whole array but reports no position, so on its own
+     * 'Malformed UTF-8 characters' leaves the operator to find the row by hand - and
+     * while such a row exists every request re-queries and re-fails, so the message is
+     * repeated rather than cached (issue #226 review, PR #247 finding 1: the empty-feed
+     * fallback was kept deliberately over JSON_INVALID_UTF8_SUBSTITUTE, which would
+     * silently rewrite a corrupt Title in visitors' browsers; the per-event id is what
+     * makes the deliberate choice actionable).
+     *
+     * Encoding each event separately is done only on the already-failed path, so the
+     * cost is never paid by a working feed. An event that encodes fine alone is absent
+     * from the list, and an empty list is itself information: the failure is not in any
+     * single event's payload (a depth or INF/NaN problem, say).
+     *
+     * @param array<int, array<string, mixed>> $eventsData
+     * @return string A suffix beginning with '; ', never a bare id list
+     */
+    private function describeUnencodableEvents(array $eventsData): string
+    {
+        $ids = [];
+        foreach ($eventsData as $eventData) {
+            if (json_encode($eventData) === false) {
+                $ids[] = (string) ($eventData['id'] ?? 'unknown');
+            }
+        }
+
+        if ($ids === []) {
+            return '; no individual event failed on its own';
+        }
+
+        return '; unencodable event id(s): ' . implode(', ', $ids);
     }
 }

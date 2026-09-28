@@ -1995,4 +1995,169 @@ class CalendarControllerCacheTest extends FunctionalTest
 
         return $request;
     }
+
+    /**
+     * Test 21 (#226): a cache read that returns `false` is a miss, not an
+     * empty-body HIT.
+     *
+     * The reported chain starts further up, but this covers the state it leaves
+     * behind: PSR-16 has get() return the stored value or the caller's default, so a
+     * `false` read is either a value pre-#226 code stored (it handed a failed
+     * json_encode() straight to set()) or a non-compliant backend reporting a failed
+     * read that way. Either one used to come back as
+     * `X-Calendar-Cache: HIT` over an empty body - a feed that reads fine to
+     * monitoring and is blank for every visitor until the TTL expires.
+     *
+     * The rebuild must also be a real write: asserting the value handed to set()
+     * pins the other half of the fix, that the pool is repaired with a string
+     * rather than left poisoned for the next request.
+     */
+    public function testCachedFalseIsTreatedAsMissAndRebuilt(): void
+    {
+        $event = EventPage::create([
+            'Title' => 'False Cache Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $written = [];
+        $cache = $this->createMock(CacheInterface::class);
+        $cache->method('get')->willReturn(false);
+        $cache->method('set')->willReturnCallback(
+            function (string $key, $value) use (&$written): bool {
+                $written[] = $value;
+                return true;
+            }
+        );
+
+        Injector::nest();
+        try {
+            Injector::inst()->registerService(
+                $this->makeCacheFactoryReturning($cache),
+                CacheFactory::class
+            );
+
+            $snapshot = $this->snapshotResponse($this->createAjaxRequest());
+
+            $this->assertEquals(
+                'MISS',
+                $snapshot['cache'],
+                'A false read is a failed read, so it must not be reported as a HIT'
+            );
+            $this->assertIsArray(
+                json_decode($snapshot['body'], true),
+                'A false read must not be passed through as the response body'
+            );
+            $this->assertContains(
+                'False Cache Event',
+                $this->titlesFrom($snapshot['body']),
+                'The feed must be rebuilt from the database on a false read'
+            );
+
+            $this->assertCount(1, $written, 'The rebuilt feed must be written back');
+            $this->assertIsString($written[0], 'Only an encoded feed may be stored');
+            $this->assertContains(
+                'False Cache Event',
+                $this->titlesFrom((string) $written[0]),
+                'The value written back must be the rebuilt feed, not a sentinel'
+            );
+        } finally {
+            Injector::unnest();
+        }
+    }
+
+    /**
+     * Test 22 (#226): a failed json_encode() is neither cached nor silent.
+     *
+     * The reported chain is: malformed UTF-8 in a Title makes json_encode()
+     * return false; false is a legal cache value, so set() succeeds and
+     * logCacheWriteFailure() never fires; the next request reads it back and
+     * serves an empty body behind a HIT header. This test reproduces the first
+     * link with LegacyUtf8TitleTestExtension and asserts the three things the
+     * fix owes: nothing poisoned reaches the cache, the failure is logged, and
+     * the response is valid (empty) JSON rather than an empty string.
+     */
+    public function testJsonEncodeFailureIsNotCachedAndLogs(): void
+    {
+        // Registered before the calendar the request runs on is built: a class-level
+        // extension is read the first time the object extends, and setUp() has already
+        // written and published $this->calendar by now - so its extension set is
+        // resolved. Same constraint CalendarControllerTest documents at
+        // testOccurrenceUrlInheritsAlternateAbsoluteLink(), met here by rebuilding the
+        // page and controller instead of registering before setUp()'s write.
+        Calendar::add_extension(LegacyUtf8TitleTestExtension::class);
+        Injector::nest();
+
+        try {
+            $this->calendar = Calendar::create([
+                'Title' => 'Encode Failure Calendar',
+                'URLSegment' => 'encode-failure-calendar',
+            ]);
+            $this->calendar->write();
+            $this->calendar->publishRecursive();
+            $this->controller = CalendarController::create($this->calendar);
+
+            $event = EventPage::create([
+                'Title' => 'Legacy Import Event',
+                'ParentID' => $this->calendar->ID,
+                'StartDate' => Carbon::now()->format('Y-m-d'),
+                'Recursion' => 'NONE',
+            ]);
+            $event->write();
+            $event->publishRecursive();
+
+            // Armed only now: the corruption is a feed-path fault, so writing bytes
+            // MySQL would reject is neither needed nor possible - and arming before the
+            // write would corrupt the very row being saved.
+            LegacyUtf8TitleTestExtension::$corruptTitleAfter = 'Legacy Import Event';
+
+            $cache = $this->createMock(CacheInterface::class);
+            $cache->method('get')->willReturn(null);
+            $cache->expects($this->never())->method('set');
+
+            // Captured rather than matched inline: the message has to carry the id of
+            // the row to fix, because one unencodable row fails the whole feed on every
+            // request (nothing is cached) and 'Malformed UTF-8 characters' alone does
+            // not say which row to repair.
+            $logged = [];
+            $logger = $this->createMock(LoggerInterface::class);
+            $logger->method('warning')
+                ->willReturnCallback(function (string $message) use (&$logged): void {
+                    $logged[] = $message;
+                });
+
+            Injector::inst()->registerService(
+                $this->makeCacheFactoryReturning($cache),
+                CacheFactory::class
+            );
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+
+            $snapshot = $this->snapshotResponse($this->createAjaxRequest());
+
+            $this->assertSame(
+                '[]',
+                $snapshot['body'],
+                'An unencodable feed must come back as valid empty JSON, not an empty string'
+            );
+            $this->assertEquals('MISS', $snapshot['cache']);
+
+            $this->assertCount(1, $logged, 'An unencodable feed must be logged exactly once');
+            $this->assertStringContainsString('json_encode failed', $logged[0]);
+            $this->assertStringContainsString(
+                'unencodable event id(s): ' . $event->ID,
+                $logged[0],
+                'The warning must name the row that json_encode refused, not just the error'
+            );
+        } finally {
+            // Everything from add_extension() is inside the try, so a throwing write
+            // still unarms the helper, drops the extension and unwinds Injector rather
+            // than leaking the corruption into the next test in the process.
+            LegacyUtf8TitleTestExtension::$corruptTitleAfter = '';
+            Calendar::remove_extension(LegacyUtf8TitleTestExtension::class);
+            Injector::unnest();
+        }
+    }
 }

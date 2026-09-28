@@ -594,9 +594,9 @@ class EventInstanceCacheTest extends SapphireTest
     /**
      * Test 7: clearEventCache() does not re-arm the volume bound.
      *
-     * clearAllCache() is the only reset. A per-event invalidation must not quietly
-     * become the second re-arm the source docblock says does not exist, so the
-     * warning stays at one per process across it.
+     * clearAllCache() is the only reset. The per-event clear call that event saves
+     * make must not quietly become a second re-arm the source docblock says does not
+     * exist, so the warning stays at one per process across it.
      *
      * @return void
      */
@@ -606,8 +606,8 @@ class EventInstanceCacheTest extends SapphireTest
         $brokenCache->method('get')->willReturn(null);
         $brokenCache->method('set')->willReturn(false);
 
-        // Same reason as test 4: the fixture writes resolve and memoise the real
-        // backend, which would answer underneath the double.
+        // setUp() already dropped the backend the fixture writes memoised; this is
+        // the same reset, restated at the point this test starts depending on it.
         $this->resetInstanceCacheState();
 
         $warnings = [];
@@ -625,7 +625,7 @@ class EventInstanceCacheTest extends SapphireTest
             $this->assertCount(
                 1,
                 $warnings,
-                'A failed write must be reported once before the invalidation is exercised'
+                'A failed write must be reported once before clearEventCache() is called'
             );
 
             EventInstanceCache::clearEventCache($this->event);

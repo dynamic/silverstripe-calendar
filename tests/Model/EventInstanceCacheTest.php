@@ -117,7 +117,8 @@ class EventInstanceCacheTest extends SapphireTest
     }
 
     /**
-     * Drop EventInstanceCache's memoised backend and its per-request state.
+     * Drop EventInstanceCache's memoised backend and its per-process failure-reporting
+     * state.
      *
      * Both are private statics, which survive SapphireTest's per-test Injector
      * reset: an un-dropped backend leaks one test's double into the next, and an
@@ -135,11 +136,14 @@ class EventInstanceCacheTest extends SapphireTest
         // Guarded, but not silently: $write_failure_logged is introduced by this fix,
         // so the pre-fix implementation this suite is also run against, to prove the
         // tests discriminate, has no such property - an unguarded reset would throw in
-        // setUp() there and turn four attributable behavioural failures into six
-        // structural ones. That openness is a real cost, so the property is pinned
-        // explicitly by testWriteFailureGuardPropertyStillExists() below: renaming it
-        // fails at a named site instead of quietly turning this reset into a no-op
-        // and surfacing later as order-dependent flakiness in another test.
+        // setUp() there and turn the attributable behavioural failures below into a
+        // structural error in every test in the file. Counts are deliberately not
+        // stated here: they rot the next time a test is added, and this comment had
+        // already outlived its own. That openness is a real cost, so the property is
+        // pinned explicitly by testWriteFailureGuardPropertyStillExists() below:
+        // renaming it fails at a named site instead of quietly turning this reset
+        // into a no-op and surfacing later as order-dependent flakiness in another
+        // test.
         if ($reflection->hasProperty('write_failure_logged')) {
             $reflection->getProperty('write_failure_logged')->setValue(null, false);
         }
@@ -445,7 +449,7 @@ class EventInstanceCacheTest extends SapphireTest
             $this->assertCount(
                 1,
                 $warnings,
-                'Three distinct failing writes in one request must collapse to one warning'
+                'Three distinct failing writes in one process must collapse to one warning'
             );
 
             EventInstanceCache::clearAllCache();

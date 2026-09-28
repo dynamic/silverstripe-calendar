@@ -153,36 +153,33 @@ class EventInstanceCache
     }
 
     /**
-     * Log a failed event instances cache write. A false-returning set() otherwise
-     * leaves every later request for this event's instances a permanent,
-     * indistinguishable cache miss (issue #160, the same invisibility #152 fixed
-     * for the events JSON cache in CalendarController::logCacheWriteFailure(),
-     * whose message wording this mirrors).
+     * What it does: emits one warning naming this class and the cache key, so that a
+     * false-returning set() is not mistaken for ordinary cache misses (issue #160;
+     * the wording mirrors CalendarController::logCacheWriteFailure(), which fixed the
+     * same invisibility for the events JSON cache).
      *
-     * Emission is bounded by $write_failure_logged, and the honest scope of that
-     * bound is one per PHP process, not one per request: the flag is reset only by
-     * clearAllCache(), which nothing in this module calls in production - the
-     * production invalidation path is clearEventCache(), called from EventPage and
-     * EventException. On the module's own caller set the distinction is invisible,
-     * because PHP-FPM statics die at request end: setCachedInstances() is reached
-     * once per recurring event from Calendar::getEventsFeed() via
-     * CarbonRecursion::getCachedOccurrences(), and getEventsFeed() is only reached
-     * from CalendarController, i.e. a web request. It is not invisible to a consuming
-     * project, though: getEventsFeed() is public module API, and calling it from a
-     * queued job or a dev/task would get one warning for the whole process, with no
-     * in-band way to re-arm. The bound is still load-bearing rather than cosmetic -
-     * an unbounded call would cost N synchronous logger calls, and when the logger
-     * itself throws N inline error_log() writes, for a single dead backend - and the
-     * first failure still names its own key while later distinct keys in the same
-     * process do not, because the defect is the shared backend rather than any one
-     * key. A wider suppression policy across the module is #179's to decide, as is
-     * whether a re-arm hook belongs on clearEventCache().
+     * The bound: $write_failure_logged suppresses every later emission in the same
+     * PHP process, so only the first failure names its key - the defect is the shared
+     * backend, not any one key, and an unbounded call would cost one synchronous
+     * logger call (or, when the logger itself throws, one inline error_log() write)
+     * per recurring event for a single dead backend. The scope is per process, not
+     * per request; PHP-FPM statics die at request end, which is why the distinction
+     * is invisible on this module's own caller set and why a long-lived caller of the
+     * public getEventsFeed() - a queued job, a dev/task - gets one warning for its
+     * whole run.
      *
-     * The logger lookup and the write to it are both guarded, via LoggerFallback,
-     * so a missing or throwing logger cannot turn a cache-write failure into a fatal
-     * error on the response path. The throwaway instance exists only because
-     * logWithFallback() is a protected non-static method: promoting it to static is
-     * #200's decision, so this call site adapts rather than changing the trait.
+     * How it resets: clearAllCache() is the only in-band reset, and it is not a
+     * targeted re-arm - it also wipes every cached instance. The production
+     * invalidation path, clearEventCache(), does not re-arm at all. Whether a
+     * targeted re-arm hook belongs there is a module-wide suppression policy
+     * decision, not this call site's.
+     *
+     * The guard: the logger lookup and the write to it both go through
+     * LoggerFallback, so a missing or throwing logger cannot escalate a cache-write
+     * failure into a fatal error. That guarantee covers the logger path only - a
+     * set() that throws rather than returning false is still unguarded here, and is
+     * tracked separately. The throwaway instance exists only because
+     * logWithFallback() is a protected non-static method.
      *
      * @param string $cacheKey
      * @return void
@@ -193,7 +190,7 @@ class EventInstanceCache
             return;
         }
         // Flag before emitting, not after: if the emit path ever throws, the next
-        // failure in the same request must not repeat it.
+        // failure in the same process must not repeat it.
         self::$write_failure_logged = true;
 
         (new self())->logWithFallback(

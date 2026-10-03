@@ -442,4 +442,25 @@ class CarbonRecursionTest extends SapphireTest
         $this->assertEquals($expectedDates, $dates);
         $this->assertNotContains('2025-06-10', $dates, 'Should not include Jun 10 as it exceeds RecursionEndDate');
     }
+
+    /**
+     * Test that createCarbonPeriod handles Throwable (such as Error) and returns null safely
+     */
+    public function testCreateCarbonPeriodHandlesThrowable()
+    {
+        $event = new class extends EventPage {
+            protected function createDailyPeriod(\Carbon\Carbon $start, \Carbon\Carbon $end): \Carbon\CarbonPeriod
+            {
+                throw new \TypeError('Forced TypeError for testing throwable guard');
+            }
+        };
+
+        $event->Title = 'Error Test Event';
+        $event->StartDate = '2025-06-20';
+        $event->Recursion = 'DAILY';
+
+        // Protected method createCarbonPeriod is invoked via getOccurrences()
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-20', '2025-06-25'));
+        $this->assertCount(0, $occurrences);
+    }
 }

@@ -172,7 +172,7 @@ trait CarbonRecursion
             return $period->filter(function (Carbon $date) use ($rangeStart, $rangeEnd) {
                 return $date->between($rangeStart, $rangeEnd, true);
             });
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Route through LoggerFallback rather than resolving the logger directly: an
             // unguarded lookup/write here would let a broken logger service turn this
             // "prevent crashes" catch into a new, uncaught throwable on the render path -

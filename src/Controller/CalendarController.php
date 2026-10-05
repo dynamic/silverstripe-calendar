@@ -472,6 +472,32 @@ class CalendarController extends \PageController
     }
 
     /**
+     * Longest date parameter accepted by parseRequestDate(). The value reaches
+     * both the feed query and the events cache key, so it has to be bounded -
+     * an unbounded visitor-supplied string would hand visitors control of
+     * cache-pool growth, the same hazard normaliseFilterParams() guards for
+     * `search` via SEARCH_MAX_LENGTH. No accepted shape is longer than 30
+     * characters, so 40 leaves headroom without admitting anything new.
+     */
+    private const DATE_MAX_LENGTH = 40;
+
+    /**
+     * The ISO-8601 shapes parseRequestDate() admits beyond plain Y-m-d: a date,
+     * then a REQUIRED 'T' or space separated time with minutes, optional
+     * seconds, optional fractional seconds, and an optional 'Z' or +hh:mm /
+     * +hhmm offset. Requiring the time part keeps a bare date that already
+     * failed the plain Y-m-d check (an impossible one such as 2026-13-45) out of
+     * the ISO branch, where a looser match would let it roll over into a real
+     * date instead of discarding to "no filter".
+     *
+     * Matching by regex - instead of calling Carbon::parse() on whatever
+     * arrived - is what keeps relative strings ('yesterday', '+1 week', 'now')
+     * out, and those are the strings a cache key must never be allowed to
+     * depend on.
+     */
+    private const DATE_ISO_REGEX = '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/';
+
+    /**
      * Get from date from request or null if no filter applied
      *
      * @param HTTPRequest $request
@@ -484,30 +510,25 @@ class CalendarController extends \PageController
         // coalesce, fail the string check below, and so discard a valid
         // `&start=` that was also present - widening the feed instead of failing.
         // A non-empty but UNPARSEABLE `from` (`?from=garbage&start=2025-10-01`)
-        // still wins here and is dropped by the hasFormat() check below, also
+        // still wins here and is dropped by parseRequestDate() below, also
         // widening the feed - pre-existing behaviour, unchanged by this guard.
         $from = $request->getVar('from');
         if (!is_string($from) || $from === '') {
             $from = $request->getVar('start');
         }
 
-        // is_string() before the string-typed hasFormat(): array-typed params
-        // (`?from[]=x`) must not reach it, same convention as
-        // normaliseFilterParams(). Without it such a request is an uncaught
+        // parseRequestDate() does the is_string() gate: array-typed params
+        // (`?from[]=x`) must not reach the string-typed parsing, same convention
+        // as normaliseFilterParams(). Without it such a request is an uncaught
         // TypeError, and since the cache key now resolves dates through this
         // accessor it fires on the cache path too, ahead of the cache read.
-        if (is_string($from) && Carbon::hasFormat($from, 'Y-m-d')) {
-            // The leading '!' resets every unset time field to midnight. Without
-            // it Carbon fills them from the current wall clock, so a window that
-            // starts on the first day of a month was compared against
-            // 'first-of-month <current time>' and the recursion's inclusive
-            // between() (CarbonRecursion) dropped that day's occurrences
-            // (issue #207).
-            return Carbon::createFromFormat('!Y-m-d', $from);
-        }
-
-        // Return null when no date filter is applied - this will show all events
-        return null;
+        //
+        // The leading '!' it applies resets every unset time field to midnight.
+        // Without it Carbon fills them from the current wall clock, so a window
+        // that starts on the first day of a month was compared against
+        // 'first-of-month <current time>' and the recursion's inclusive between()
+        // (CarbonRecursion) dropped that day's occurrences (issue #207).
+        return $this->parseRequestDate($from);
     }
 
     /**
@@ -527,19 +548,84 @@ class CalendarController extends \PageController
             $to = $request->getVar('end');
         }
 
-        // See getFromDate() - array-typed params must not reach hasFormat().
-        if (is_string($to) && Carbon::hasFormat($to, 'Y-m-d')) {
-            // See getFromDate() for the '!' modifier. The upper bound is also
-            // pushed to the end of the day, because the recursion compares it
-            // inclusively ($date->between($rangeStart, $rangeEnd, true)) against
-            // occurrences at midnight, and the SQL path formats it back to
-            // Y-m-d - so end of day includes the last day in full without
-            // changing which rows that clause matches (issue #207).
-            return Carbon::createFromFormat('!Y-m-d', $to)->endOfDay();
+        // See getFromDate() for array-typed params and the '!' modifier. The
+        // upper bound is also pushed to the end of the day, because the
+        // recursion compares it inclusively
+        // ($date->between($rangeStart, $rangeEnd, true)) against occurrences at
+        // midnight, and the SQL path formats it back to Y-m-d - so end of day
+        // includes the last day in full without changing which rows that clause
+        // matches (issue #207). Applies to ISO input too: the pin is what keeps
+        // generateEventsCacheKey()'s Ymd component a complete description of the
+        // window.
+        return $this->parseRequestDate($to)?->endOfDay();
+    }
+
+    /**
+     * Parse a date request parameter into a Carbon instance, or null when the
+     * parameter is absent or is not an accepted date shape.
+     *
+     * FullCalendar sends info.startStr / info.endStr, which are plain Y-m-d only
+     * in dayGridMonth: timeGrid and list views send full ISO-8601 with a UTC
+     * offset (2026-08-01T00:00:00-05:00). The Y-m-d-only gate this replaces
+     * rejected those, returned null, and so silently disabled date filtering -
+     * every week/day/list request expanded the entire event corpus (#255, from
+     * #128 on branch 2).
+     *
+     * For ISO input the calendar date is taken from the first ten characters -
+     * the date the requesting grid is actually drawing - and re-created with
+     * '!Y-m-d', so the result carries the site's own timezone and midnight,
+     * exactly like a plain Y-m-d request. Converting through the offset instead
+     * would key and compare the same request against the site's UTC date, which
+     * is not the day the visitor asked to see.
+     *
+     * Shapes are matched by regex rather than handed to bare Carbon::parse(),
+     * which also accepts relative strings ("yesterday", "+1 week"). Those would
+     * give visitors control of the cache key.
+     *
+     * @param mixed $value Raw request parameter, which may be an array
+     * @return Carbon|null Null means "no date filter", i.e. the whole corpus
+     */
+    protected function parseRequestDate(mixed $value): ?Carbon
+    {
+        // is_string() first: array-typed params (`?start[]=x`) must not reach the
+        // string-typed parsing below, same convention as normaliseFilterParams().
+        if (!is_string($value) || $value === '' || strlen($value) > self::DATE_MAX_LENGTH) {
+            return null;
         }
 
-        // Return null when no date filter is applied
-        return null;
+        try {
+            // Fast path: the shape dayGridMonth has always sent.
+            if (Carbon::hasFormat($value, 'Y-m-d')) {
+                return Carbon::createFromFormat('!Y-m-d', $value);
+            }
+
+            if (!preg_match(self::DATE_ISO_REGEX, $value)) {
+                return null;
+            }
+
+            // Only the date part is used: the time and the offset are dropped on
+            // purpose, so the ISO form of a date and the plain form resolve to
+            // one bound and therefore one cache entry.
+            //
+            // The date part goes through the SAME check the fast path above
+            // applies, so the two branches can never disagree about whether a
+            // date exists. Carbon::hasFormat() is a shape test, not a calendar
+            // one, so an impossible day within a valid month (2026-02-30) rolls
+            // over here exactly as it already does for a plain Y-m-d parameter,
+            // and a date outside a valid month or day (2026-13-45) is rejected
+            // here as it is there. Making either branch stricter than the other
+            // would mean the two shapes of one window keyed differently; making
+            // both stricter would change long-standing Y-m-d behaviour, which is
+            // outside this port. Pre-existing behaviour, deliberately unchanged.
+            $datePart = substr($value, 0, 10);
+            if (!Carbon::hasFormat($datePart, 'Y-m-d')) {
+                return null;
+            }
+
+            return Carbon::createFromFormat('!Y-m-d', $datePart);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**
@@ -1010,18 +1096,23 @@ class CalendarController extends \PageController
         $mode = (string) Versioned::get_reading_mode();
 
         // Read the parsed dates, not the raw params. getFromDate()/getToDate()
-        // prefer the legacy from/to over start/end and reject anything that is
-        // not Y-m-d; the key must follow that same resolution or a request
-        // carrying BOTH names (FullCalendar always sends start/end, a scraper
-        // can add from/to) keys on one window and queries another. That is a
-        // poisoning hole, not just wasted space: an attacker could write an
-        // empty window's payload under the key every browser reads. Formatted
+        // prefer the legacy from/to over start/end and accept only Y-m-d and the
+        // ISO-8601 shapes parseRequestDate() admits (everything else is
+        // rejected, which means "unfiltered"); the key must follow that same
+        // resolution or a request carrying BOTH names (FullCalendar always sends
+        // start/end, a scraper can add from/to) keys on one window and queries
+        // another. That is a poisoning hole, not just wasted space: an attacker
+        // could write an empty window's payload under the key every browser
+        // reads. Formatted
         // as Ymd (no separator) rather than Y-m-d, since $filterPart below
         // joins its own parts with '-' and a dash-free date avoids adding a
         // second source of the same collision risk to this key.
         //
         // Ymd is a complete description of the window only because the
-        // accessors below pin time of day (issue #207). Before that, a bound
+        // accessors below pin time of day (issue #207) - including for ISO
+        // input, whose time and offset are deliberately dropped in favour of
+        // its own calendar date, so 2026-08-17 and 2026-08-17T00:00:00-05:00
+        // share one entry and get the same body. Before that pin, a bound
         // carried the request's H:i:s while the key discarded it, so two
         // requests for the same days minted one entry and got two different
         // bodies from it - whichever variant was computed first won for the

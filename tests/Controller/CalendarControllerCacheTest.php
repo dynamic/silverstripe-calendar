@@ -1692,10 +1692,12 @@ class CalendarControllerCacheTest extends FunctionalTest
     /**
      * Test 17: Unparseable date parameters key deterministically and do not fatal
      *
-     * getFromDate()/getToDate() accept only a strict Y-m-d, so anything else -
-     * garbage, ISO8601 datetimes, unpadded days - resolves to null, i.e. no
-     * filter. All of those must share the no-window key, because that is the
-     * identical unfiltered body they produce, while a real window must not.
+     * getFromDate()/getToDate() accept a strict Y-m-d and the ISO-8601 shapes
+     * parseRequestDate() admits (issue #255), so garbage and unpadded days
+     * resolve to null, i.e. no filter, and must share the no-window key - that
+     * is the identical unfiltered body they produce - while a real window must
+     * not. An ISO-8601 datetime is a real window: it keys on its own dates, and
+     * shares that entry with the plain Y-m-d form of the same dates.
      * Also asserts the request path itself survives such input, not just the
      * key builder.
      *
@@ -1705,6 +1707,7 @@ class CalendarControllerCacheTest extends FunctionalTest
     {
         $bad = ['start' => 'not-a-date', 'end' => 'garbage/{}/\\@:'];
         $iso8601 = ['start' => '2026-08-13T00:00:00+00:00', 'end' => '2026-10-13T00:00:00+00:00'];
+        $isoPlainEquivalent = ['start' => '2026-08-13', 'end' => '2026-10-13'];
         $loose = ['start' => '2026-8-13', 'end' => '2026-10-13'];
         $previousMode = Versioned::get_reading_mode();
         try {
@@ -1721,10 +1724,21 @@ class CalendarControllerCacheTest extends FunctionalTest
                 $noWindow,
                 'Unparseable dates resolve to no filter, so they must key with no window'
             );
-            $this->assertSame(
+            // Issue #255 reversed this expectation: ISO-8601 used to fail the
+            // Y-m-d-only check and land on the no-window entry. It is honoured
+            // now, so it keys on its own dates - and it must share that entry
+            // with the plain form of the same dates, since dropping the time and
+            // offset is what makes one window out of the two shapes.
+            $isoKey = $this->generateEventsCacheKeyFor($this->createJsonFeedRequest($iso8601));
+            $this->assertNotSame(
                 $keyA,
-                $this->generateEventsCacheKeyFor($this->createJsonFeedRequest($iso8601)),
-                'ISO8601 datetimes fail the strict Y-m-d check and must share the no-window key'
+                $isoKey,
+                'An ISO-8601 window is a real window and must not key with the unfiltered one'
+            );
+            $this->assertSame(
+                $this->generateEventsCacheKeyFor($this->createJsonFeedRequest($isoPlainEquivalent)),
+                $isoKey,
+                'The ISO-8601 and Y-m-d shapes of one window must share one cache entry'
             );
             // Components resolve independently: an unpadded start fails the strict
             // check while a well-formed end in the same request still keys, so the

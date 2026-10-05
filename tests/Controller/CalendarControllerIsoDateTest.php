@@ -182,6 +182,31 @@ class CalendarControllerIsoDateTest extends FunctionalTest
         $this->assertNull($this->resolveStart(['2026-08-17']));
     }
 
+    /**
+     * A parameter whose only flaw is a trailing newline used to fail the request
+     * outright rather than discard to "no date filter": it passes Carbon's
+     * shape test (whose pattern allows the newline) and then throws on the
+     * trailing data, and nothing caught that before parseRequestDate(). The ISO
+     * branch has to give the same answer, which is what the regex's D modifier
+     * is for - PCRE's '$' alone would have matched the newline and filtered the
+     * feed, so one stray byte would flip a request between filtered and
+     * unfiltered depending on which date shape it was sent in.
+     */
+    public function testTrailingNewlineIsNotSilentlyAccepted(): void
+    {
+        $this->assertNull($this->resolveStart("2026-08-17\n"));
+        $this->assertNull($this->resolveStart("2026-08-17T00:00:00Z\n"));
+
+        // And the request path must answer, not fatal.
+        $this->createEvent('In Window Event', '2025-06-18');
+        $titles = $this->titles($this->fetchEvents(['start' => "2025-06-15\n"]));
+        $this->assertContains(
+            'In Window Event',
+            $titles,
+            'A malformed bound means the whole corpus, which is what it must return'
+        );
+    }
+
     public function testImpossibleDateRollsOverTheSameWayThePlainFormAlreadyDoes(): void
     {
         // Carbon's hasFormat() is a shape test, not a calendar one, so a day

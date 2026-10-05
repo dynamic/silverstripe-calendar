@@ -485,7 +485,13 @@ class CalendarController extends \PageController
      * The ISO-8601 shapes parseRequestDate() admits beyond plain Y-m-d: a date,
      * then a REQUIRED 'T' or space separated time with minutes, optional
      * seconds, optional fractional seconds, and an optional 'Z' or +hh:mm /
-     * +hhmm offset. Requiring the time part keeps a bare date that already
+     * +hhmm offset, with the trailing `D` modifier so `$` means end of string
+     * and not "before a final newline". Without it a parameter ending in `"\n"`
+     * would match here while the same trailing byte has always made the plain
+     * Y-m-d branch throw, so one stray newline would quietly switch a request
+     * between "filtered" and "unfiltered" depending on which shape it used.
+     *
+     * Requiring the time part keeps a bare date that already
      * failed the plain Y-m-d check (an impossible one such as 2026-13-45) out of
      * the ISO branch, where a looser match would let it roll over into a real
      * date instead of discarding to "no filter".
@@ -495,7 +501,7 @@ class CalendarController extends \PageController
      * out, and those are the strings a cache key must never be allowed to
      * depend on.
      */
-    private const DATE_ISO_REGEX = '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/';
+    private const DATE_ISO_REGEX = '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/D';
 
     /**
      * Get from date from request or null if no filter applied
@@ -617,6 +623,15 @@ class CalendarController extends \PageController
             // would mean the two shapes of one window keyed differently; making
             // both stricter would change long-standing Y-m-d behaviour, which is
             // outside this port. Pre-existing behaviour, deliberately unchanged.
+            //
+            // The D modifier is what keeps a trailing newline out of this branch:
+            // PCRE's '$' alone also matches before a final "\n", so a param
+            // ending in one newline would be accepted as ISO while the same
+            // trailing byte has always made the plain path above throw on the
+            // trailing data - and the throw, with no catch before this method
+            // existed, failed the request outright. Both shapes of "a date we do
+            // not accept" now answer "no filter" through the same catch, which is
+            // what testTrailingNewlineIsNotSilentlyAccepted pins.
             $datePart = substr($value, 0, 10);
             if (!Carbon::hasFormat($datePart, 'Y-m-d')) {
                 return null;
@@ -1103,10 +1118,9 @@ class CalendarController extends \PageController
         // start/end, a scraper can add from/to) keys on one window and queries
         // another. That is a poisoning hole, not just wasted space: an attacker
         // could write an empty window's payload under the key every browser
-        // reads. Formatted
-        // as Ymd (no separator) rather than Y-m-d, since $filterPart below
-        // joins its own parts with '-' and a dash-free date avoids adding a
-        // second source of the same collision risk to this key.
+        // reads. Formatted as Ymd (no separator) rather than Y-m-d, since
+        // $filterPart below joins its own parts with '-' and a dash-free date
+        // avoids adding a second source of the same collision risk to this key.
         //
         // Ymd is a complete description of the window only because the
         // accessors below pin time of day (issue #207) - including for ISO

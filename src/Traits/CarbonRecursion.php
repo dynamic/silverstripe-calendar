@@ -33,6 +33,19 @@ trait CarbonRecursion
     protected array $occurrenceCache = [];
 
     /**
+     * Whether the last expansion was cut short by an UnreachableException.
+     *
+     * getCachedOccurrences() must not write a truncated set: an interrupted expansion
+     * yields fewer instances than the window contains, and a cache write would then be
+     * served as a valid HIT for the whole TTL - the same class of bug as a failed encode
+     * being cached and read back as an empty HIT (#226). Reset at the start of every
+     * expansion so a later complete run clears it.
+     *
+     * @var bool
+     */
+    protected bool $expansionInterrupted = false;
+
+    /**
      * Get cached event occurrences for better performance
      *
      * @param Carbon|string|null $startDate
@@ -73,8 +86,11 @@ trait CarbonRecursion
             }
         }
 
-        // Cache the results for future requests
-        EventInstanceCache::setCachedInstances($this, $start, $end, $instances);
+        // Cache the results for future requests - but only when the expansion ran to
+        // completion. An interrupted one is incomplete data, not a result set.
+        if (!$this->expansionInterrupted) {
+            EventInstanceCache::setCachedInstances($this, $start, $end, $instances);
+        }
     }
 
     /**
@@ -106,6 +122,10 @@ trait CarbonRecursion
             return;
         }
 
+        // Reset before iterating: only the iteration below can set this, so a false value
+        // after the loop means this expansion covered the whole window.
+        $this->expansionInterrupted = false;
+
         // Refresh the exception memo once per expansion (one query) rather than once per
         // generated date, so an exception written between two expansions is still picked
         // up without paying a query per occurrence.
@@ -132,6 +152,7 @@ trait CarbonRecursion
                 }
             }
         } catch (UnreachableException $e) {
+            $this->expansionInterrupted = true;
             // Route through LoggerFallback rather than resolving the logger directly: an
             // unguarded lookup/write here would let a broken logger service turn this
             // "don't crash the feed" catch into a new, uncaught throwable on the render
@@ -425,8 +446,14 @@ trait CarbonRecursion
     {
         if ($refresh || $this->exceptionMapCache === null) {
             $this->exceptionMapCache = [];
-            foreach ($this->getExceptions() as $exception) {
-                $this->exceptionMapCache[(string) $exception->InstanceDate] = $exception;
+            // Order by ID and keep the first hit so duplicate rows for the same date
+            // resolve to the lowest ID, matching the findForEventAndDate()->first() this
+            // replaced. There is no unique index on (OriginalEventID, InstanceDate).
+            foreach ($this->getExceptions()->sort('ID', 'ASC') as $exception) {
+                $instanceDate = (string) $exception->InstanceDate;
+                if (!isset($this->exceptionMapCache[$instanceDate])) {
+                    $this->exceptionMapCache[$instanceDate] = $exception;
+                }
             }
         }
 

@@ -6,10 +6,12 @@ use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Model\EventInstance;
+use Dynamic\Calendar\Model\EventInstanceCache;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Core\Injector\Injector;
+use SilverStripe\ORM\Connect\MySQLDatabase;
 use SilverStripe\ORM\DB;
 use Psr\Log\LoggerInterface;
 use SilverStripe\Versioned\Versioned;
@@ -457,6 +459,13 @@ class CarbonRecursionTest extends SapphireTest
      */
     private function databaseQueryCount(): int
     {
+        if (!DB::get_conn() instanceof MySQLDatabase) {
+            $this->markTestSkipped(
+                'The query counter reads SHOW SESSION STATUS, which only exists on MySQL/MariaDB; '
+                . 'this run uses ' . get_class(DB::get_conn())
+            );
+        }
+
         $row = DB::query("SHOW SESSION STATUS LIKE 'Questions'")->record();
         if (!isset($row['Value'])) {
             $this->fail('SHOW SESSION STATUS LIKE \'Questions\' returned no row; the query counter is unavailable');
@@ -716,6 +725,11 @@ class CarbonRecursionTest extends SapphireTest
      * Regression test for the memo added in dynamic/silverstripe-calendar#260: an
      * exception written after an expansion has already populated the memo must be visible
      * to the next expansion, and removing it again must undo that.
+     *
+     * Both write paths are covered separately: a direct EventException::createDeletion()
+     * that goes nowhere near the memo (only getOccurrences()'s per-expansion refresh can
+     * see it, so dropping that refresh fails this test), and createException()/
+     * removeException(), whose clearExceptionMap() calls must also take effect.
      */
     public function testMemoIsRefreshedBetweenExpansions()
     {
@@ -733,19 +747,84 @@ class CarbonRecursionTest extends SapphireTest
         $first = iterator_to_array($event->getOccurrences('2025-06-03', '2025-06-12'));
         $this->assertCount(10, $first, 'Populate the memo before writing any exception');
 
+        // The discriminating half first: write straight through EventException, so no
+        // memo invalidation hook runs at all, and do it before anything that clears the
+        // memo - otherwise a lazily rebuilt map would hide a missing per-expansion refresh.
+        EventException::createDeletion($event, '2025-06-09', 'Written behind the memo');
+
+        $second = $this->expandDates($event, '2025-06-03', '2025-06-12');
+        $this->assertCount(9, $second, 'An exception written without touching the memo is still picked up');
+        $this->assertNotContains('2025-06-09', $second);
+
         $event->createException('2025-06-07', 'DELETED', [], 'Cancelled');
 
-        $second = iterator_to_array($event->getOccurrences('2025-06-03', '2025-06-12'));
-        $secondDates = array_map(function ($occurrence) {
-            return (string) $occurrence->StartDate;
-        }, $second);
-        $this->assertCount(9, $second, 'The new exception is seen by the next expansion');
-        $this->assertNotContains('2025-06-07', $secondDates);
+        $third = $this->expandDates($event, '2025-06-03', '2025-06-12');
+        $this->assertCount(8, $third, 'The new exception is seen by the next expansion');
+        $this->assertNotContains('2025-06-07', $third);
 
         $this->assertTrue($event->removeException('2025-06-07'));
 
-        $third = iterator_to_array($event->getOccurrences('2025-06-03', '2025-06-12'));
-        $this->assertCount(10, $third, 'Removing the exception restores the occurrence');
+        $fourth = $this->expandDates($event, '2025-06-03', '2025-06-12');
+        $this->assertCount(9, $fourth, 'Removing the exception restores the occurrence');
+        $this->assertContains('2025-06-07', $fourth);
+    }
+
+    /**
+     * Expand a window and return just the instance dates.
+     *
+     * @return array<int,string>
+     */
+    private function expandDates(EventPage $event, string $start, string $end): array
+    {
+        $dates = [];
+        foreach ($event->getOccurrences($start, $end) as $occurrence) {
+            $dates[] = (string) $occurrence->StartDate;
+        }
+        return $dates;
+    }
+
+    /**
+     * An expansion that was cut short by UnreachableException must not be written to the
+     * instance cache: getCachedOccurrences() would otherwise serve the incomplete set as a
+     * valid HIT for the whole TTL, which is the failure mode #226 removed for a failed
+     * json_encode().
+     */
+    public function testInterruptedExpansionIsNotCached()
+    {
+        $event = new class extends EventPage {
+            protected function createDailyPeriod(Carbon $start, Carbon $end): CarbonPeriod
+            {
+                return CarbonPeriod::create(
+                    Carbon::parse('2000-01-01'),
+                    '1 day',
+                    Carbon::parse('2025-07-10')
+                );
+            }
+        };
+
+        $event->Title = 'Interrupted Expansion Event';
+        $event->StartDate = '2025-06-20';
+        $event->Recursion = 'DAILY';
+        $event->Interval = 1;
+        $event->ParentID = $this->parentPage->ID;
+
+        // Deliberately not written: DataObject rejects an anonymous class as an allowed
+        // ClassName, and the cache key only needs the object, not a persisted ID.
+        EventInstanceCache::clearAllCache();
+
+        $this->assertNull(
+            EventInstanceCache::getCachedInstances($event, '2025-06-20', '2025-06-25'),
+            'Nothing is cached before the expansion runs'
+        );
+
+        // The expansion is cut short (and logs) instead of throwing; see
+        // testUnreachableIterationIsCaughtAndLogged for that part.
+        iterator_to_array($event->getCachedOccurrences('2025-06-20', '2025-06-25'));
+
+        $this->assertNull(
+            EventInstanceCache::getCachedInstances($event, '2025-06-20', '2025-06-25'),
+            'An interrupted expansion must not be cached as if it were a result set'
+        );
     }
 
     /**

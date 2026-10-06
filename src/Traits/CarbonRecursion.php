@@ -5,6 +5,7 @@ namespace Dynamic\Calendar\Traits;
 use Carbon\Carbon;
 use Carbon\CarbonInterval;
 use Carbon\CarbonPeriod;
+use Carbon\Exceptions\UnreachableException;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Model\EventInstance;
 use Dynamic\Calendar\Model\EventInstanceCache;
@@ -30,6 +31,20 @@ trait CarbonRecursion
      * @var array Cache for occurrence calculations
      */
     protected array $occurrenceCache = [];
+
+    /**
+     * Whether the last expansion was cut short by an UnreachableException, or by a period
+     * that could not be built at all.
+     *
+     * getCachedOccurrences() must not write a truncated set: an interrupted expansion
+     * yields fewer instances than the window contains, and a cache write would then be
+     * served as a valid HIT for the whole TTL - the same class of bug as a failed encode
+     * being cached and read back as an empty HIT (#226). Reset at the top of every
+     * expansion so a later complete run clears it.
+     *
+     * @var bool
+     */
+    protected bool $expansionInterrupted = false;
 
     /**
      * Get cached event occurrences for better performance
@@ -72,8 +87,11 @@ trait CarbonRecursion
             }
         }
 
-        // Cache the results for future requests
-        EventInstanceCache::setCachedInstances($this, $start, $end, $instances);
+        // Cache the results for future requests - but only when the expansion ran to
+        // completion. An interrupted one is incomplete data, not a result set.
+        if (!$this->expansionInterrupted) {
+            EventInstanceCache::setCachedInstances($this, $start, $end, $instances);
+        }
     }
 
     /**
@@ -86,6 +104,12 @@ trait CarbonRecursion
      */
     public function getOccurrences($startDate = null, $endDate = null, ?int $limit = null): Generator
     {
+        // Reset before anything can set it, so a false value once this generator is done
+        // means the expansion covered the whole window. It sits at the very top because
+        // createCarbonPeriod() can also fail, and that path must not be judged by an older
+        // run's flag.
+        $this->expansionInterrupted = false;
+
         if (!$this->eventRecurs()) {
             // For non-recurring events, just return the original if it falls within range
             $eventStart = Carbon::parse($this->StartDate);
@@ -99,28 +123,49 @@ trait CarbonRecursion
         }
 
         $count = 0;
+
         $period = $this->createCarbonPeriod($startDate, $endDate);
 
         if (!$period) {
             return;
         }
 
-        foreach ($period as $date) {
-            // Check for exceptions (deleted instances)
-            $exception = $this->getExceptionForDate($date);
-            if ($exception && $exception->isDeleted()) {
-                continue;
+        // Refresh the exception memo once per expansion (one query) rather than once per
+        // generated date, so an exception written between two expansions is still picked
+        // up without paying a query per occurrence.
+        $exceptions = $this->exceptionMap(true);
+
+        // The try must wrap ITERATION, not just construction: CarbonPeriod's filter() is
+        // lazy, so UnreachableException surfaces here, not in createCarbonPeriod().
+        try {
+            foreach ($period as $date) {
+                // Check for exceptions (deleted instances)
+                $exception = $this->getExceptionForDate($date, $exceptions);
+                if ($exception && $exception->isDeleted()) {
+                    continue;
+                }
+
+                // Create virtual instance
+                $instance = $this->createVirtualInstance($date, $exception);
+
+                yield $instance;
+
+                // Apply limit if specified
+                if ($limit && ++$count >= $limit) {
+                    break;
+                }
             }
-
-            // Create virtual instance
-            $instance = $this->createVirtualInstance($date, $exception);
-
-            yield $instance;
-
-            // Apply limit if specified
-            if ($limit && ++$count >= $limit) {
-                break;
-            }
+        } catch (UnreachableException $e) {
+            $this->expansionInterrupted = true;
+            // Route through LoggerFallback rather than resolving the logger directly: an
+            // unguarded lookup/write here would let a broken logger service turn this
+            // "don't crash the feed" catch into a new, uncaught throwable on the render
+            // path - exactly the failure this catch exists to stop (#182).
+            $this->logWithFallback(
+                "Error iterating occurrences for event {$this->ID}: " . $e->getMessage(),
+                \Psr\Log\LogLevel::ERROR
+            );
+            return;
         }
     }
 
@@ -156,9 +201,28 @@ trait CarbonRecursion
         }
 
         try {
+            $interval = max(1, (int) $this->Interval);
+
+            // Start DAILY/WEEKLY periods at the first on-lattice occurrence at or after
+            // $rangeStart instead of walking from the event's start date. Without this the
+            // cost is O(event age), and CarbonPeriod's lazy filter() throws
+            // UnreachableException after 1000 consecutive rejections - a daily event ~3
+            // years old 500ed the events feed for a correctly parsed Y-m-d window.
+            //
+            // MONTHLY/YEARLY intentionally still iterate from $eventStart: CarbonPeriod
+            // adds the interval to the CURRENT date, so month-end dates drift
+            // (Jan 31 -> Mar 3 -> Apr 3...). Snapping would change which days those events
+            // fall on. They step at most ~12x per year of event age and cannot reach the
+            // 1000-rejection limit.
             $period = match ($this->Recursion) {
-                'DAILY' => $this->createDailyPeriod($eventStart, $rangeEnd),
-                'WEEKLY' => $this->createWeeklyPeriod($eventStart, $rangeEnd),
+                'DAILY' => $this->createDailyPeriod(
+                    $this->snapToLattice($eventStart, $rangeStart, $interval),
+                    $rangeEnd
+                ),
+                'WEEKLY' => $this->createWeeklyPeriod(
+                    $this->snapToLattice($eventStart, $rangeStart, 7 * $interval),
+                    $rangeEnd
+                ),
                 'MONTHLY' => $this->createMonthlyPeriod($eventStart, $rangeEnd),
                 'YEARLY' => $this->createYearlyPeriod($eventStart, $rangeEnd),
                 default => null
@@ -168,11 +232,18 @@ trait CarbonRecursion
                 return null;
             }
 
-            // Filter period to only include dates within our range
+            // Filter period to only include dates within our range. After the snap this
+            // rejects at most one candidate for DAILY/WEEKLY; it remains the range guard
+            // for the un-snapped MONTHLY/YEARLY.
             return $period->filter(function (Carbon $date) use ($rangeStart, $rangeEnd) {
                 return $date->between($rangeStart, $rangeEnd, true);
             });
         } catch (\Throwable $e) {
+            // A failed period build yields no instances at all. Mark the expansion as
+            // interrupted so getCachedOccurrences() does not cache that emptiness as a
+            // result set; the 'does not recur' and unknown-pattern nulls above are genuine
+            // answers and stay cacheable.
+            $this->expansionInterrupted = true;
             // Route through LoggerFallback rather than resolving the logger directly: an
             // unguarded lookup/write here would let a broken logger service turn this
             // "prevent crashes" catch into a new, uncaught throwable on the render path -
@@ -183,6 +254,34 @@ trait CarbonRecursion
             );
             return null;
         }
+    }
+
+    /**
+     * First date on the event's recurrence lattice at or after $rangeStart.
+     *
+     * Only valid for fixed-day-step patterns (DAILY, WEEKLY): occurrence n is exactly
+     * eventStart + n * stepDays, so the snap is pure arithmetic.
+     *
+     * @param Carbon $eventStart
+     * @param Carbon $rangeStart
+     * @param int $stepDays
+     * @return Carbon
+     */
+    protected function snapToLattice(Carbon $eventStart, Carbon $rangeStart, int $stepDays): Carbon
+    {
+        $from = $eventStart->copy()->startOfDay();
+        $to = $rangeStart->copy()->startOfDay();
+
+        // Carbon 3 diffInDays() is signed; positive when $to is after $from.
+        $dayDelta = (int) round($from->diffInDays($to));
+
+        if ($dayDelta <= 0 || $stepDays < 1) {
+            return $eventStart->copy();
+        }
+
+        $steps = (int) ceil($dayDelta / $stepDays);
+
+        return $eventStart->copy()->addDays($steps * $stepDays);
     }
 
     /**
@@ -337,16 +436,68 @@ trait CarbonRecursion
     }
 
     /**
+     * @var array<string,EventException>|null Per-object memo of this event's exceptions, keyed by InstanceDate
+     */
+    protected ?array $exceptionMapCache = null;
+
+    /**
+     * All exceptions for this event, keyed by InstanceDate.
+     *
+     * One query for the whole set, memoised on the object. Previously every generated
+     * occurrence date cost its own SELECT, which made expanding an old recurring event
+     * the dominant query cost of the events feed.
+     *
+     * @param bool $refresh Discard the memo and query again. getOccurrences() uses this so
+     *                      each expansion sees exceptions written since the last one.
+     * @return array<string,EventException>
+     */
+    protected function exceptionMap(bool $refresh = false): array
+    {
+        if ($refresh || $this->exceptionMapCache === null) {
+            $this->exceptionMapCache = [];
+            // Order by ID and keep the first hit so duplicate rows for the same date
+            // resolve to the lowest ID, matching the findForEventAndDate()->first() this
+            // replaced. There is no unique index on (OriginalEventID, InstanceDate).
+            foreach ($this->getExceptions()->sort('ID', 'ASC') as $exception) {
+                $instanceDate = (string) $exception->InstanceDate;
+                if (!isset($this->exceptionMapCache[$instanceDate])) {
+                    $this->exceptionMapCache[$instanceDate] = $exception;
+                }
+            }
+        }
+
+        return $this->exceptionMapCache;
+    }
+
+    /**
+     * Drop the exception memo (call after any exception write/delete).
+     *
+     * @return void
+     */
+    public function clearExceptionMap(): void
+    {
+        $this->exceptionMapCache = null;
+    }
+
+    /**
      * Get an exception for a specific date
      *
+     * Consults the caller-supplied map when given one, otherwise the per-event memo -
+     * replacing the one SQL query per generated occurrence DATE that used to happen here.
+     *
      * @param Carbon|string $date
+     * @param array<string,EventException>|null $exceptions Prefetched map keyed by Y-m-d
      * @return EventException|null
      */
-    protected function getExceptionForDate($date): ?EventException
+    protected function getExceptionForDate($date, ?array $exceptions = null): ?EventException
     {
         $dateString = is_string($date) ? $date : $date->format('Y-m-d');
 
-        return EventException::findForEventAndDate($this, $dateString);
+        if ($exceptions === null) {
+            $exceptions = $this->exceptionMap();
+        }
+
+        return $exceptions[$dateString] ?? null;
     }
 
     /**
@@ -398,6 +549,8 @@ trait CarbonRecursion
             $existing->delete();
         }
 
+        $this->clearExceptionMap();
+
         if ($action === 'DELETED') {
             return EventException::createDeletion($this, $instanceDate, $reason);
         } else {
@@ -416,6 +569,7 @@ trait CarbonRecursion
         $exception = EventException::findForEventAndDate($this, $instanceDate);
         if ($exception) {
             $exception->delete();
+            $this->clearExceptionMap();
             return true;
         }
 

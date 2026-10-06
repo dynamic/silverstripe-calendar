@@ -3,11 +3,17 @@
 namespace Dynamic\Calendar\Tests;
 
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Model\EventInstance;
+use Dynamic\Calendar\Model\EventInstanceCache;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Dev\SapphireTest;
+use SilverStripe\Core\Injector\Injector;
+use SilverStripe\ORM\Connect\MySQLDatabase;
+use SilverStripe\ORM\DB;
+use Psr\Log\LoggerInterface;
 use SilverStripe\Versioned\Versioned;
 
 /**
@@ -441,6 +447,492 @@ class CarbonRecursionTest extends SapphireTest
 
         $this->assertEquals($expectedDates, $dates);
         $this->assertNotContains('2025-06-10', $dates, 'Should not include Jun 10 as it exceeds RecursionEndDate');
+    }
+
+    /**
+     * Number of SQL statements executed by this DB connection so far.
+     *
+     * MariaDB's session-scope 'Questions' counter, used to show that exception lookups no
+     * longer scale with the number of generated occurrence dates. It counts every
+     * statement on the connection - including the probe itself - so callers compare
+     * differences and every test using it carries a positive control.
+     */
+    private function databaseQueryCount(): int
+    {
+        if (!DB::get_conn() instanceof MySQLDatabase) {
+            $this->markTestSkipped(
+                'The query counter reads SHOW SESSION STATUS, which only exists on MySQL/MariaDB; '
+                . 'this run uses ' . get_class(DB::get_conn())
+            );
+        }
+
+        $row = DB::query("SHOW SESSION STATUS LIKE 'Questions'")->record();
+        if (!isset($row['Value'])) {
+            $this->fail('SHOW SESSION STATUS LIKE \'Questions\' returned no row; the query counter is unavailable');
+        }
+        return (int) $row['Value'];
+    }
+
+    /**
+     * Expand one window on a freshly loaded event and report how many queries it cost.
+     *
+     * @return array{queries:int,count:int}
+     */
+    private function expandAndCountQueries(int $eventId, string $start, string $end): array
+    {
+        $event = EventPage::get()->byID($eventId);
+        $this->assertNotNull($event, 'Test event must exist');
+
+        $before = $this->databaseQueryCount();
+        $occurrences = iterator_to_array($event->getOccurrences($start, $end));
+        $after = $this->databaseQueryCount();
+
+        return ['queries' => $after - $before, 'count' => count($occurrences)];
+    }
+
+    /**
+     * Regression test for dynamic/silverstripe-calendar#260.
+     *
+     * An unbounded DAILY event that started more than ~3 years ago used to iterate from
+     * its StartDate, so CarbonPeriod's lazy range filter rejected more than its 1000
+     * consecutive rejections and threw Carbon\Exceptions\UnreachableException out of the
+     * expansion - a correctly parsed Y-m-d feed window returned HTTP 500.
+     */
+    public function testOldDailyEventExpandsOneMonthWindowWithoutBailing()
+    {
+        $event = EventPage::create([
+            'Title' => 'Ancient Daily Event',
+            'StartDate' => '2021-01-04',
+            'StartTime' => '08:00:00',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-01', '2025-06-30'));
+        $dates = array_map(function ($occurrence) {
+            return (string) $occurrence->StartDate;
+        }, $occurrences);
+
+        $this->assertCount(30, $occurrences, 'A one-month window must expand to its 30 dates');
+        $this->assertEquals('2025-06-01', $dates[0], 'Expansion starts at the range start');
+        $this->assertEquals('2025-06-30', end($dates), 'Expansion ends at the range end');
+        $this->assertContains('2025-06-15', $dates);
+    }
+
+    /**
+     * Regression test for dynamic/silverstripe-calendar#260.
+     *
+     * Exception lookups used to be one SELECT per generated occurrence date. They are now
+     * a single memoised query per expansion, so the cost must not grow with the window.
+     */
+    public function testExceptionQueriesStayConstantAsTheWindowGrows()
+    {
+        $event = EventPage::create([
+            'Title' => 'June Daily Event',
+            'StartDate' => '2025-06-01',
+            'StartTime' => '09:00:00',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-06-30',
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        // Positive control: prove the counter actually observes an EventException query,
+        // so a counter that silently always reads zero cannot make the assertions below
+        // pass for the wrong reason.
+        $controlEvent = EventPage::get()->byID($event->ID);
+        $controlBefore = $this->databaseQueryCount();
+        EventException::findForEventAndDate($controlEvent, '2025-06-05');
+        $controlAfter = $this->databaseQueryCount();
+        $this->assertGreaterThanOrEqual(
+            2,
+            $controlAfter - $controlBefore,
+            'The query counter must observe a single EventException lookup'
+        );
+
+        $short = $this->expandAndCountQueries($event->ID, '2025-06-01', '2025-06-10');
+        $long = $this->expandAndCountQueries($event->ID, '2025-06-01', '2025-06-30');
+
+        $this->assertSame(10, $short['count'], 'Short window sanity check');
+        $this->assertSame(30, $long['count'], 'Long window sanity check');
+        $this->assertSame(
+            $short['queries'],
+            $long['queries'],
+            'Tripling the window must not triple the exception lookups (short: '
+            . $short['queries'] . ', long: ' . $long['queries'] . ')'
+        );
+        $this->assertLessThan(
+            $long['count'],
+            $long['queries'],
+            'Exception lookups must not be one query per generated date'
+        );
+    }
+
+    /**
+     * Regression test for dynamic/silverstripe-calendar#260.
+     *
+     * getOccurrences() must catch UnreachableException where it is actually thrown - while
+     * iterating, because CarbonPeriod's filter() is lazy - log it, and stop generating
+     * instead of crashing the render path. The overridden period builder below puts the
+     * lattice ~25 years behind the requested window, so Carbon gives up after
+     * CarbonPeriod::NEXT_MAX_ATTEMPTS (1000) consecutive rejections of its lazy range filter.
+     */
+    public function testUnreachableIterationIsCaughtAndLogged()
+    {
+        $event = new class extends EventPage {
+            protected function createDailyPeriod(Carbon $start, Carbon $end): CarbonPeriod
+            {
+                return CarbonPeriod::create(
+                    Carbon::parse('2000-01-01'),
+                    '1 day',
+                    Carbon::parse('2025-07-10')
+                );
+            }
+        };
+
+        $event->Title = 'Unreachable Daily Event';
+        $event->StartDate = '2025-06-20';
+        $event->Recursion = 'DAILY';
+        $event->Interval = 1;
+        $event->ParentID = $this->parentPage->ID;
+
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())
+            ->method('error')
+            ->with($this->stringContains('Error iterating occurrences for event'));
+
+        Injector::nest();
+        try {
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+
+            // iterator_to_array() forces the generator: before the fix the
+            // UnreachableException escaped this line instead of being logged.
+            $occurrences = iterator_to_array($event->getOccurrences('2025-06-20', '2025-06-25'));
+        } finally {
+            Injector::unnest();
+        }
+
+        $this->assertCount(0, $occurrences, 'An unreachable rule stops generation instead of throwing');
+    }
+
+    /**
+     * Happy path: snapping the lattice must not move any occurrence. Weekly event on
+     * Mondays, queried from a Monday three and a half years later.
+     */
+    public function testSnappedWeeklyEventKeepsTheSameDates()
+    {
+        $event = EventPage::create([
+            'Title' => 'Long Running Weekly Event',
+            'StartDate' => '2022-01-03', // Monday
+            'StartTime' => '10:00:00',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-02', '2025-06-30'));
+        $dates = array_map(function ($occurrence) {
+            return (string) $occurrence->StartDate;
+        }, $occurrences);
+
+        $this->assertEquals(
+            ['2025-06-02', '2025-06-09', '2025-06-16', '2025-06-23', '2025-06-30'],
+            $dates,
+            'Every Monday in the window is returned, and only Mondays'
+        );
+    }
+
+    /**
+     * Snapping must land on the event's own lattice, not on the range start: an
+     * every-3-days event only occurs on eventStart + n * 3 days.
+     */
+    public function testSnapLandsOnTheEventLatticeNotTheRangeStart()
+    {
+        $event = EventPage::create([
+            'Title' => 'Every Three Days',
+            'StartDate' => '2021-01-01',
+            'Recursion' => 'DAILY',
+            'Interval' => 3,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-01', '2025-06-20'));
+        $dates = array_map(function ($occurrence) {
+            return (string) $occurrence->StartDate;
+        }, $occurrences);
+
+        $expected = [];
+        for ($cursor = Carbon::parse('2021-01-01'); $cursor->lte('2025-06-20'); $cursor->addDays(3)) {
+            if ($cursor->gte('2025-06-01')) {
+                $expected[] = $cursor->format('Y-m-d');
+            }
+        }
+
+        $this->assertNotEmpty($expected, 'The reference lattice must contain dates in the window');
+        $this->assertEquals($expected, $dates, 'Occurrences are exactly the lattice dates inside the window');
+        $this->assertNotContains('2025-06-01', $dates, 'The range start itself is not an occurrence');
+    }
+
+    /**
+     * A DELETED exception still skips its date inside an expanded window, and a MODIFIED
+     * exception is still applied to it, after the per-expansion memo was introduced.
+     */
+    public function testExceptionsStillApplyThroughTheMemo()
+    {
+        $event = EventPage::create([
+            'Title' => 'Memoised Exceptions Event',
+            'StartDate' => '2025-06-02',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-06-11',
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $event->createException('2025-06-05', 'DELETED', [], 'Cancelled');
+        $event->createException('2025-06-06', 'MODIFIED', ['Title' => 'Changed title'], 'Moved');
+
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-02', '2025-06-11'));
+        $dates = array_map(function ($occurrence) {
+            return (string) $occurrence->StartDate;
+        }, $occurrences);
+
+        $this->assertCount(9, $occurrences, 'The deleted instance is skipped');
+        $this->assertNotContains('2025-06-05', $dates);
+        $this->assertContains('2025-06-06', $dates);
+
+        $modified = null;
+        foreach ($occurrences as $occurrence) {
+            if ((string) $occurrence->StartDate === '2025-06-06') {
+                $modified = $occurrence;
+            }
+        }
+        $this->assertNotNull($modified);
+        $this->assertEquals('Changed title', $modified->Title, 'The modified override is still applied');
+    }
+
+    /**
+     * Regression test for the memo added in dynamic/silverstripe-calendar#260: an
+     * exception written after an expansion has already populated the memo must be visible
+     * to the next expansion, and removing it again must undo that.
+     *
+     * Both write paths are covered separately: a direct EventException::createDeletion()
+     * that goes nowhere near the memo (only getOccurrences()'s per-expansion refresh can
+     * see it, so dropping that refresh fails this test), and createException()/
+     * removeException(), whose clearExceptionMap() calls must also take effect.
+     */
+    public function testMemoIsRefreshedBetweenExpansions()
+    {
+        $event = EventPage::create([
+            'Title' => 'Memo Refresh Event',
+            'StartDate' => '2025-06-03',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-06-12',
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $first = iterator_to_array($event->getOccurrences('2025-06-03', '2025-06-12'));
+        $this->assertCount(10, $first, 'Populate the memo before writing any exception');
+
+        // The discriminating half first: write straight through EventException, so no
+        // memo invalidation hook runs at all, and do it before anything that clears the
+        // memo - otherwise a lazily rebuilt map would hide a missing per-expansion refresh.
+        EventException::createDeletion($event, '2025-06-09', 'Written behind the memo');
+
+        $second = $this->expandDates($event, '2025-06-03', '2025-06-12');
+        $this->assertCount(9, $second, 'An exception written without touching the memo is still picked up');
+        $this->assertNotContains('2025-06-09', $second);
+
+        $event->createException('2025-06-07', 'DELETED', [], 'Cancelled');
+
+        $third = $this->expandDates($event, '2025-06-03', '2025-06-12');
+        $this->assertCount(8, $third, 'The new exception is seen by the next expansion');
+        $this->assertNotContains('2025-06-07', $third);
+
+        $this->assertTrue($event->removeException('2025-06-07'));
+
+        $fourth = $this->expandDates($event, '2025-06-03', '2025-06-12');
+        $this->assertCount(9, $fourth, 'Removing the exception restores the occurrence');
+        $this->assertContains('2025-06-07', $fourth);
+    }
+
+    /**
+     * Expand a window and return just the instance dates.
+     *
+     * @return array<int,string>
+     */
+    private function expandDates(EventPage $event, string $start, string $end): array
+    {
+        $dates = [];
+        foreach ($event->getOccurrences($start, $end) as $occurrence) {
+            $dates[] = (string) $occurrence->StartDate;
+        }
+        return $dates;
+    }
+
+    /**
+     * An expansion that was cut short by UnreachableException must not be written to the
+     * instance cache: getCachedOccurrences() would otherwise serve the incomplete set as a
+     * valid HIT for the whole TTL, which is the failure mode #226 removed for a failed
+     * json_encode().
+     */
+    public function testInterruptedExpansionIsNotCached()
+    {
+        $event = new class extends EventPage {
+            protected function createDailyPeriod(Carbon $start, Carbon $end): CarbonPeriod
+            {
+                return CarbonPeriod::create(
+                    Carbon::parse('2000-01-01'),
+                    '1 day',
+                    Carbon::parse('2025-07-10')
+                );
+            }
+        };
+
+        $event->Title = 'Interrupted Expansion Event';
+        $event->StartDate = '2025-06-20';
+        $event->Recursion = 'DAILY';
+        $event->Interval = 1;
+        $event->ParentID = $this->parentPage->ID;
+        // Pin the key ingredient: EventInstanceCache::generateCacheKey() falls back to
+        // date('Y-m-d H:i:s') when LastEdited is empty, so an unwritten event would get a
+        // different key on each call and assertNull would pass without the fix.
+        $event->LastEdited = '2025-01-01 00:00:00';
+
+        // Deliberately not written: DataObject rejects an anonymous class as an allowed
+        // ClassName, and the cache key only needs the object, not a persisted ID.
+        EventInstanceCache::clearAllCache();
+
+        $this->assertNull(
+            EventInstanceCache::getCachedInstances($event, '2025-06-20', '2025-06-25'),
+            'Nothing is cached before the expansion runs'
+        );
+
+        // The expansion is cut short (and logs) instead of throwing; see
+        // testUnreachableIterationIsCaughtAndLogged for that part.
+        iterator_to_array($event->getCachedOccurrences('2025-06-20', '2025-06-25'));
+
+        $this->assertNull(
+            EventInstanceCache::getCachedInstances($event, '2025-06-20', '2025-06-25'),
+            'An interrupted expansion must not be cached as if it were a result set'
+        );
+    }
+
+    /**
+     * Positive control for the two tests around it: a complete expansion of the same shape
+     * IS written to the instance cache, so the assertNull above cannot be the result of a
+     * cache layer that never writes.
+     */
+    public function testCompleteExpansionIsCached()
+    {
+        $event = EventPage::create([
+            'Title' => 'Cacheable Event',
+            'StartDate' => '2025-06-02',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-06-06',
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+
+        EventInstanceCache::clearAllCache();
+
+        $this->assertNull(
+            EventInstanceCache::getCachedInstances($event, '2025-06-02', '2025-06-06'),
+            'Nothing is cached before the expansion runs'
+        );
+
+        $instances = iterator_to_array($event->getCachedOccurrences('2025-06-02', '2025-06-06'));
+        $this->assertCount(5, $instances);
+
+        $cached = EventInstanceCache::getCachedInstances($event, '2025-06-02', '2025-06-06');
+        $this->assertNotNull($cached, 'A complete expansion is written to the cache');
+        $this->assertCount(5, $cached);
+    }
+
+    /**
+     * A period that cannot be built at all yields nothing - and, like an interrupted
+     * iteration, must not have that nothing cached.
+     */
+    public function testFailedPeriodBuildIsNotCached()
+    {
+        $event = new class extends EventPage {
+            protected function createDailyPeriod(Carbon $start, Carbon $end): CarbonPeriod
+            {
+                throw new \TypeError('Forced TypeError for testing the cache-write guard');
+            }
+        };
+
+        $event->Title = 'Failed Period Build Event';
+        $event->StartDate = '2025-06-20';
+        $event->Recursion = 'DAILY';
+        $event->Interval = 1;
+        $event->ParentID = $this->parentPage->ID;
+        $event->LastEdited = '2025-01-01 00:00:00';
+
+        EventInstanceCache::clearAllCache();
+
+        $occurrences = iterator_to_array($event->getCachedOccurrences('2025-06-20', '2025-06-25'));
+        $this->assertSame([], $occurrences, 'A failed period build yields no instances');
+
+        $this->assertNull(
+            EventInstanceCache::getCachedInstances($event, '2025-06-20', '2025-06-25'),
+            'A failed period build must not be cached as an empty result set'
+        );
+    }
+
+    /**
+     * A window entirely before StartDate yields nothing instead of erroring.
+     */
+    public function testWindowBeforeStartDateIsEmpty()
+    {
+        $event = EventPage::create([
+            'Title' => 'Future Event',
+            'StartDate' => '2027-01-05',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2027-01-15',
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $occurrences = iterator_to_array($event->getOccurrences('2026-06-01', '2026-06-30'));
+
+        $this->assertSame([], $occurrences, 'A window before StartDate yields no instances');
+    }
+
+    /**
+     * A window whose end is before its start yields nothing and does not throw.
+     */
+    public function testInvertedWindowIsEmpty()
+    {
+        $event = EventPage::create([
+            'Title' => 'Inverted Window Event',
+            'StartDate' => '2021-01-04',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-30', '2025-06-01'));
+
+        $this->assertSame([], $occurrences, 'An end before start yields no instances');
     }
 
     /**

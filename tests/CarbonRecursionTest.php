@@ -807,6 +807,10 @@ class CarbonRecursionTest extends SapphireTest
         $event->Recursion = 'DAILY';
         $event->Interval = 1;
         $event->ParentID = $this->parentPage->ID;
+        // Pin the key ingredient: EventInstanceCache::generateCacheKey() falls back to
+        // date('Y-m-d H:i:s') when LastEdited is empty, so an unwritten event would get a
+        // different key on each call and assertNull would pass without the fix.
+        $event->LastEdited = '2025-01-01 00:00:00';
 
         // Deliberately not written: DataObject rejects an anonymous class as an allowed
         // ClassName, and the cache key only needs the object, not a persisted ID.
@@ -824,6 +828,69 @@ class CarbonRecursionTest extends SapphireTest
         $this->assertNull(
             EventInstanceCache::getCachedInstances($event, '2025-06-20', '2025-06-25'),
             'An interrupted expansion must not be cached as if it were a result set'
+        );
+    }
+
+    /**
+     * Positive control for the two tests around it: a complete expansion of the same shape
+     * IS written to the instance cache, so the assertNull above cannot be the result of a
+     * cache layer that never writes.
+     */
+    public function testCompleteExpansionIsCached()
+    {
+        $event = EventPage::create([
+            'Title' => 'Cacheable Event',
+            'StartDate' => '2025-06-02',
+            'Recursion' => 'DAILY',
+            'Interval' => 1,
+            'RecursionEndDate' => '2025-06-06',
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+
+        EventInstanceCache::clearAllCache();
+
+        $this->assertNull(
+            EventInstanceCache::getCachedInstances($event, '2025-06-02', '2025-06-06'),
+            'Nothing is cached before the expansion runs'
+        );
+
+        $instances = iterator_to_array($event->getCachedOccurrences('2025-06-02', '2025-06-06'));
+        $this->assertCount(5, $instances);
+
+        $cached = EventInstanceCache::getCachedInstances($event, '2025-06-02', '2025-06-06');
+        $this->assertNotNull($cached, 'A complete expansion is written to the cache');
+        $this->assertCount(5, $cached);
+    }
+
+    /**
+     * A period that cannot be built at all yields nothing - and, like an interrupted
+     * iteration, must not have that nothing cached.
+     */
+    public function testFailedPeriodBuildIsNotCached()
+    {
+        $event = new class extends EventPage {
+            protected function createDailyPeriod(Carbon $start, Carbon $end): CarbonPeriod
+            {
+                throw new \TypeError('Forced TypeError for testing the cache-write guard');
+            }
+        };
+
+        $event->Title = 'Failed Period Build Event';
+        $event->StartDate = '2025-06-20';
+        $event->Recursion = 'DAILY';
+        $event->Interval = 1;
+        $event->ParentID = $this->parentPage->ID;
+        $event->LastEdited = '2025-01-01 00:00:00';
+
+        EventInstanceCache::clearAllCache();
+
+        $occurrences = iterator_to_array($event->getCachedOccurrences('2025-06-20', '2025-06-25'));
+        $this->assertSame([], $occurrences, 'A failed period build yields no instances');
+
+        $this->assertNull(
+            EventInstanceCache::getCachedInstances($event, '2025-06-20', '2025-06-25'),
+            'A failed period build must not be cached as an empty result set'
         );
     }
 

@@ -33,12 +33,13 @@ trait CarbonRecursion
     protected array $occurrenceCache = [];
 
     /**
-     * Whether the last expansion was cut short by an UnreachableException.
+     * Whether the last expansion was cut short by an UnreachableException, or by a period
+     * that could not be built at all.
      *
      * getCachedOccurrences() must not write a truncated set: an interrupted expansion
      * yields fewer instances than the window contains, and a cache write would then be
      * served as a valid HIT for the whole TTL - the same class of bug as a failed encode
-     * being cached and read back as an empty HIT (#226). Reset at the start of every
+     * being cached and read back as an empty HIT (#226). Reset at the top of every
      * expansion so a later complete run clears it.
      *
      * @var bool
@@ -103,6 +104,12 @@ trait CarbonRecursion
      */
     public function getOccurrences($startDate = null, $endDate = null, ?int $limit = null): Generator
     {
+        // Reset before anything can set it, so a false value once this generator is done
+        // means the expansion covered the whole window. It sits at the very top because
+        // createCarbonPeriod() can also fail, and that path must not be judged by an older
+        // run's flag.
+        $this->expansionInterrupted = false;
+
         if (!$this->eventRecurs()) {
             // For non-recurring events, just return the original if it falls within range
             $eventStart = Carbon::parse($this->StartDate);
@@ -116,15 +123,12 @@ trait CarbonRecursion
         }
 
         $count = 0;
+
         $period = $this->createCarbonPeriod($startDate, $endDate);
 
         if (!$period) {
             return;
         }
-
-        // Reset before iterating: only the iteration below can set this, so a false value
-        // after the loop means this expansion covered the whole window.
-        $this->expansionInterrupted = false;
 
         // Refresh the exception memo once per expansion (one query) rather than once per
         // generated date, so an exception written between two expansions is still picked
@@ -235,6 +239,11 @@ trait CarbonRecursion
                 return $date->between($rangeStart, $rangeEnd, true);
             });
         } catch (\Throwable $e) {
+            // A failed period build yields no instances at all. Mark the expansion as
+            // interrupted so getCachedOccurrences() does not cache that emptiness as a
+            // result set; the 'does not recur' and unknown-pattern nulls above are genuine
+            // answers and stay cacheable.
+            $this->expansionInterrupted = true;
             // Route through LoggerFallback rather than resolving the logger directly: an
             // unguarded lookup/write here would let a broken logger service turn this
             // "prevent crashes" catch into a new, uncaught throwable on the render path -

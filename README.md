@@ -219,6 +219,26 @@ Dynamic\Calendar\Controller\CalendarController:
 
 Categories support color customization and can be managed through the Calendar Admin interface.
 
+A category is a shared taxonomy: the same category can be attached to events belonging to
+several calendars. Events feeds are therefore scoped to a single calendar by default - both
+when a visitor selects a category and when a calendar's `DefaultCategories` are applied - so a
+category filter never returns another calendar's events.
+
+To restore the pre-3.1.0 cross-calendar results for a site that depended on them:
+
+```yaml
+# app/_config/calendar.yml
+Dynamic\Calendar\Page\Calendar:
+  # Widen a category-filtered feed across calendars.
+  # false (default): the feed stays scoped to this calendar.
+  # true: a feed that has categories is queried across all calendars.
+  allow_cross_calendar_feed: true
+```
+
+In 3.x the flag only widens a feed that actually has categories; a feed with no categories has
+always stayed scoped to its own calendar. (This differs from the 2.2.0 release of the 2.x
+branch, where the same setting made the feed cross-calendar unconditionally.)
+
 ### Recurring Events Configuration
 
 Configure default recurrence options:

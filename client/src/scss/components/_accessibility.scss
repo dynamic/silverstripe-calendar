@@ -11,7 +11,7 @@
   margin: -1px !important;
   overflow: hidden !important;
 
-  // Kept for browsers without clip-path support (see browserslist).
+  // Deprecated, but the only clipping property in this rule; kept intentionally.
   // stylelint-disable-next-line property-no-deprecated
   clip: rect(0, 0, 0, 0) !important;
   white-space: nowrap !important;

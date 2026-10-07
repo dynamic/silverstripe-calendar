@@ -140,6 +140,23 @@ class Calendar extends \Page
     private static bool $include_child_categories = false;
 
     /**
+     * Whether a category-filtered events feed may return events from calendars
+     * other than this one.
+     *
+     * Defaults to false, which keeps the feed scoped to this calendar (ParentID)
+     * even when categories are supplied - a category is a shared taxonomy, so
+     * without this scope a category filter, and the DefaultCategories
+     * substitution CalendarController performs when the request carries none,
+     * would leak other calendars' events into this one's feed.
+     *
+     * Set to true to restore the pre-3.1.0 behaviour, where any category in the
+     * feed's category list made the query cross calendar boundaries.
+     *
+     * @var bool
+     */
+    private static bool $allow_cross_calendar_feed = false;
+
+    /**
      * @return string
      */
     public function getLumberjackTitle(): string
@@ -295,16 +312,20 @@ class Calendar extends \Page
 
         $allEvents = ArrayList::create();
 
-        // If categories are provided, query all events across all calendars
-        // If no categories, use ParentID filtering for this calendar only
-        $queryAllEvents = ($categories && $categories->exists());
+        // The feed is scoped to this calendar (ParentID) unless the site has
+        // explicitly opted in to cross-calendar category results. Categories are
+        // a shared taxonomy, so filtering by one must not widen the feed to other
+        // calendars - that also covers CalendarController's DefaultCategories
+        // substitution, which reaches this method with no visitor input at all.
+        $queryAllEvents = ($categories && $categories->exists())
+            && (bool)$this->config()->get('allow_cross_calendar_feed');
 
         // Get regular (non-recurring) events
         $regularEventsFilter = [
             'Recursion' => 'NONE',
         ];
 
-        // Only filter by ParentID if we're not doing category-based filtering across all calendars
+        // ParentID scope, unless the cross-calendar feed opt-in is enabled
         if (!$queryAllEvents) {
             $regularEventsFilter['ParentID'] = $this->ID;
         }
@@ -353,7 +374,7 @@ class Calendar extends \Page
         // Get recurring events and their virtual instances
         $recurringEventsFilter = [];
 
-        // Only filter by ParentID if we're not querying all events for category filtering
+        // ParentID scope on the recurring branch too, unless opted in
         if (!$queryAllEvents) {
             $recurringEventsFilter['ParentID'] = $this->ID;
         }

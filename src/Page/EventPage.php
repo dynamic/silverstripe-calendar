@@ -525,6 +525,13 @@ class EventPage extends \Page
      * feed (issue #150), and the CMS only hideIf()s the time fields rather than nulling
      * them, so the divergent state has to be closed at the write boundary.
      *
+     * The derived EndTime never sorts before its StartTime: when the default hour crosses
+     * midnight while the end still belongs to the start's date, EndTime is clamped to
+     * 23:59:59 instead of wrapping to 00:30-style times (issue #286). Only a start sitting on
+     * that very last second rolls EndDate to the following day, because no same-day end sorts
+     * after it. An explicit EndDate later than StartDate is left alone - the wrapped time
+     * already sorts after the start there.
+     *
      * A StartTime that cannot be parsed is reported through the injected logger (see
      * LoggerFallback::logWithFallback()) at the default warning level - a missing derived
      * default is correctable by the editor, unlike the user-visible output the ICS transform
@@ -571,8 +578,36 @@ class EventPage extends \Page
                 );
                 $startTimeDT = $startTimeObj->getValue() ? new \DateTime($startTimeObj->getValue()) : null;
                 if ($startTimeDT) {
+                    $startDT = clone $startTimeDT;
                     $startTimeDT->add(new \DateInterval('PT1H')); // Add 1 hour
                     $this->EndTime = $startTimeDT->format('H:i:s');
+
+                    // Adding the default hour can roll the clock past midnight (a 23:30 start
+                    // yields 00:30) while the EndDate default below pins EndDate to StartDate,
+                    // which stored an end that sorted before its start - DTEND < DTSTART in the
+                    // ICS, end < start in the events feed (dynamic/silverstripe-calendar#286).
+                    // Only an end that shares the start's date can be affected: with an explicit
+                    // later EndDate the wrapped time already sorts after the start.
+                    if (!$this->EndDate || $this->EndDate === $this->StartDate) {
+                        $endOfDay = (clone $startDT)->setTime(23, 59, 59);
+                        if ($startTimeDT > $endOfDay) {
+                            if ($startDT < $endOfDay) {
+                                // Keep the event inside its start day by clamping to its last
+                                // second instead of spilling into the next one.
+                                $this->EndTime = $endOfDay->format('H:i:s');
+                            } elseif ($this->StartDate) {
+                                // The start already sits on the last second of its day, so no
+                                // same-day end sorts after it; the event has to carry an EndDate
+                                // on the following day for end > start to hold at all.
+                                $nextDay = $this->nextDay($this->StartDate);
+                                if ($nextDay !== null) {
+                                    $this->EndDate = $nextDay;
+                                }
+                            } else {
+                                $this->EndTime = $endOfDay->format('H:i:s');
+                            }
+                        }
+                    }
                 } else {
                     $this->logWithFallback(
                         "EventPage: Failed to parse StartTime '{$this->StartTime}' as DBTime in onBeforeWrite."
@@ -590,6 +625,33 @@ class EventPage extends \Page
         if ($this->StartDate && !$this->EndDate) {
             $this->EndDate = $this->StartDate;
         }
+    }
+
+    /**
+     * The day after a stored Y-m-d date, used when a derived end can only sort after its
+     * start by crossing into the next day (see the midnight-wrap clamp in onBeforeWrite()).
+     *
+     * Returns null rather than throwing on a StartDate this hook cannot make sense of - the
+     * end time was already derived by then, so inventing an EndDate would be worse than
+     * leaving the one the editor set.
+     *
+     * @param string $date
+     * @return string|null
+     */
+    protected function nextDay(string $date): ?string
+    {
+        try {
+            $dateObj = new \DateTime($date);
+        } catch (\Throwable $e) {
+            $this->logWithFallback(
+                "EventPage: Failed to parse StartDate '{$date}' for the EndDate roll-over: " .
+                $e->getMessage()
+            );
+            return null;
+        }
+        $dateObj->modify('+1 day');
+
+        return $dateObj->format('Y-m-d');
     }
 
     /**

@@ -15,6 +15,7 @@ use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Versioned\Versioned;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionClass;
 use ReflectionMethod;
 
@@ -58,19 +59,19 @@ class EventPageTest extends SapphireTest
 
         $event = EventPage::get()->byID($event->ID);
 
-        $this->assertEquals(3, $event->allChildren()->count());
+        $this->assertEquals(3, $event->getRecurringInstances()->count());
 
         $event->Interval = 1;
         $event->writeToStage(Versioned::DRAFT);
         $event->publishRecursive();
 
-        $this->assertEquals(7, $event->allChildren()->count());
+        $this->assertEquals(7, $event->getRecurringInstances()->count());
 
         $event->Interval = 2;
         $event->writeToStage(Versioned::DRAFT);
         $event->publishRecursive();
 
-        $this->assertEquals(3, $event->allChildren()->count());
+        $this->assertEquals(3, $event->getRecurringInstances()->count());
 
 
         Config::modify()->set(EventPage::class, 'recursion', false);
@@ -456,21 +457,23 @@ class EventPageTest extends SapphireTest
     }
 
     /**
-     * allChildren() returns an ArrayList of virtual EventInstance records for the recurring
-     * occurrences only: the original occurrence and any occurrence cancelled by a DELETED
-     * EventException are both excluded.
+     * getRecurringInstances() returns an ArrayList of virtual EventInstance records for the
+     * recurring occurrences only: the original occurrence and any occurrence cancelled by a
+     * DELETED EventException are both excluded. It is deliberately not named after the
+     * Hierarchy child accessor - see testUnpublishRecurringEventRemovesItFromLive().
      */
-    public function testAllChildrenReturnsEventInstances()
+    public function testGetRecurringInstancesReturnsEventInstances()
     {
         Config::modify()->set(EventPage::class, 'recursion', true);
 
         $event = EventPage::get()->byID($this->objFromFixture(EventPage::class, 'one')->ID);
 
-        $children = $event->allChildren();
+        $children = $event->getRecurringInstances();
 
         $this->assertInstanceOf(ArrayList::class, $children);
         // Weekly from 2025-06-18 to 2025-07-30 is 7 occurrences; the original (06-18) is
-        // excluded by allChildren() itself and 06-25 by the DELETED EventException fixture.
+        // excluded by getRecurringInstances() itself and 06-25 by the DELETED EventException
+        // fixture.
         $dates = [];
         foreach ($children as $child) {
             $this->assertInstanceOf(EventInstance::class, $child);
@@ -691,5 +694,167 @@ class EventPageTest extends SapphireTest
         $stored = EventPage::get()->byID($event->ID);
         $this->assertSame('09:00:00', $stored->StartTime);
         $this->assertSame('10:00:00', $stored->EndTime);
+    }
+    /**
+     * Draft and publish a recurring EventPage under the fixture Calendar, then return the
+     * re-fetched record with its publication state asserted. Shared by the #340 regression
+     * tests so each one starts from the same "published, recurs, has occurrences" state that
+     * the CMS editor is in when they press Unpublish or Archive.
+     *
+     * @param string $recursion A CARBON_PATTERNS key, or 'NONE' for a single-instance event
+     * @param string $recursionEndDate
+     * @return EventPage
+     */
+    private function publishEventWithRecursion(string $recursion, string $recursionEndDate): EventPage
+    {
+        Config::modify()->set(EventPage::class, 'recursion', true);
+
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+        $calendar->write();
+        $calendar->publishRecursive();
+
+        $event = EventPage::create();
+        $event->Title = 'Recursion ' . $recursion;
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2025-06-18';
+        $event->StartTime = '09:00:00';
+        $event->EndTime = '10:00:00';
+        $event->EndDate = '2025-06-18';
+        $event->Recursion = $recursion;
+        $event->RecursionEndDate = $recursionEndDate;
+        $event->Interval = 1;
+        $event->write();
+        $event->publishRecursive();
+
+        /** @var EventPage|null $published */
+        $published = EventPage::get()->byID((int)$event->ID);
+        $this->assertNotNull($published, 'The test event must exist on draft');
+        $this->assertTrue(
+            $published->isPublished(),
+            sprintf('The %s test event must be on live before the lifecycle action', $recursion)
+        );
+        return $published;
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function recurrenceProvider(): array
+    {
+        return [
+            'weekly' => ['WEEKLY', '2025-07-30'],
+            'monthly' => ['MONTHLY', '2025-11-18'],
+            'non-recurring' => ['NONE', '2025-06-18'],
+        ];
+    }
+
+    /**
+     * Regression test for #340: EventPage's allChildren override shadowed the framework's
+     * Hierarchy child accessor (PHP method names are case-insensitive) and handed
+     * EventInstance - a ModelData with no delete() - to SiteTree::onBeforeDelete(), so
+     * unpublishing a recurring event threw BadMethodCallException and left it live.
+     *
+     */
+    #[DataProvider('recurrenceProvider')]
+    public function testUnpublishRecurringEventRemovesItFromLive(string $recursion, string $endDate): void
+    {
+        $event = $this->publishEventWithRecursion($recursion, $endDate);
+        $id = (int)$event->ID;
+
+        $this->assertTrue($event->doUnpublish(), sprintf('doUnpublish() must report success for %s', $recursion));
+
+        $this->assertNull(
+            Versioned::get_by_stage(EventPage::class, Versioned::LIVE)->byID($id),
+            sprintf('A %s event must be gone from live after doUnpublish()', $recursion)
+        );
+        $this->assertNotNull(
+            EventPage::get()->byID($id),
+            sprintf('doUnpublish() must leave the %s draft record alone', $recursion)
+        );
+    }
+
+    /**
+     * Regression test for #340: archiving a recurring event threw the same exception and left
+     * both stages populated.
+     *
+     */
+    #[DataProvider('recurrenceProvider')]
+    public function testArchiveRecurringEventRemovesItFromBothStages(string $recursion, string $endDate): void
+    {
+        $event = $this->publishEventWithRecursion($recursion, $endDate);
+        $id = (int)$event->ID;
+
+        $this->assertTrue($event->doArchive(), sprintf('doArchive() must report success for %s', $recursion));
+
+        $this->assertNull(
+            Versioned::get_by_stage(EventPage::class, Versioned::LIVE)->byID($id),
+            sprintf('A %s event must be gone from live after doArchive()', $recursion)
+        );
+        $this->assertNull(
+            EventPage::get()->byID($id),
+            sprintf('A %s event must be gone from draft after doArchive()', $recursion)
+        );
+    }
+
+    /**
+     * Regression test for #340: the cascade ran unwrapped in a transaction, so archiving a
+     * Calendar whose children included a recurring event could delete the children that came
+     * first and then throw. Both a recurring and a plain child must leave live together.
+     */
+    public function testArchiveCalendarWithRecurringChildRemovesWholeTree(): void
+    {
+        $recurring = $this->publishEventWithRecursion('WEEKLY', '2025-07-30');
+
+        /** @var Calendar|null $calendar */
+        $calendar = Calendar::get()->byID((int)$recurring->ParentID);
+        $this->assertNotNull($calendar, 'The recurring event must have a Calendar parent');
+
+        $plain = EventPage::create();
+        $plain->Title = 'Plain sibling';
+        $plain->ParentID = $calendar->ID;
+        $plain->StartDate = '2025-06-20';
+        $plain->StartTime = '09:00:00';
+        $plain->EndTime = '10:00:00';
+        $plain->EndDate = '2025-06-20';
+        $plain->Recursion = 'NONE';
+        $plain->write();
+        $plain->publishRecursive();
+
+        $recurringID = (int)$recurring->ID;
+        $plainID = (int)$plain->ID;
+        $calendarID = (int)$calendar->ID;
+        $this->assertTrue(
+            $plain->isPublished(),
+            'The plain sibling must be on live before the calendar is archived'
+        );
+
+        $this->assertTrue($calendar->doArchive(), 'doArchive() must report success for the Calendar');
+
+        $live = Versioned::get_by_stage(EventPage::class, Versioned::LIVE);
+        $this->assertNull(
+            $live->byID($recurringID),
+            'The recurring child must be gone from live with its calendar'
+        );
+        $this->assertNull(
+            $live->byID($plainID),
+            'The plain child must be gone from live with its calendar - a partial cascade is the bug'
+        );
+        $this->assertNull(
+            EventPage::get()->byID($recurringID),
+            'The recurring child must be gone from draft too, since the calendar was archived'
+        );
+        $this->assertNull(
+            EventPage::get()->byID($plainID),
+            'The plain child must be gone from draft too, since the calendar was archived'
+        );
+        $this->assertNull(
+            Versioned::get_by_stage(Calendar::class, Versioned::LIVE)->byID($calendarID),
+            'The Calendar itself must be gone from live after doArchive()'
+        );
+        $this->assertNull(
+            Calendar::get()->byID($calendarID),
+            'The Calendar itself must be gone from draft after doArchive()'
+        );
     }
 }

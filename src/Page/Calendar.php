@@ -353,7 +353,25 @@ class Calendar extends \Page
         if ($applyDateFilter) {
             $whereClause = [];
             if ($fromDate) {
-                $whereClause['StartDate >= ?'] = $fromDate->format('Y-m-d');
+                // Issue #267: the lower bound is the standard interval-overlap predicate,
+                // not a 'StartDate >=' bound. An event that started before the window and
+                // has not ended by its start is still running and belongs in the feed;
+                // only an event whose end falls before the window is out. The StartDate
+                // arm keeps the predicate purely additive for rows whose EndDate precedes
+                // their StartDate (broken data the CMS can save): they stay admitted and
+                // the PHP pass below decides, so no event disappears beyond what the fix
+                // requires. It also covers rows whose EndDate is NULL, which is why the
+                // predicate needs no IS NULL arm: such a row is admitted exactly when its
+                // StartDate is at or after the window start, and resolveFeedEndDate()
+                // below treats the missing end as that same StartDate. There is
+                // deliberately no "EndDate = ''" arm either: EndDate is a Date column, so
+                // no row can hold an empty string, and MySQL 8 rejects the comparison
+                // outright (ERROR 1525 "Incorrect DATE value: ''") rather than warning the
+                // way MariaDB does.
+                $whereClause['(StartDate >= ? OR EndDate >= ?)'] = [
+                    $fromDate->format('Y-m-d'),
+                    $fromDate->format('Y-m-d'),
+                ];
             }
             if ($toDate) {
                 $whereClause['StartDate <= ?'] = $toDate->format('Y-m-d');
@@ -502,16 +520,27 @@ class Calendar extends \Page
             // If date filtering was requested, ensure event is within range
             if ($applyDateFilter) {
                 try {
-                    $eventDate = Carbon::parse($event->StartDate);
+                    $eventDate = Carbon::parse((string)$event->StartDate)->startOfDay();
 
-                    // Skip events before the requested start date (compare dates only, not times)
-                    if ($fromDate && $eventDate->startOfDay()->lt($fromDate->copy()->startOfDay())) {
+                    // Skip events after the requested end date (compare dates only, not
+                    // times). The upper bound stays on StartDate: an event that has not
+                    // started yet cannot overlap the window.
+                    if ($toDate && $eventDate->gt($toDate->copy()->startOfDay())) {
                         continue;
                     }
 
-                    // Skip events after the requested end date (compare dates only, not times)
-                    if ($toDate && $eventDate->startOfDay()->gt($toDate->copy()->startOfDay())) {
-                        continue;
+                    // Issue #267: the lower bound mirrors the SQL overlap predicate and
+                    // compares the event's END, because a recurring occurrence and a
+                    // one-time event both reach this loop. EventInstance already carries an
+                    // instance-relative EndDate, so multi-day occurrences spanning the
+                    // window start survive here too; widening their generation window is
+                    // still tracked separately in dynamic/silverstripe-calendar#312.
+                    if ($fromDate) {
+                        $eventEnd = $this->resolveFeedEndDate($event, $eventDate);
+
+                        if ($eventEnd->lt($fromDate->copy()->startOfDay())) {
+                            continue;
+                        }
                     }
                 } catch (\Exception $e) {
                     // Skip events with unparseable dates
@@ -534,6 +563,44 @@ class Calendar extends \Page
         $this->extend('updateEventsFeed', $allEvents);
 
         return $allEvents;
+    }
+
+    /**
+     * The date an event stops overlapping the feed window, for the lower bound of
+     * Calendar::getEventsFeed() (dynamic/silverstripe-calendar#267).
+     *
+     * EndDate is used when it holds a usable date. Anything else - a NULL column on a
+     * row written before EventPage::onBeforeWrite() derived EndDate, a value the date
+     * parser rejects, or one that precedes the event's own StartDate (a nonsensical range
+     * that must not silently hide an event whose start is in the window) - falls back to
+     * StartDate, which is the same default EventPage::onBeforeWrite() and
+     * EventInstance::calculateVirtualProperties() apply. An empty or unparseable value is
+     * handled here rather than in the feed's SQL, where comparing a Date column to '' is
+     * an error on MySQL 8.
+     *
+     * @param mixed $event EventPage or virtual EventInstance
+     * @param Carbon $eventDate The event's StartDate, already truncated to the day
+     * @return Carbon The day the event ends, truncated to the day
+     */
+    private function resolveFeedEndDate($event, Carbon $eventDate): Carbon
+    {
+        $rawEnd = (string)($event->EndDate ?? '');
+
+        if ($rawEnd !== '') {
+            try {
+                $eventEnd = Carbon::parse($rawEnd)->startOfDay();
+            } catch (\Exception $e) {
+                // Treat an unparseable EndDate as no known end rather than dropping the
+                // event, which is how a NULL EndDate is already resolved.
+                return $eventDate;
+            }
+
+            if ($eventEnd->gte($eventDate)) {
+                return $eventEnd;
+            }
+        }
+
+        return $eventDate;
     }
 
     /**

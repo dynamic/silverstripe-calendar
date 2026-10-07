@@ -110,6 +110,20 @@ The module supports complex recurring patterns:
 - Exception dates for holidays or special circumstances
 - End dates or occurrence limits
 
+> **Upgrading from 2.x or 3.0.x:** `EventPage` no longer overrides `allChildren()` to
+> return occurrences - every 2.x and 3.0.x release did. That name belongs to
+> `Hierarchy::AllChildren()`, and returning virtual `EventInstance` objects
+> from it broke unpublish, archive and delete for recurring events, because `SiteTree` deletes
+> every entry it finds there
+> ([#340](https://github.com/dynamic/silverstripe-calendar/issues/340)). `$event->allChildren()`
+> now returns the event's real child pages - normally none. Code that listed occurrences through
+> it must call `getRecurringInstances()` (the previous behaviour: an `ArrayList` of occurrences
+> minus the series start) or `getOccurrences()` (a `Generator` over every occurrence, including
+> the first, so `->count()` and the other `ArrayList` methods do not apply to its return value).
+> There is deliberately no same-name deprecation wrapper:
+> any method still spelled that way re-creates the bug, since PHP method names are
+> case-insensitive.
+
 ## Frontend Integration
 
 ### Hybrid Calendar Architecture

@@ -775,20 +775,30 @@ class EventPage extends \Page
     }
 
     /**
-     * Get all child events/instances for this recurring event
+     * Get the recurring occurrences of this event as virtual instances, excluding the
+     * occurrence that starts the series.
+     *
+     * This is deliberately NOT named allChildren(): PHP method names are case-insensitive, so
+     * an allChildren() override here silently replaced Hierarchy::AllChildren() and returned
+     * EventInstance objects - a ModelData with no delete() - to SiteTree::onBeforeDelete(),
+     * duplicateWithChildren() and getDescendantIDList(). Unpublishing or archiving a recurring
+     * event then threw BadMethodCallException mid-cascade and left the record live
+     * (dynamic/silverstripe-calendar#340). Callers who want the framework's hierarchy children
+     * get Hierarchy::AllChildren(); callers who want occurrences get this method or
+     * getOccurrences().
      *
      * For the Carbon system, this returns an ArrayList of virtual instances
      *
      * @return \SilverStripe\Model\List\ArrayList<EventInstance>
      */
-    public function allChildren()
+    public function getRecurringInstances()
     {
         // Use virtual instances with Carbon system
         if (!$this->eventRecurs()) {
             return \SilverStripe\Model\List\ArrayList::create();
         }
 
-        // Get occurrences within a reasonable timeframe for testing
+        // Get occurrences within a reasonable timeframe
         $endDate = $this->RecursionEndDate ? Carbon::parse($this->RecursionEndDate) :
             Carbon::parse($this->StartDate)->addMonth();
         $occurrences = $this->getOccurrences($this->StartDate, $endDate);

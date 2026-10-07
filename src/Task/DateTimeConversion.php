@@ -59,12 +59,39 @@ use Symfony\Component\Console\Input\InputInterface;
  * publish content, so run it while the site is quiet: a row an editor saves mid-run is written
  * from the snapshot this task read.
  *
- * Usage: sake calendar-datetime-conversion-task
+ * A legacy value that reads as a date outside the range the date columns can hold - a MySQL
+ * zero date (`0000-00-00 00:00:00`) is the common case, and strtotime() reads it happily as
+ * year -0001 - is refused as a failure and named, not converted. Such a row stays unconverted,
+ * so it is counted failed on every run until the data is fixed by hand: a run that quietly
+ * skipped it would hide a corrupt row.
+ *
+ * Usage: sake tasks:calendar-datetime-conversion-task
  *        (also reachable in a browser at dev/tasks/calendar-datetime-conversion-task)
  */
 class DateTimeConversion extends BuildTask
 {
-    private static string $segment = 'calendar-datetime-conversion-task';
+    // silverstripe/framework ^6.0 resolves a task's name through PolyCommand::$commandName.
+    // The SS4/SS5 BuildTask::$segment spelling is read by nothing in SS6: left unset here the
+    // task would register as tasks:Dynamic-Calendar-Task-DateTimeConversion and the invocation
+    // the README documents would fail with "command not found", which is load-bearing on the
+    // upgrade path this task exists to serve.
+    protected static string $commandName = 'calendar-datetime-conversion-task';
+
+    /**
+     * The lowest timestamp this task will read out of a legacy column.
+     *
+     * 1000-01-01 00:00:00, the earliest date a MySQL DATE/DATETIME column can hold - which is
+     * what both the legacy composite column and the modern StartDate/EndDate columns are. A
+     * value that parses below it cannot land in the column anyway, and the one that gets there
+     * most often (the zero date a NULL-in-a-DATETIME dump leaves behind) parses to year -0001,
+     * so refusing below this line is what keeps date() from inventing `-0001-11-30`.
+     *
+     * Stated as a UTC epoch, while parseLegacy() parses in PHP's default timezone: the two
+     * disagree by the site's UTC offset at most, which shifts this boundary by hours at a date
+     * two millennia away and so never decides whether a real legacy value passes. The zero date
+     * lands about 31 billion seconds below this floor (year -0001 against a year 1000 floor).
+     */
+    public const MIN_ACCEPTED_TIMESTAMP = -30610224000;
 
     protected string $title = 'Calendar - Legacy Datetime Conversion Task';
 
@@ -332,9 +359,12 @@ class DateTimeConversion extends BuildTask
     /**
      * Read one legacy composite value as a timestamp.
      *
-     * Refuses rather than guessing: strtotime() returns false for a value it cannot read and
-     * date() would turn that into 1970-01-01, quietly inventing a date on an event. The caller
-     * turns this into a counted failure and carries on with the next row.
+     * Refuses rather than guessing, in two ways. strtotime() returns false for a value it
+     * cannot read and date() would turn that into 1970-01-01, quietly inventing a date on an
+     * event. And a value it *can* read may read to a date the columns cannot hold: the MySQL
+     * zero date `0000-00-00 00:00:00` is a truthy string strtotime() accepts, rendering as
+     * `-0001-11-30`, so anything below MIN_ACCEPTED_TIMESTAMP is refused too. The caller turns
+     * either into a counted failure and carries on with the next row.
      *
      * @param mixed $value
      * @param string $field
@@ -351,6 +381,17 @@ class DateTimeConversion extends BuildTask
                 $field,
                 (string)$value,
                 $event->ID ?? 0
+            ));
+        }
+
+        if ($timestamp < self::MIN_ACCEPTED_TIMESTAMP) {
+            throw new \RuntimeException(sprintf(
+                'Cannot parse %s value "%s" on event %d: it reads as %s, before the earliest date the '
+                . 'date columns can store. A MySQL zero date (0000-00-00 00:00:00) reads this way.',
+                $field,
+                (string)$value,
+                $event->ID ?? 0,
+                date('Y-m-d H:i:s', $timestamp)
             ));
         }
 

@@ -5,6 +5,7 @@ namespace Dynamic\Calendar\Tests\Task;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Task\DateTimeConversion;
+use PHPUnit\Framework\Attributes\DataProvider;
 use SilverStripe\Core\Convert;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\ORM\DataObject;
@@ -445,12 +446,31 @@ class DateTimeConversionTest extends SapphireTest
     }
 
     /**
+     * Corrupt start-half values, each injected in memory the way the test below injects it.
+     *
+     * The second is the one a real upgraded database holds: a MySQL zero date, left behind by a
+     * legacy dump. It is a truthy string that strtotime() reads - as year -0001 - so a guard
+     * that only checked for strtotime() returning false would "convert" the row to a date the
+     * date columns cannot even hold.
+     *
+     * @return array<string,array{0:string}>
+     */
+    public static function providerCorruptLegacyStart(): array
+    {
+        return [
+            'unreadable string' => ['definitely not a date'],
+            'mysql zero date' => ['0000-00-00 00:00:00'],
+        ];
+    }
+
+    /**
      * A legacy value the conversion cannot make sense of must be reported and counted as a
      * failure, not thrown at the operator - and must not leave the row half written: the end
      * half of the same row is perfectly readable, and must not be assigned while the start
      * half is being rejected.
      */
-    public function testUnparseableLegacyDatetimeIsCountedAndWritesNothing(): void
+    #[DataProvider('providerCorruptLegacyStart')]
+    public function testUnparseableLegacyDatetimeIsCountedAndWritesNothing(string $corrupt): void
     {
         $event = $this->createEvent([
             'Title' => 'Corrupt legacy row',
@@ -469,7 +489,7 @@ class DateTimeConversionTest extends SapphireTest
         // Corrupt the start half in memory only: a DATETIME column cannot hold this, but the
         // guard must not depend on the current column type to stay reachable, and the cleanup
         // task keeps these columns in place until it is dropped.
-        $event->setField('StartDatetime', 'definitely not a date');
+        $event->setField('StartDatetime', $corrupt);
 
         $task = $this->task();
         $buffer = new BufferedOutput();
@@ -486,7 +506,7 @@ class DateTimeConversionTest extends SapphireTest
             $this->assertSame(0, $property->getValue($task), "{$counter} must not move on failure");
         }
 
-        $this->assertStringContainsString('definitely not a date', $buffer->fetch());
+        $this->assertStringContainsString($corrupt, $buffer->fetch());
         $this->assertSame($versions, $this->versionCount(), 'A rejected row must not be written');
 
         $stored = $this->rowValues($event->ID, ['StartDate', 'StartTime', 'EndDate', 'EndTime']);
@@ -495,6 +515,44 @@ class DateTimeConversionTest extends SapphireTest
             $stored,
             'The readable end half must not be assigned while the start half is rejected'
         );
+    }
+
+    /**
+     * The zero date refused by the row-level test above is refused by the parse itself, not by
+     * the database refusing to store the result. That distinction is the finding: pre-fix the
+     * parse happily returned a timestamp, and whether the row survived depended on the column.
+     */
+    public function testParseLegacyRefusesTimestampsOutsideTheColumnRange(): void
+    {
+        $event = $this->createEvent([
+            'Title' => 'Zero date guard',
+            'StartDate' => '2025-10-08',
+            'StartTime' => '09:00:00',
+            'EndDate' => '2025-10-08',
+            'EndTime' => '10:00:00',
+        ]);
+        $task = $this->task();
+
+        // The readable value still parses; the guard must not have become a blanket refusal.
+        $parsed = $this->call($task, 'parseLegacy', ['2025-11-16 09:00:00', 'StartDatetime', $event]);
+        $this->assertSame('2025-11-16', date('Y-m-d', (int) $parsed), 'A readable legacy value must parse');
+
+        foreach (['0000-00-00 00:00:00', '0000-00-00'] as $zeroDate) {
+            $thrown = null;
+
+            try {
+                $this->call($task, 'parseLegacy', [$zeroDate, 'StartDatetime', $event]);
+            } catch (\RuntimeException $e) {
+                $thrown = $e->getMessage();
+            }
+
+            $this->assertNotNull(
+                $thrown,
+                "The legacy zero date \"{$zeroDate}\" must be refused by the parse, not returned as a timestamp"
+            );
+            $this->assertStringContainsString('StartDatetime', (string) $thrown);
+            $this->assertStringContainsString($zeroDate, (string) $thrown);
+        }
     }
 
     /**

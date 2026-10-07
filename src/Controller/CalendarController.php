@@ -1205,24 +1205,25 @@ class CalendarController extends \PageController
         $filterPart = $filterParts === [] ? 'no-filters' : 'filters-' . md5(implode('|', $filterParts));
 
         // The origin the body was rendered for. The feed embeds absolute URLs
-        // ('url' => $event->AbsoluteLink() above, and the ICS path builds them
-        // the same way), whose host and scheme come from the request when
-        // alternate_base_url is not pinned - so two requests for the same
-        // calendar, window, categories and stage can produce two different
-        // bodies. Without this part a request that arrived on an
+        // ('url' => $event->AbsoluteLink() above), whose host and scheme come from
+        // the request when alternate_base_url is not pinned - so two requests for
+        // the same calendar, window, categories and stage can produce two
+        // different bodies. Without this part a request that arrived on an
         // attacker-chosen Host seeded the shared CalendarJSON pool with links
-        // pointing at that origin, and every later visitor to the same window
-        // read those links back for the remainder of json_cache_ttl (issue #206).
+        // pointing at that origin, and every later visitor to the same window read
+        // those links back for the remainder of json_cache_ttl (issue #206).
         // absoluteBaseURL() rather than protocolAndHost() because it carries the
         // base path too: a deployment served under a subdirectory renders
         // different links, so it is a different body and wants a different entry.
         //
-        // Cost is one entry per origin a site answers on, which a wildcard vhost
-        // or multi-domain deployment pays for. Pinning alternate_base_url (or
-        // SS_ALLOWED_HOSTS, which rejects a foreign Host before it reaches the
-        // app) collapses that back to one key per site, and is the cheaper answer
-        // where there is exactly one canonical origin - noted on #193, which
-        // tracks this key's cardinality budget.
+        // Cost is one entry per origin a site answers on, which a wildcard vhost or
+        // multi-domain deployment pays for. Pinning alternate_base_url (or
+        // SS_ALLOWED_HOSTS, which rejects a foreign Host before it reaches the app)
+        // collapses that back to one key per site, and is the cheaper answer where
+        // there is exactly one canonical origin. The per-origin growth this adds is
+        // bounded by the cache TTL and sits inside the same accepted-risk position
+        // already taken for this key's cardinality; this component resolves none of
+        // that, and #206 is where the tradeoff it makes is recorded.
         $origin = md5(Director::absoluteBaseURL());
 
         $parts = [

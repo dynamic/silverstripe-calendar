@@ -697,6 +697,143 @@ class EventPageTest extends SapphireTest
     }
 
     /**
+     * The default 1-hour EndTime must never sort before its StartTime once the EndDate
+     * default pins the end to the start's date: dynamic/silverstripe-calendar#286. A 23:30
+     * start derived EndTime 00:30 on the same date, so DTEND < DTSTART in the ICS export and
+     * end < start in the events feed.
+     */
+    public function testDefaultEndTimeIsClampedWhenTheHourRollsPastMidnight(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Late night event';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2027-03-03';
+        $event->StartTime = '23:30:00';
+        $event->AllDay = 0;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertSame('2027-03-03', $stored->EndDate, 'A clamped event must stay on its start day');
+        $this->assertSame('23:59:59', $stored->EndTime);
+        $this->assertGreaterThan(
+            $stored->StartDate . ' ' . $stored->StartTime,
+            $stored->EndDate . ' ' . $stored->EndTime,
+            'The stored end must sort strictly after the stored start'
+        );
+    }
+
+    /**
+     * A 23:00 start lands exactly on midnight once the default hour is added, which is a wrap
+     * like any other and is clamped the same way (dynamic/silverstripe-calendar#286).
+     */
+    public function testDefaultEndTimeIsClampedWhenTheHourLandsExactlyOnMidnight(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Event ending at midnight';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2027-03-03';
+        $event->StartTime = '23:00:00';
+        $event->AllDay = 0;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertSame('2027-03-03', $stored->EndDate);
+        $this->assertSame('23:59:59', $stored->EndTime);
+        $this->assertGreaterThan(
+            $stored->StartDate . ' ' . $stored->StartTime,
+            $stored->EndDate . ' ' . $stored->EndTime,
+            'The stored end must sort strictly after the stored start'
+        );
+    }
+
+    /**
+     * The clamp is a midnight-wrap guard and nothing else: a 22:30 start still gets the plain
+     * 23:30:00 end, so ordinary late-evening events keep their real one-hour duration.
+     */
+    public function testDefaultEndTimeIsNotClampedBeforeTheMidnightWrap(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Evening event';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2027-03-03';
+        $event->StartTime = '22:30:00';
+        $event->AllDay = 0;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertSame('2027-03-03', $stored->EndDate);
+        $this->assertSame('23:30:00', $stored->EndTime, 'A non-wrapping derivation must keep the 1-hour default');
+        $this->assertGreaterThan(
+            $stored->StartDate . ' ' . $stored->StartTime,
+            $stored->EndDate . ' ' . $stored->EndTime
+        );
+    }
+
+    /**
+     * A start sitting on the very last second of its day is the one case the clamp cannot
+     * solve inside that day - no same-day end sorts after it - so EndDate rolls to the
+     * following day instead. A month-end date is used to pin the roll-over itself.
+     */
+    public function testDefaultEndTimeRollsEndDateForwardForALastSecondStart(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Last second start';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2027-03-31';
+        $event->StartTime = '23:59:59';
+        $event->AllDay = 0;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertSame('2027-04-01', $stored->EndDate, 'The end date must roll across the month boundary');
+        $this->assertSame('00:59:59', $stored->EndTime, 'The plain 1-hour default is kept once the date rolls over');
+        $this->assertGreaterThan(
+            $stored->StartDate . ' ' . $stored->StartTime,
+            $stored->EndDate . ' ' . $stored->EndTime,
+            'The stored end must sort strictly after the stored start'
+        );
+    }
+
+    /**
+     * With an explicit EndDate after StartDate the wrapped time already sorts after the start,
+     * so the clamp must not fire and shorten a genuinely multi-day event.
+     */
+    public function testDefaultEndTimeIsNotClampedForAnExplicitLaterEndDate(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Overnight event';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2027-03-03';
+        $event->StartTime = '23:30:00';
+        $event->EndDate = '2027-03-04';
+        $event->AllDay = 0;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertSame('2027-03-04', $stored->EndDate);
+        $this->assertSame('00:30:00', $stored->EndTime, 'A multi-day event keeps the plain 1-hour default');
+        $this->assertGreaterThan(
+            $stored->StartDate . ' ' . $stored->StartTime,
+            $stored->EndDate . ' ' . $stored->EndTime
+        );
+    }
+
+    /**
      * Draft and publish a recurring EventPage under the fixture Calendar, then return the
      * re-fetched record with its publication state asserted. Shared by the #340 regression
      * tests so each one starts from the same "published, recurs, has occurrences" state that

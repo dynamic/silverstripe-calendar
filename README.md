@@ -265,7 +265,7 @@ Dynamic\Calendar\Page\Calendar:
 
 ### Frontend Development
 
-The module includes a webpack-based build system for frontend assets:
+The module includes a webpack-based build system for frontend assets. It requires Node 20.19+ or 22.9+:
 
 ```bash
 # Install dependencies
@@ -278,7 +278,7 @@ npm run build:dev
 npm run build
 
 # Watch for changes
-npm run watch
+npm run dev
 ```
 
 ### Testing
@@ -293,6 +293,21 @@ vendor/bin/phpunit
 vendor/bin/phpcs src/ tests/ --standard=phpcs.xml.dist
 vendor/bin/phpstan analyse src/ --configuration=phpstan.neon.dist
 ```
+
+Front-end checks run from the module root:
+
+```bash
+# Stylesheet lint
+npm run lint:css
+
+# Browser regression specs (tests/playwright); install Chromium once, and again
+# after a Playwright version bump
+npm run install-playwright
+npm test
+```
+
+The specs serve their own fixture page from a local port and load `client/src` and the built
+`client/dist` bundles, so they need no running SilverStripe site.
 
 ## Upgrading
 

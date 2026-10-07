@@ -31,6 +31,7 @@
 
       .event-summary {
         font-size: 0.875rem;
+
         // Limit to 3 lines on mobile
         display: -webkit-box;
         -webkit-line-clamp: 3;
@@ -150,7 +151,7 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  background: rgba(var(--bs-primary-rgb), 0.1);
+  background: rgb(var(--bs-primary-rgb), 0.1);
   color: var(--bs-primary);
   border-radius: 50%;
   width: 40px;
@@ -293,7 +294,7 @@
   }
 
   .swipe-indicator {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgb(255 255 255 / 10%);
     color: var(--bs-light, #f8f9fa);
   }
 }

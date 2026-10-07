@@ -233,7 +233,7 @@ export class FullCalendarView {
         }
 
         if (event.Category) {
-            classes.push(`category - ${event.Category.toLowerCase().replace(/\s+/g, '-')}`);
+            classes.push(`category-${event.Category.toLowerCase().replace(/\s+/g, '-')}`);
         }
 
         return classes.join(' ');
@@ -250,7 +250,7 @@ export class FullCalendarView {
       // Add category-specific styling
         const category = event.extendedProps.category;
         if (category) {
-            const categoryClass = `bg - ${this.getCategoryColor(category)}`;
+            const categoryClass = `bg-${this.getCategoryColor(category)}`;
             element.classList.add(categoryClass);
         }
 

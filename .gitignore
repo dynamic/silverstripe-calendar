@@ -87,3 +87,7 @@ public/build/
 tmp/
 temp/
 /.phpunit.result.cache
+
+# Playwright
+playwright-report/
+test-results/

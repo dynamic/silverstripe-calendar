@@ -264,7 +264,7 @@ npm run build:dev
 npm run build
 
 # Watch for changes
-npm run watch
+npm run dev
 ```
 
 ### Testing

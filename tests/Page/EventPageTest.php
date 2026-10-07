@@ -5,6 +5,7 @@ namespace Dynamic\Calendar\Tests\Page;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Model\EventInstance;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Log\LoggerInterface;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\Core\Injector\Injector;
@@ -15,7 +16,6 @@ use SilverStripe\ORM\DataObject;
 use SilverStripe\ORM\FieldType\DBTime;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\Versioned\Versioned;
-use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionClass;
 use ReflectionMethod;
 
@@ -695,6 +695,7 @@ class EventPageTest extends SapphireTest
         $this->assertSame('09:00:00', $stored->StartTime);
         $this->assertSame('10:00:00', $stored->EndTime);
     }
+
     /**
      * Draft and publish a recurring EventPage under the fixture Calendar, then return the
      * re-fetched record with its publication state asserted. Shared by the #340 regression

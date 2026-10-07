@@ -110,8 +110,9 @@ The module supports complex recurring patterns:
 - Exception dates for holidays or special circumstances
 - End dates or occurrence limits
 
-> **Upgrading from 2.x:** `EventPage` no longer overrides `allChildren()` to return occurrences.
-> That name belongs to `Hierarchy::AllChildren()`, and returning virtual `EventInstance` objects
+> **Upgrading from 3.0.x or 2.x:** `EventPage` no longer overrides `allChildren()` to
+> return occurrences - every release up to and including 3.0.9 did. That name belongs to
+> `Hierarchy::AllChildren()`, and returning virtual `EventInstance` objects
 > from it broke unpublish, archive and delete for recurring events, because `SiteTree` deletes
 > every entry it finds there
 > ([#340](https://github.com/dynamic/silverstripe-calendar/issues/340)). `$event->allChildren()`

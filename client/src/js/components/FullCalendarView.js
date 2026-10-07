@@ -254,10 +254,12 @@ export class FullCalendarView {
             element.classList.add(categoryClass);
         }
 
-      // Add accessibility attributes
+      // Add accessibility attributes. setAttribute() takes text, not markup, so the title
+      // needs no escaping here - concatenated rather than interpolated so the modal's
+      // escape-the-interpolated-values rule (#269) is the only markup path in this file.
         element.setAttribute('role', 'button');
         element.setAttribute('tabindex', '0');
-        element.setAttribute('aria-label', `Event: ${event.title}`);
+        element.setAttribute('aria-label', 'Event: ' + event.title);
 
       // Add tooltip for description
         if (event.extendedProps.description) {
@@ -305,29 +307,60 @@ export class FullCalendarView {
         }
     }
 
+    /**
+     * Escape a value for interpolation into an HTML string.
+     *
+     * Everything the modal renders is untrusted input. The events feed JSON-encodes the CMS
+     * Title but never HTML-escapes it, so a title such as '<img src=x onerror=...>' arrived
+     * here verbatim and executed on insertAdjacentHTML (#269).
+     *
+     * `description` on this path is set only by transformEvents(), which maps it from the
+     * rich-text Content field, so escaping it in full shows that rich text as literal text
+     * rather than as formatted markup. That is deliberate: letting markup through a template
+     * literal is the bug being fixed, and a plain-text escape is the only safe default here.
+     * Which fields the feed actually emits is a separate matter, tracked as issue 270.
+     *
+     * @param {*} value Raw value from the feed; null and undefined become an empty string
+     * @returns {string} HTML-escaped text, safe inside text nodes and quoted attributes
+     */
+    escapeHtml(value)
+    {
+        if (value === null || typeof value === 'undefined') {
+            return '';
+        }
+
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     showEventModal(event)
     {
-      // Create Bootstrap modal for event details
+      // Create Bootstrap modal for event details. Every interpolated value is escaped:
+      // title, url and the rendered details all originate from the untrusted feed JSON.
         const modalHtml = `
-        < div class = "modal fade" id = "eventModal" tabindex = "-1" aria - labelledby = "eventModalLabel" aria - hidden = "true" >
-        < div class = "modal-dialog" >
-          < div class = "modal-content" >
-            < div class = "modal-header" >
-              < h5 class = "modal-title" id = "eventModalLabel" > ${event.title} < / h5 >
-              < button type = "button" class = "btn-close" data - bs - dismiss = "modal" aria - label = "Close" > < / button >
-            <  / div >
-            < div class = "modal-body" >
-              < div class = "event-details" >
+        <div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="eventModalLabel">${this.escapeHtml(event.title)}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="event-details">
                 ${this.renderEventDetails(event)}
-              <  / div >
-            <  / div >
-            < div class = "modal-footer" >
-              < a href = "${event.url}" class = "btn btn-primary" > View Full Details < / a >
-              < button type = "button" class = "btn btn-secondary" data - bs - dismiss = "modal" > Close < / button >
-            <  / div >
-          <  / div >
-        <  / div >
-        <  / div >
+              </div>
+            </div>
+            <div class="modal-footer">
+              <a href="${this.escapeHtml(event.url)}" class="btn btn-primary">View Full Details</a>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>
+        </div>
         `;
 
       // Remove existing modal
@@ -349,22 +382,23 @@ export class FullCalendarView {
         const props = event.extendedProps;
         let html = '';
 
-      // Date and time
-        html += ` < p > < strong > Date: < / strong > ${this.formatEventDate(event)} < / p > `;
+      // Date and time. Locale output is not attacker controlled, but escaping it keeps
+      // every value leaving this method on one rule.
+        html += `<p><strong>Date:</strong> ${this.escapeHtml(this.formatEventDate(event))}</p>`;
 
       // Location
         if (props.location) {
-            html += ` < p > < strong > Location: < / strong > ${props.location} < / p > `;
+            html += `<p><strong>Location:</strong> ${this.escapeHtml(props.location)}</p>`;
         }
 
       // Category
         if (props.category) {
-            html += ` < p > < strong > Category: < / strong > ${props.category} < / p > `;
+            html += `<p><strong>Category:</strong> ${this.escapeHtml(props.category)}</p>`;
         }
 
       // Description
         if (props.description) {
-            html += ` < div > < strong > Description: < / strong > < div class = "mt-2" > ${props.description} < / div > < / div > `;
+            html += `<div><strong>Description:</strong><div class="mt-2">${this.escapeHtml(props.description)}</div></div>`;
         }
 
         return html;
@@ -452,19 +486,23 @@ export class FullCalendarView {
     {
       // Show a simple list view if FullCalendar fails to load
         this.container.innerHTML = `
-        < div class = "alert alert-warning" >
-        < h5 > Calendar View Unavailable < / h5 >
-        < p > The calendar view could not be loaded. Please refresh the page or try again later.< / p >
-        < a href = "${window.location.pathname}?view=list" class = "btn btn-primary" > View Events List < / a >
-        <  / div >
+        <div class="alert alert-warning">
+        <h5>Calendar View Unavailable</h5>
+        <p>The calendar view could not be loaded. Please refresh the page or try again later.</p>
+        <a href="${window.location.pathname}?view=list" class="btn btn-primary">View Events List</a>
+        </div>
         `;
     }
 
     stripHtml(html)
     {
-        const div = document.createElement('div');
-        div.innerHTML = html;
-        return div.textContent || div.innerText || '';
+      // <template> parses markup into an inert document fragment: scripts do not run and an
+      // <img src=x onerror=...> is never loaded, so untrusted feed text can be flattened to
+      // text without the detached-div version of this method executing it first (#269).
+      // Entity decoding is preserved, which a regex strip would lose.
+        const template = document.createElement('template');
+        template.innerHTML = String(html === null || typeof html === 'undefined' ? '' : html);
+        return template.content.textContent || '';
     }
 
   // Public API methods

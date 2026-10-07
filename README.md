@@ -336,10 +336,15 @@ The specs serve their own fixture page from a local port and load `client/src` a
 When upgrading from version 1.x, run the datetime conversion task:
 
 ```bash
-sake dev/tasks/calendar-datetime-conversion-task
+sake tasks:calendar-datetime-conversion-task
 ```
 
-This migrates datetime data to separate date and time fields.
+(In a browser the same task is at `dev/tasks/calendar-datetime-conversion-task`.)
+
+This migrates datetime data to separate date and time fields. A legacy row whose composite
+value cannot be read - an unparseable string, or a MySQL zero date such as
+`0000-00-00 00:00:00` - is reported as a failure and left untouched rather than converted to
+an invented date, so fix the data and run it again.
 
 ### From Earlier 2.x Versions
 

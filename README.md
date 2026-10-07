@@ -251,7 +251,7 @@ Dynamic\Calendar\Page\Calendar:
 
 ### Frontend Development
 
-The module includes a webpack-based build system for frontend assets. It requires Node 20.19 or later:
+The module includes a webpack-based build system for frontend assets. It requires Node 20.19+ or 22.9+:
 
 ```bash
 # Install dependencies

@@ -10,6 +10,9 @@
   padding: 0 !important;
   margin: -1px !important;
   overflow: hidden !important;
+
+  // Kept for browsers without clip-path support (see browserslist).
+  // stylelint-disable-next-line property-no-deprecated
   clip: rect(0, 0, 0, 0) !important;
   white-space: nowrap !important;
   border: 0 !important;
@@ -46,7 +49,7 @@
   .event-card:focus {
     outline: 2px solid var(--bs-primary);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), 0.25);
+    box-shadow: 0 0 0 4px rgb(var(--bs-primary-rgb), 0.25);
   }
 }
 
@@ -68,10 +71,7 @@
         &::before {
           content: "";
           position: absolute;
-          top: -2px;
-          left: -2px;
-          right: -2px;
-          bottom: -2px;
+          inset: -2px;
           border: 2px solid transparent;
           border-radius: calc(var(--bs-border-radius) + 2px);
           transition: border-color 0.2s ease;
@@ -112,11 +112,11 @@
     &:focus {
       outline: 2px solid var(--bs-primary);
       outline-offset: -2px;
-      background-color: rgba(var(--bs-primary-rgb), 0.1);
+      background-color: rgb(var(--bs-primary-rgb), 0.1);
     }
 
     &[aria-selected="true"] {
-      background-color: rgba(var(--bs-primary-rgb), 0.2);
+      background-color: rgb(var(--bs-primary-rgb), 0.2);
 
       &::after {
         content: "Selected";
@@ -140,7 +140,7 @@
 
     // Ensure sufficient color contrast
     &[style*="background-color"] {
-      border: 1px solid rgba(0, 0, 0, 0.2);
+      border: 1px solid rgb(0 0 0 / 20%);
     }
   }
 }
@@ -163,7 +163,7 @@
 
     &:focus {
       border-color: var(--bs-danger);
-      box-shadow: 0 0 0 0.2rem rgba(var(--bs-danger-rgb), 0.25);
+      box-shadow: 0 0 0 0.2rem rgb(var(--bs-danger-rgb), 0.25);
     }
   }
 
@@ -174,7 +174,7 @@
 
     &:focus {
       border-color: var(--bs-success);
-      box-shadow: 0 0 0 0.2rem rgba(var(--bs-success-rgb), 0.25);
+      box-shadow: 0 0 0 0.2rem rgb(var(--bs-success-rgb), 0.25);
     }
   }
 
@@ -283,8 +283,8 @@
         45deg,
         transparent,
         transparent 2px,
-        rgba(255, 255, 255, 0.3) 2px,
-        rgba(255, 255, 255, 0.3) 4px
+        rgb(255 255 255 / 30%) 2px,
+        rgb(255 255 255 / 30%) 4px
       );
     }
 
@@ -295,7 +295,7 @@
     &.event-type-holiday {
       background-image: radial-gradient(
         circle at 2px 2px,
-        rgba(255, 255, 255, 0.3) 1px,
+        rgb(255 255 255 / 30%) 1px,
         transparent 1px
       );
       background-size: 8px 8px;

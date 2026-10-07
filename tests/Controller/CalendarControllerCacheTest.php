@@ -10,6 +10,7 @@ use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
+use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\Cache\CacheFactory;
 use SilverStripe\Core\Config\Config;
@@ -2172,6 +2173,138 @@ class CalendarControllerCacheTest extends FunctionalTest
             LegacyUtf8TitleTestExtension::$corruptTitleAfter = '';
             Calendar::remove_extension(LegacyUtf8TitleTestExtension::class);
             Injector::unnest();
+        }
+    }
+
+    /**
+     * Test 23 (#206): a request carrying a forged Host must not seed the entry a
+     * later legitimate visitor reads.
+     *
+     * The feed body embeds absolute URLs ('url' => AbsoluteLink()), so the origin
+     * it was rendered for is part of the body. The key did not carry one, so the
+     * forged request below wrote an entry pointing at evil.example and the next
+     * ordinary request for the same window, calendar and stage read it back -
+     * `X-Calendar-Cache: HIT` with attacker-chosen links, for the whole
+     * json_cache_ttl (1800s by default).
+     *
+     * Both halves are load-bearing: the MISS is the fix, and the evil.example
+     * assertion on the FORGED response is what stops this passing vacuously -
+     * without it the test would still pass if the request never varied the body
+     * at all and both requests simply missed the cache.
+     *
+     * $_SERVER['HTTP_HOST'] rather than a Host header on the request object:
+     * Director::host() falls back to it when the request is not the one
+     * registered with Injector (these tests call events() directly), and a real
+     * forged request populates it the same way.
+     */
+    public function testForgedHostCannotPoisonTheLegitimateFeed(): void
+    {
+        $event = EventPage::create([
+            'Title' => 'Ordinary Host Event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::now()->format('Y-m-d'),
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+        try {
+            $_SERVER['HTTP_HOST'] = 'evil.example';
+            $forged = $this->snapshotResponse($this->createJsonFeedRequest());
+            $this->assertEquals('MISS', $forged['cache']);
+            $this->assertStringContainsString(
+                'evil.example',
+                $forged['body'],
+                'The forged request must carry its own origin in the body or this test proves nothing'
+            );
+
+            // Same calendar, same window, same stage - only the origin differs.
+            $_SERVER['HTTP_HOST'] = 'example.com';
+            $legitimate = $this->snapshotResponse($this->createJsonFeedRequest());
+            $this->assertEquals(
+                'MISS',
+                $legitimate['cache'],
+                'A request on its own host must not be served the body a forged Host cached (#206)'
+            );
+            $this->assertStringNotContainsString(
+                'evil.example',
+                $legitimate['body'],
+                'The attacker origin must not leak into the legitimate response (#206)'
+            );
+
+            $urls = array_column(json_decode($legitimate['body'], true) ?: [], 'url');
+            $this->assertNotEmpty($urls, 'The fixture must publish an event for the feed to carry');
+            foreach ($urls as $url) {
+                $this->assertMatchesRegularExpression(
+                    '#^https?://example\.com/#',
+                    $url,
+                    'Every url must be rendered for the host that made the request (#206)'
+                );
+            }
+        } finally {
+            if ($previousHost === null) {
+                unset($_SERVER['HTTP_HOST']);
+            } else {
+                $_SERVER['HTTP_HOST'] = $previousHost;
+            }
+        }
+    }
+
+    /**
+     * Test 24 (#206): host and scheme are properties of the key, not only of the
+     * body, and an absent Host (a CLI-style request) must still key cleanly.
+     *
+     * The behavioural test above shows two hosts do not share an entry; this pins
+     * why, at the key itself, so a future edit that drops the component again
+     * fails here even if it happens to leave the bodies looking right.
+     *
+     * Scheme is varied through alternate_base_url, which is how a deployment
+     * pins an origin: Director::protocol()/host() both read it before the request.
+     */
+    public function testCacheKeyIncludesHostSchemeAndSurvivesAnAbsentHost(): void
+    {
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+        try {
+            $_SERVER['HTTP_HOST'] = 'evil.example';
+            $forgedKey = $this->generateEventsCacheKeyFor($this->createJsonFeedRequest());
+
+            $_SERVER['HTTP_HOST'] = 'example.com';
+            $legitimateKey = $this->generateEventsCacheKeyFor($this->createJsonFeedRequest());
+
+            $this->assertNotSame(
+                $forgedKey,
+                $legitimateKey,
+                'Two origins rendering two bodies must never share a key (#206)'
+            );
+
+            Config::modify()->set(Director::class, 'alternate_base_url', 'https://example.com/');
+            $secureKey = $this->generateEventsCacheKeyFor($this->createJsonFeedRequest());
+            $this->assertNotSame(
+                $legitimateKey,
+                $secureKey,
+                'The same host on two schemes renders two bodies, so it must not share a key (#206)'
+            );
+
+            // No Host at all - the CLI/`Director::absoluteBaseURL()`-fallback case
+            // every other test in this file runs under. It must produce a usable
+            // key, not an error or an empty one.
+            unset($_SERVER['HTTP_HOST']);
+            Config::modify()->set(Director::class, 'alternate_base_url', null);
+            $absentHostKey = $this->generateEventsCacheKeyFor($this->createJsonFeedRequest());
+            $this->assertNotSame('', $absentHostKey, 'An absent Host must still produce a key (#206)');
+            $this->assertStringStartsWith('calendar_json_' . $this->calendar->ID . '_', $absentHostKey);
+            $this->assertSame(
+                $absentHostKey,
+                $this->generateEventsCacheKeyFor($this->createJsonFeedRequest()),
+                'An absent Host must key deterministically, not once per request (#206)'
+            );
+        } finally {
+            if ($previousHost === null) {
+                unset($_SERVER['HTTP_HOST']);
+            } else {
+                $_SERVER['HTTP_HOST'] = $previousHost;
+            }
         }
     }
 }

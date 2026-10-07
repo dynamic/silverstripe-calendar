@@ -9,6 +9,7 @@ use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Dynamic\Calendar\Form\CalendarFilterForm;
 use Dynamic\Calendar\Traits\LoggerFallback;
+use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\ORM\DataList;
 use SilverStripe\Model\List\ArrayList;
@@ -1087,6 +1088,12 @@ class CalendarController extends \PageController
      * mint different entries (unbounded pool growth), and worse, lets two
      * requests that produce different bodies share one entry (poisoning).
      *
+     * The origin component is the one part the query itself does not carry, and
+     * it is there for the same reason in the other direction (issue #206): the
+     * body embeds absolute URLs, so two requests whose queries are identical
+     * still render two different bodies when they arrive on different hosts or
+     * schemes, and only the origin keeps those entries apart.
+     *
      * @param HTTPRequest $request
      * @param array{search: string, eventType: string, allDay: string|null} $filters
      * @param int[]|null $resolvedCategoryIDs The same value events() already
@@ -1197,6 +1204,27 @@ class CalendarController extends \PageController
         }
         $filterPart = $filterParts === [] ? 'no-filters' : 'filters-' . md5(implode('|', $filterParts));
 
+        // The origin the body was rendered for. The feed embeds absolute URLs
+        // ('url' => $event->AbsoluteLink() above, and the ICS path builds them
+        // the same way), whose host and scheme come from the request when
+        // alternate_base_url is not pinned - so two requests for the same
+        // calendar, window, categories and stage can produce two different
+        // bodies. Without this part a request that arrived on an
+        // attacker-chosen Host seeded the shared CalendarJSON pool with links
+        // pointing at that origin, and every later visitor to the same window
+        // read those links back for the remainder of json_cache_ttl (issue #206).
+        // absoluteBaseURL() rather than protocolAndHost() because it carries the
+        // base path too: a deployment served under a subdirectory renders
+        // different links, so it is a different body and wants a different entry.
+        //
+        // Cost is one entry per origin a site answers on, which a wildcard vhost
+        // or multi-domain deployment pays for. Pinning alternate_base_url (or
+        // SS_ALLOWED_HOSTS, which rejects a foreign Host before it reaches the
+        // app) collapses that back to one key per site, and is the cheaper answer
+        // where there is exactly one canonical origin - noted on #193, which
+        // tracks this key's cardinality budget.
+        $origin = md5(Director::absoluteBaseURL());
+
         $parts = [
             'calendar_json',
             $this->calendar->ID,
@@ -1204,7 +1232,8 @@ class CalendarController extends \PageController
             $end,
             $cats,
             $filterPart,
-            md5($mode)
+            md5($mode),
+            $origin
         ];
 
         return implode('_', $parts);

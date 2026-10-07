@@ -36,12 +36,28 @@ class DateTimeConversionTest extends SapphireTest
     {
         parent::setUp();
 
+        // Registered before any row exists: a class-level extension is read when the object is
+        // constructed, so an extension added afterwards would not be on those records.
+        EventPage::add_extension(PublishHookTestExtension::class);
+
         $this->calendar = Calendar::create([
             'Title' => 'Conversion Calendar',
             'URLSegment' => 'conversion-calendar',
         ]);
         $this->calendar->write();
         $this->calendar->publishRecursive();
+
+        // The calendar above was just published and fired the hook; only the task's own calls
+        // should be recorded from here on.
+        PublishHookTestExtension::reset();
+    }
+
+    protected function tearDown(): void
+    {
+        EventPage::remove_extension(PublishHookTestExtension::class);
+        PublishHookTestExtension::reset();
+
+        parent::tearDown();
     }
 
     /**
@@ -401,8 +417,14 @@ class DateTimeConversionTest extends SapphireTest
 
         // Reach the task the way a live-context caller would.
         Versioned::set_stage(Versioned::LIVE);
-        [$code, $report] = $this->runTask();
-        Versioned::set_stage(Versioned::DRAFT);
+
+        try {
+            [$code, $report] = $this->runTask();
+        } finally {
+            // Restored even when the run throws, so a failure here cannot leak live reading
+            // mode into the tests that follow.
+            Versioned::set_stage(Versioned::DRAFT);
+        }
 
         $this->assertSame(0, $code, $report);
         $this->assertSame(
@@ -526,8 +548,17 @@ class DateTimeConversionTest extends SapphireTest
         $this->assertStringContainsString('1 published rows still hold an unconverted legacy value', $report);
 
         $this->assertSame('2025-11-10', EventPage::get()->byID($converted->ID)->StartDate);
+        $liveConverted = Versioned::get_by_stage(EventPage::class, Versioned::LIVE)->byID($converted->ID);
+        $this->assertSame(
+            '2025-11-10',
+            $liveConverted->StartDate,
+            'The row the run counted as published must be converted on live'
+        );
         $this->assertSame('2025-11-11', EventPage::get()->byID($heldBack->ID)->StartDate);
-        $this->assertSame('2025-11-11', EventPage::get()->byID($heldBack->ID)->StartDate);
+        $this->assertNull(
+            Versioned::get_by_stage(EventPage::class, Versioned::LIVE)->byID($heldBack->ID)->StartDate,
+            'A held-back row must leave its live copy untouched, not carry the draft edits along'
+        );
     }
 
     /**
@@ -646,5 +677,107 @@ class DateTimeConversionTest extends SapphireTest
         $this->assertSame(0, $secondCode, $secondReport);
         $this->assertStringContainsString('Converted: 0', $secondReport);
         $this->assertStringContainsString('1 published rows still hold an unconverted legacy value', $secondReport);
+    }
+
+    /**
+     * The live mirror has to be a publication, not a version move.
+     *
+     * publishSingle() fires onBeforePublish/onAfterPublish; copyVersionToStage() fires only
+     * onBeforeVersionedPublish/onAfterVersionedPublish. Everything that listens for publication
+     * - Fluent, Subsites, static publishing - is told by the first and never by the second, and
+     * the live field values come out identical either way, so field assertions alone cannot tell
+     * the two apart. The control half of this test mirrors through copyVersionToStage() and
+     * shows exactly that: the live row converts, and nothing is told.
+     */
+    public function testLiveMirrorFiresThePublishHooksAndHeldBackRowsAreNeverPublished(): void
+    {
+        $published = $this->createEvent([
+            'Title' => 'Published event',
+            'StartDate' => '2025-10-17',
+            'StartTime' => '09:00:00',
+            'EndDate' => '2025-10-17',
+            'EndTime' => '10:00:00',
+        ]);
+        $this->forceLegacyRow($published->ID, '2025-11-17 09:15:00', null);
+
+        $heldBack = $this->createEvent([
+            'Title' => 'Held back event',
+            'StartDate' => '2025-10-18',
+            'StartTime' => '09:00:00',
+            'EndDate' => '2025-10-18',
+            'EndTime' => '10:00:00',
+        ]);
+        $this->forceLegacyRow($heldBack->ID, '2025-11-18 09:15:00', null);
+        $draft = EventPage::get()->byID($heldBack->ID);
+        $draft->Summary = 'unpublished edit';
+        $draft->writeToStage(Versioned::DRAFT);
+
+        $draftOnly = EventPage::create([
+            'Title' => 'Draft only event',
+            'ParentID' => $this->calendar->ID,
+            'Recursion' => 'NONE',
+        ]);
+        $draftOnly->write();
+        $this->forceLegacyRow($draftOnly->ID, '2025-11-19 09:15:00', null);
+
+        // A row with nothing to convert until the control run below, so the control's own
+        // publication is the only thing recorded for it.
+        $control = $this->createEvent([
+            'Title' => 'Control event',
+            'StartDate' => '2025-10-19',
+            'StartTime' => '09:00:00',
+            'EndDate' => '2025-10-19',
+            'EndTime' => '10:00:00',
+        ]);
+
+        PublishHookTestExtension::reset();
+        [$code, $report] = $this->runTask();
+
+        $this->assertSame(0, $code, $report);
+        $calls = PublishHookTestExtension::$afterPublishCalls;
+        $this->assertSame(
+            1,
+            $calls[$published->ID] ?? 0,
+            'The live mirror must go through the publish hooks, once, for the row whose stages matched'
+        );
+        $this->assertArrayNotHasKey(
+            $heldBack->ID,
+            $calls,
+            'A held-back row must not be published, so nothing may be told about it'
+        );
+        $this->assertArrayNotHasKey(
+            $draftOnly->ID,
+            $calls,
+            'A draft-only row must never gain a live version, so the hook must not fire'
+        );
+        $this->assertArrayNotHasKey($control->ID, $calls, 'Nothing to convert means nothing published');
+
+        // Control: the old mirror moves the fields without firing the publish hooks, which is
+        // why "live looks right" was never evidence that anything was told.
+        $this->forceLegacyRow($control->ID, '2025-11-20 09:15:00', null);
+
+        $task = new class extends DateTimeConversion {
+            protected function publishLive(EventPage $event): void
+            {
+                $event->copyVersionToStage(Versioned::DRAFT, Versioned::LIVE);
+            }
+        };
+
+        PublishHookTestExtension::reset();
+        [$controlCode, $controlReport] = $this->runTask($task);
+
+        $this->assertSame(0, $controlCode, $controlReport);
+        $this->assertSame(
+            '2025-11-20',
+            Versioned::get_by_stage(EventPage::class, Versioned::LIVE)->byID($control->ID)->StartDate,
+            'Precondition: copyVersionToStage() does move the fields, so the field assertions in '
+                . 'this suite could never have caught it'
+        );
+        $this->assertArrayNotHasKey(
+            $control->ID,
+            PublishHookTestExtension::$afterPublishCalls,
+            'copyVersionToStage() publishes without telling anyone, which is what publishSingle() '
+                . 'replaced it for'
+        );
     }
 }

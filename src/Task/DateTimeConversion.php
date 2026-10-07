@@ -289,19 +289,44 @@ class DateTimeConversion extends BuildTask
     {
         $conversion = [];
 
-        if ($event->StartDatetime && !$event->StartDate) {
+        if ($this->needsStartConversion($event)) {
             $startTimestamp = $this->parseLegacy($event->StartDatetime, 'StartDatetime', $event);
             $conversion['StartDate'] = date('Y-m-d', $startTimestamp);
             $conversion['StartTime'] = date('H:i:s', $startTimestamp);
         }
 
-        if ($event->EndDatetime && !$event->EndDate) {
+        if ($this->needsEndConversion($event)) {
             $endTimestamp = $this->parseLegacy($event->EndDatetime, 'EndDatetime', $event);
             $conversion['EndDate'] = date('Y-m-d', $endTimestamp);
             $conversion['EndTime'] = date('H:i:s', $endTimestamp);
         }
 
         return $conversion === [] ? null : $conversion;
+    }
+
+    /**
+     * Whether this record's start half still has a legacy value and no modern counterpart.
+     *
+     * One definition, used by the conversion and by the outstanding count alike, so the number
+     * reported cannot drift from the work done.
+     *
+     * @param EventPage $event
+     * @return bool
+     */
+    protected function needsStartConversion(EventPage $event): bool
+    {
+        return (bool) ($event->StartDatetime && !$event->StartDate);
+    }
+
+    /**
+     * Whether this record's end half still has a legacy value and no modern counterpart.
+     *
+     * @param EventPage $event
+     * @return bool
+     */
+    protected function needsEndConversion(EventPage $event): bool
+    {
+        return (bool) ($event->EndDatetime && !$event->EndDate);
     }
 
     /**
@@ -335,18 +360,15 @@ class DateTimeConversion extends BuildTask
     /**
      * Whether one record still holds a legacy composite value with no modern counterpart.
      *
-     * The same predicate conversionFor() converts by, so the outstanding count cannot disagree
-     * with the work the task does.
+     * The disjunction of needsStartConversion() and needsEndConversion(), the same two checks
+     * the conversion itself makes, so the outstanding count cannot disagree with the work done.
      *
      * @param EventPage $event
      * @return bool
      */
     protected function hasUnconvertedLegacy(EventPage $event): bool
     {
-        $needsStart = (bool) ($event->StartDatetime && !$event->StartDate);
-        $needsEnd = (bool) ($event->EndDatetime && !$event->EndDate);
-
-        return $needsStart || $needsEnd;
+        return $this->needsStartConversion($event) || $this->needsEndConversion($event);
     }
 
     /**

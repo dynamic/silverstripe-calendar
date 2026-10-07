@@ -315,11 +315,15 @@ export class FullCalendarView {
     /**
      * Escape a value for interpolation into an HTML string.
      *
-     * Everything the modal renders comes from the events feed, which JSON-encodes the CMS
-     * values but never HTML-escapes them, so a title such as '<img src=x onerror=...>'
-     * arrived here verbatim and executed on insertAdjacentHTML (issue #269). The feed's
-     * description is plain text (Event::Summary()), so escaping it in full is intended - no
-     * markup is allowed through.
+     * Everything the modal renders is untrusted input. The events feed JSON-encodes the CMS
+     * Title but never HTML-escapes it, so a title such as '<img src=x onerror=...>' arrived
+     * here verbatim and executed on insertAdjacentHTML (#269).
+     *
+     * `description` on this path is set only by transformEvents(), which maps it from the
+     * rich-text Content field, so escaping it in full shows that rich text as literal text
+     * rather than as formatted markup. That is deliberate: letting markup through a template
+     * literal is the bug being fixed, and a plain-text escape is the only safe default here.
+     * Which fields the feed actually emits is a separate matter, tracked as issue 270.
      *
      * @param {*} value Raw value from the feed; null and undefined become an empty string
      * @returns {string} HTML-escaped text, safe inside text nodes and quoted attributes

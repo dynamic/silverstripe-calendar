@@ -230,13 +230,38 @@ test('a benign event still renders title, details and link', async ({ page }) =>
 test('stripHtml flattens a hostile description without loading it', async ({ page }) => {
     await openPage(page);
 
-    const text = await page.evaluate(
-        (value) => window.__strip(value),
-        '<img src=x onerror="window.__pwned = true">Choir practice'
-    );
+    // An <img> parsed into a detached element is fetched asynchronously, so reading a flag
+    // straight after stripHtml() returns proves nothing - the payload in the old
+    // detached-div version usually won that race. Both requests are awaited instead, and a
+    // positive control (the payload parsed the way the vulnerable code parsed it, one tick
+    // later) supplies a deterministic floor: if the code under test had parsed the markup,
+    // its request would already have been issued by the time the control's arrives.
+    const pwnSeen = page.waitForRequest(/pwn-img\.png/, { timeout: 5000 })
+        .then(() => true)
+        .catch(() => false);
+    const controlSeen = page.waitForRequest(/control-img\.png/, { timeout: 5000 })
+        .then(() => true)
+        .catch(() => false);
 
-    await expect(page.evaluate(() => window.__pwned)).resolves.toBe(false);
-    expect(text).toBe('Choir practice');
+    const result = await page.evaluate(() => {
+        window.__pwned = false;
+        const stripped = window.__strip(
+            '<img src="pwn-img.png" onerror="window.__pwned = true">Choir practice'
+        );
+        const control = document.createElement('div');
+        control.innerHTML = '<img src="control-img.png">Control';
+        return { stripped: stripped, controlText: control.textContent };
+    });
+
+    const controlFired = await controlSeen;
+
+    // Positive control first: a detached <div> parse does fetch its image in this browser,
+    // so a false pwnSeen below is a result about the code, not about timing luck.
+    expect(controlFired).toBe(true);
+    expect(result.controlText).toBe('Control');
+    expect(result.stripped).toBe('Choir practice');
+    expect(await pwnSeen).toBe(false);
+    expect(await page.evaluate(() => window.__pwned)).toBe(false);
 });
 
 test('stripHtml still flattens markup and decodes entities the way the tooltip needs', async ({ page }) => {

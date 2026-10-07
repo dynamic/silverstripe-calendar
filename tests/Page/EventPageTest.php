@@ -802,10 +802,9 @@ class EventPageTest extends SapphireTest
      * Regression test for #340. SiteTree::onBeforeDelete() deletes the calendar's children in
      * AllChildren() order and nothing wraps that cascade in a transaction, so the
      * BadMethodCallException the recurring child raised could leave earlier children already
-     * deleted. The fixture Calendar's own recurring child is the first one deleted, so this test
-     * covers the throw interrupting the cascade rather than the partial-deletion state on its
-     * own; the assertion is that a whole tree - recurring child, plain child and the Calendar -
-     * leaves both stages together.
+     * deleted. This test asserts the whole tree - recurring child, plain child and the Calendar -
+     * leaves both stages together; it catches the throw interrupting the cascade rather than
+     * isolating a half-deleted tree on its own.
      */
     public function testArchiveCalendarWithRecurringChildRemovesWholeTree(): void
     {

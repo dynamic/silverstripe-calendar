@@ -360,14 +360,15 @@ class Calendar extends \Page
                 // arm keeps the predicate purely additive for rows whose EndDate precedes
                 // their StartDate (broken data the CMS can save): they stay admitted and
                 // the PHP pass below decides, so no event disappears beyond what the fix
-                // requires. Rows with a NULL EndDate are likewise admitted here and
-                // resolved below, which treats them as ending on their own StartDate -
-                // keeping them out of this query would drop them from a window their
-                // StartDate sits in. There is deliberately no "EndDate = ''" arm: EndDate
-                // is a Date column, so no row can hold an empty string, and MySQL 8
-                // rejects the comparison outright (ERROR 1525 "Incorrect DATE value: ''")
-                // rather than warning the way MariaDB does.
-                $whereClause['(StartDate >= ? OR EndDate >= ? OR EndDate IS NULL)'] = [
+                // requires. It also covers rows whose EndDate is NULL, which is why the
+                // predicate needs no IS NULL arm: such a row is admitted exactly when its
+                // StartDate is at or after the window start, and resolveFeedEndDate()
+                // below treats the missing end as that same StartDate. There is
+                // deliberately no "EndDate = ''" arm either: EndDate is a Date column, so
+                // no row can hold an empty string, and MySQL 8 rejects the comparison
+                // outright (ERROR 1525 "Incorrect DATE value: ''") rather than warning the
+                // way MariaDB does.
+                $whereClause['(StartDate >= ? OR EndDate >= ?)'] = [
                     $fromDate->format('Y-m-d'),
                     $fromDate->format('Y-m-d'),
                 ];
@@ -573,9 +574,9 @@ class Calendar extends \Page
      * parser rejects, or one that precedes the event's own StartDate (a nonsensical range
      * that must not silently hide an event whose start is in the window) - falls back to
      * StartDate, which is the same default EventPage::onBeforeWrite() and
-     * EventInstance::calculateVirtualProperties() apply. An empty string is handled here
-     * rather than in the feed's SQL, where comparing a Date column to '' is an error on
-     * MySQL 8.
+     * EventInstance::calculateVirtualProperties() apply. An empty or unparseable value is
+     * handled here rather than in the feed's SQL, where comparing a Date column to '' is
+     * an error on MySQL 8.
      *
      * @param mixed $event EventPage or virtual EventInstance
      * @param Carbon $eventDate The event's StartDate, already truncated to the day
@@ -590,7 +591,7 @@ class Calendar extends \Page
                 $eventEnd = Carbon::parse($rawEnd)->startOfDay();
             } catch (\Exception $e) {
                 // Treat an unparseable EndDate as no known end rather than dropping the
-                // event, which is what the SQL predicate's "EndDate IS NULL" half does.
+                // event, which is how a NULL EndDate is already resolved.
                 return $eventDate;
             }
 

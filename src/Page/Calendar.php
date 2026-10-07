@@ -360,10 +360,14 @@ class Calendar extends \Page
                 // arm keeps the predicate purely additive for rows whose EndDate precedes
                 // their StartDate (broken data the CMS can save): they stay admitted and
                 // the PHP pass below decides, so no event disappears beyond what the fix
-                // requires. Rows with no EndDate are likewise admitted here and resolved
-                // below, which treats them as ending on their own StartDate - keeping them
-                // out of this query would drop them from a window their StartDate sits in.
-                $whereClause["(StartDate >= ? OR EndDate >= ? OR EndDate IS NULL OR EndDate = '')"] = [
+                // requires. Rows with a NULL EndDate are likewise admitted here and
+                // resolved below, which treats them as ending on their own StartDate -
+                // keeping them out of this query would drop them from a window their
+                // StartDate sits in. There is deliberately no "EndDate = ''" arm: EndDate
+                // is a Date column, so no row can hold an empty string, and MySQL 8
+                // rejects the comparison outright (ERROR 1525 "Incorrect DATE value: ''")
+                // rather than warning the way MariaDB does.
+                $whereClause['(StartDate >= ? OR EndDate >= ? OR EndDate IS NULL)'] = [
                     $fromDate->format('Y-m-d'),
                     $fromDate->format('Y-m-d'),
                 ];
@@ -564,12 +568,14 @@ class Calendar extends \Page
      * The date an event stops overlapping the feed window, for the lower bound of
      * Calendar::getEventsFeed() (dynamic/silverstripe-calendar#267).
      *
-     * EndDate is used when it holds a usable date. Anything else - an empty column on a
+     * EndDate is used when it holds a usable date. Anything else - a NULL column on a
      * row written before EventPage::onBeforeWrite() derived EndDate, a value the date
      * parser rejects, or one that precedes the event's own StartDate (a nonsensical range
      * that must not silently hide an event whose start is in the window) - falls back to
      * StartDate, which is the same default EventPage::onBeforeWrite() and
-     * EventInstance::calculateVirtualProperties() apply.
+     * EventInstance::calculateVirtualProperties() apply. An empty string is handled here
+     * rather than in the feed's SQL, where comparing a Date column to '' is an error on
+     * MySQL 8.
      *
      * @param mixed $event EventPage or virtual EventInstance
      * @param Carbon $eventDate The event's StartDate, already truncated to the day

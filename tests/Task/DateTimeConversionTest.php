@@ -290,9 +290,8 @@ class DateTimeConversionTest extends SapphireTest
 
     /**
      * A row with nothing to convert must not be written at all. The pre-fix task called
-     * writeToStage() unconditionally, which added a version (and bumped LastEdited) to every
-     * event on the site, and published each published one, whether or not it held a legacy
-     * value.
+     * writeToStage() unconditionally for every event on the site, and republished every
+     * published one, whether or not it held a legacy value.
      */
     public function testEventWithoutLegacyDatetimeIsSkippedWithoutWriting(): void
     {
@@ -314,12 +313,12 @@ class DateTimeConversionTest extends SapphireTest
         [$code, $report] = $this->runTask();
 
         $this->assertSame(0, $code, $report);
-        $this->assertSame($versions, $this->versionCount(), 'A row with nothing to convert must not gain a version');
         $this->assertSame(
             $before,
             $this->rowValues($event->ID, ['LastEdited']),
             'A skipped row must not even have its LastEdited bumped'
         );
+        $this->assertSame($versions, $this->versionCount(), 'A row with nothing to convert must not gain a version');
         $this->assertStringContainsString('Skipped: 1', $report);
         $this->assertStringContainsString('Converted: 0', $report);
     }
@@ -367,10 +366,14 @@ class DateTimeConversionTest extends SapphireTest
     }
 
     /**
-     * Versioned::DEFAULT_MODE is Stage.Live and a CLI call does not override it, so unpinned
-     * EventPage::get() iterates LIVE rows and writes them back over the draft. Pinned to
-     * draft, the draft-only row is still converted and a live record can never clobber a
-     * draft edit.
+     * The stage has to be a precondition of the run, not a side effect of the caller.
+     *
+     * Neither real entry point reads live today: under sake no reading mode is set at all
+     * (choose_site_stage() only runs from VersionedHTTPMiddleware), and DevelopmentAdmin::init()
+     * pins draft for browser runs. So this sets the stage the way a caller that got it wrong
+     * would - Versioned::DEFAULT_MODE is Stage.Live, and a caller that left it there would make
+     * EventPage::get() iterate LIVE rows and write them back over the draft. Pinned to draft, a
+     * live-loaded record cannot clobber a draft edit and a draft-only row is still converted.
      */
     public function testExecutePinsTheDraftStageEvenWhenReachedFromLive(): void
     {
@@ -519,8 +522,11 @@ class DateTimeConversionTest extends SapphireTest
         $this->assertStringContainsString('Held back: 1', $report);
         $this->assertStringContainsString('Skipped: 1', $report);
         $this->assertStringContainsString('Failed: 0', $report);
+        // The held-back row's live copy is the one still owed a conversion, and the run says so.
+        $this->assertStringContainsString('1 published rows still hold an unconverted legacy value', $report);
 
         $this->assertSame('2025-11-10', EventPage::get()->byID($converted->ID)->StartDate);
+        $this->assertSame('2025-11-11', EventPage::get()->byID($heldBack->ID)->StartDate);
         $this->assertSame('2025-11-11', EventPage::get()->byID($heldBack->ID)->StartDate);
     }
 
@@ -588,5 +594,57 @@ class DateTimeConversionTest extends SapphireTest
         $this->assertStringContainsString('Converted: 0', $report);
         // The run continued past the first failure instead of aborting.
         $this->assertSame(2, substr_count($report, 'simulated write failure'), $report);
+    }
+
+    /**
+     * A publish that throws after the draft write landed must be reported as its own outcome.
+     *
+     * Counting it as a failed conversion would be worse than the bug it reports: the next run
+     * would find the draft already converted, report the row as skipped, and say nothing about
+     * the live copy the site is still owed - so the live event would keep rendering with no
+     * date at all, forever, behind a green run.
+     */
+    public function testPublishFailureKeepsTheDraftConversionAndStaysVisible(): void
+    {
+        $event = $this->createEvent([
+            'Title' => 'Publish throws',
+            'StartDate' => '2025-10-13',
+            'StartTime' => '09:00:00',
+            'EndDate' => '2025-10-13',
+            'EndTime' => '10:00:00',
+        ]);
+        $this->forceLegacyRow($event->ID, '2025-11-16 09:00:00', '2025-11-16 11:00:00');
+
+        $task = new class extends DateTimeConversion {
+            protected function publishLive(EventPage $event): void
+            {
+                throw new \RuntimeException('simulated publish failure');
+            }
+        };
+
+        [$code, $report] = $this->runTask($task);
+
+        $this->assertNotSame(0, $code, "Must not exit clean:\n{$report}");
+        $this->assertStringContainsString('Converted: 1', $report, 'The draft conversion did land');
+        $this->assertStringContainsString('Published: 0', $report);
+        $this->assertStringContainsString('Publish failed: 1', $report);
+        $this->assertStringContainsString('Failed: 0', $report, 'A publish failure is not a write failure');
+        $this->assertStringContainsString('simulated publish failure', $report);
+
+        $this->assertSame(
+            '2025-11-16',
+            EventPage::get()->byID($event->ID)->StartDate,
+            'The draft conversion must survive a failed publish'
+        );
+        $live = Versioned::get_by_stage(EventPage::class, Versioned::LIVE)->byID($event->ID);
+        $this->assertNull($live->StartDate, 'Precondition: live still holds no modern date');
+
+        // A later run cannot redo the work (draft is already converted) but must still name the
+        // live copy that is outstanding, instead of reporting a clean Skipped run.
+        [$secondCode, $secondReport] = $this->runTask();
+
+        $this->assertSame(0, $secondCode, $secondReport);
+        $this->assertStringContainsString('Converted: 0', $secondReport);
+        $this->assertStringContainsString('1 published rows still hold an unconverted legacy value', $secondReport);
     }
 }

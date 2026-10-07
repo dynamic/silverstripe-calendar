@@ -776,6 +776,34 @@ class EventPageTest extends SapphireTest
     }
 
     /**
+     * A start sitting on the very last second of its day is the one case the clamp cannot
+     * solve inside that day - no same-day end sorts after it - so EndDate rolls to the
+     * following day instead. A month-end date is used to pin the roll-over itself.
+     */
+    public function testDefaultEndTimeRollsEndDateForwardForALastSecondStart(): void
+    {
+        /** @var Calendar $calendar */
+        $calendar = $this->objFromFixture(Calendar::class, 'one');
+
+        $event = EventPage::create();
+        $event->Title = 'Last second start';
+        $event->ParentID = $calendar->ID;
+        $event->StartDate = '2027-03-31';
+        $event->StartTime = '23:59:59';
+        $event->AllDay = 0;
+        $event->write();
+
+        $stored = EventPage::get()->byID($event->ID);
+        $this->assertSame('2027-04-01', $stored->EndDate, 'The end date must roll across the month boundary');
+        $this->assertSame('00:59:59', $stored->EndTime, 'The plain 1-hour default is kept once the date rolls over');
+        $this->assertGreaterThan(
+            $stored->StartDate . ' ' . $stored->StartTime,
+            $stored->EndDate . ' ' . $stored->EndTime,
+            'The stored end must sort strictly after the stored start'
+        );
+    }
+
+    /**
      * With an explicit EndDate after StartDate the wrapped time already sorts after the start,
      * so the clamp must not fire and shorten a genuinely multi-day event.
      */

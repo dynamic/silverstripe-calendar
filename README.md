@@ -255,6 +255,21 @@ vendor/bin/phpcs src/ tests/ --standard=phpcs.xml.dist
 vendor/bin/phpstan analyse src/ --configuration=phpstan.neon.dist
 ```
 
+Front-end checks run from the module root:
+
+```bash
+# Stylesheet lint
+npm run lint:css
+
+# Browser regression specs (tests/playwright); install Chromium once, and again
+# after a Playwright version bump
+npm run install-playwright
+npm test
+```
+
+The specs serve their own fixture page from a local port and load the `client/src` components, so
+they need no running SilverStripe site.
+
 ## Upgrading
 
 ### From Version 1.x

@@ -117,8 +117,10 @@ The module supports complex recurring patterns:
 > every entry it finds there
 > ([#340](https://github.com/dynamic/silverstripe-calendar/issues/340)). `$event->allChildren()`
 > now returns the event's real child pages - normally none. Code that listed occurrences through
-> it must call `getRecurringInstances()` (the previous behaviour: occurrences minus the series
-> start) or `getOccurrences()` instead. There is deliberately no same-name deprecation wrapper:
+> it must call `getRecurringInstances()` (the previous behaviour: an `ArrayList` of occurrences
+> minus the series start) or `getOccurrences()` (a `Generator` over every occurrence, including
+> the first, so `->count()` and the other `ArrayList` methods do not apply to its return value).
+> There is deliberately no same-name deprecation wrapper:
 > any method still spelled that way re-creates the bug, since PHP method names are
 > case-insensitive.
 

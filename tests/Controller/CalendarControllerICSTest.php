@@ -751,7 +751,10 @@ class CalendarControllerICSTest extends FunctionalTest
 
         // Unfolding is lossless: the full DESCRIPTION comes back.
         $unfolded = $this->unfoldICS($body);
-        $this->assertStringContainsString('DESCRIPTION:Start marker ' . str_repeat('abcdefghij ', 30) . 'end marker', $unfolded);
+        $this->assertStringContainsString(
+            'DESCRIPTION:' . $longContent,
+            $unfolded
+        );
         $this->assertStringContainsString(
             'SUMMARY:A Summary Long Enough That It Must Be Folded In The ICS Output',
             $unfolded

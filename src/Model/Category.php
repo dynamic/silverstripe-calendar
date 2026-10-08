@@ -237,22 +237,26 @@ class Category extends DataObject implements PermissionProvider
      * (#rrggbbaa) and drops the trailing alpha byte.
      *
      * The alpha byte is last, not first. This module's branch 2 documentation ('#334597 or
-     * #FF334597 for alpha') suggested alpha-first, but no alpha-first data can exist: branch
-     * 2 used ryanpotter/silverstripe-color-field's ColorField, whose constructor passes a
-     * maxLength of 7 to TextField, so only '#rrggbb' could be stored through it - and branch
-     * 2's own getColorPreview() passed an 8-digit value straight through to CSS, which reads
-     * it as #rrggbbaa. Dropping the trailing byte therefore agrees with that historical
-     * rendering, with the CMS swatch background (ColorField::Field() emits '#' . value
-     * unconverted, which CSS reads in order) and with CalendarController::getContrastColor(),
-     * which reads r, g and b from the first three byte pairs and so picks the same text colour
-     * the frontend renders against. The difference against the CMS swatch is opacity only -
-     * the frontend renders the same hue fully opaque.
+     * #FF334597 for alpha') suggested alpha-first, but nothing renders an 8-digit value that
+     * way: branch 2's own getColorPreview() passed the stored value straight through to CSS,
+     * which reads #rrggbbaa (verified against origin/2), and its ColorField
+     * (ryanpotter/silverstripe-color-field) is reported to cap the value at 7 characters in
+     * its TextField constructor, so at most '#rrggbb' could be written through it - that last
+     * detail comes from a review of that package, which is not installed on this branch.
+     * Dropping the trailing byte therefore agrees with that historical rendering, with the
+     * CMS swatch background (ColorField::Field() emits '#' . value unconverted, which CSS
+     * reads in order) and with CalendarController::getContrastColor(), which reads r, g and b
+     * from the first three byte pairs and so picks the same text colour the frontend renders
+     * against. The difference against the CMS swatch is opacity only - the frontend renders
+     * the same hue fully opaque.
      *
      * The vendor package is not consistent with itself on 8-digit values: ColorField's text
-     * colour goes through Color::HEX_TO_RGB(), which does intval($hex, 16) and then shifts out
-     * the low three byte pairs, i.e. it reads alpha-first. So the CMS input's own text colour
-     * can disagree with its swatch background for an 8-digit value. That is third-party
-     * behaviour on a value its own picker cannot produce, not something this method can fix.
+     * colour goes through Color::HEX_TO_RGB(), which does intval($hex, 16) and keeps only the
+     * low three byte pairs ($r = ($color >> 16) & 0xff, $g = ($color >> 8) & 0xff,
+     * $b = $color & 0xff), discarding the high byte - i.e. it reads alpha-first. So the CMS
+     * input's own text colour can disagree with its swatch background for an 8-digit value.
+     * That is third-party behaviour on a value its own picker cannot produce, not something
+     * this method can fix.
      *
      * @param string $hex Hex digits without a leading # (3, 6 or 8 characters)
      * @return string Lowercase hex digits ready to be prefixed with #

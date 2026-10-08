@@ -182,9 +182,10 @@ class CategoryColorTest extends SapphireTest
 
     /**
      * A #-prefixed 8-digit legacy value renders its CSS-order RGB part with the alpha byte
-     * dropped. Branch 2's '#FF334597 for alpha' comment never described stored data: that
-     * branch's ColorField limited the field to 7 characters, so only '#rrggbb' could be
-     * written through it
+     * dropped. Branch 2's '#FF334597 for alpha' comment never described how such a value was
+     * rendered: that branch's getColorPreview() passed it through to CSS, which reads
+     * #rrggbbaa, and its ColorField is reported to cap the value at 7 characters so only
+     * '#rrggbb' could be written through it
      */
     public function testLegacyPrefixedEightDigitHex()
     {

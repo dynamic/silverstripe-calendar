@@ -18,11 +18,13 @@ class EventExceptionTest extends SapphireTest
 {
     /**
      * Declared explicitly rather than relied on by default: this class has no
-     * $fixture_file, so run standalone (not after a fixture-bearing class in the
-     * same process) it errors on every test with "Table 'db.SiteTree' doesn't
-     * exist." The setUp() and test methods below write DataObjects directly, so
-     * they need a schema of their own rather than one inherited from suite
-     * ordering.
+     * $fixture_file, and SapphireTest declares `protected $usesDatabase = null`,
+     * so without it no temp database is provisioned and the writes below go to
+     * whatever database is configured - erroring on every test with "Table
+     * 'db.SiteTree' doesn't exist" when that database has no schema of its own,
+     * or landing in the live dev database and never being rolled back when it
+     * does. Declared untyped and non-static to match SapphireTest's own
+     * declaration - a typed or static redeclaration is a compile-time fatal.
      *
      * @var bool
      */

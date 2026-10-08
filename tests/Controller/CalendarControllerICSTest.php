@@ -674,4 +674,317 @@ class CalendarControllerICSTest extends FunctionalTest
             }
         }
     }
+
+    /**
+     * Create and publish an EventPage under the fixture calendar, tracked for
+     * tearDown cleanup.
+     *
+     * @param array $data Field values merged over the defaults
+     * @return EventPage
+     */
+    private function createPublishedICSEvent(array $data): EventPage
+    {
+        $event = EventPage::create(array_merge([
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::tomorrow()->format('Y-m-d'),
+            'StartTime' => '10:00:00',
+            'EndDate' => Carbon::tomorrow()->format('Y-m-d'),
+            'EndTime' => '11:00:00',
+            'Recursion' => 'NONE',
+        ], $data));
+        $event->write();
+        $event->publishRecursive();
+        $this->additionalEvents[] = $event;
+
+        return $event;
+    }
+
+    /**
+     * Fetch the /ical feed body through the controller action.
+     */
+    private function fetchICSBody(): string
+    {
+        $request = new HTTPRequest('GET', '/ical');
+
+        return $this->controller->ical($request)->getBody();
+    }
+
+    /**
+     * Undo RFC 5545 line folding: a CRLF followed by a single linear whitespace
+     * character is insignificant, so stripping it restores the logical line.
+     */
+    private function unfoldICS(string $ics): string
+    {
+        return str_replace("\r\n ", '', $ics);
+    }
+
+    /**
+     * RFC 5545 3.1: content lines SHOULD NOT be longer than 75 octets (excluding
+     * the CRLF), and long lines are folded by inserting CRLF plus one space. This
+     * is the #297 regression: pre-fix the generator emitted the long DESCRIPTION,
+     * SUMMARY and URL lines unfolded, so the per-line length assertion below
+     * fails on the unfixed code. The Title is deliberately longer than 67
+     * characters so its SUMMARY line itself exceeds 75 octets and is folded,
+     * not just checked for surviving unfolding.
+     */
+    public function testLongLinesAreFoldedAt75Octets()
+    {
+        $longContent = 'Start marker ' . str_repeat('abcdefghij ', 30) . 'end marker';
+        $longTitle = 'A Summary Long Enough That It Must Be Folded In The ICS Output For Consumers';
+        $this->createPublishedICSEvent([
+            'Title' => $longTitle,
+            'Content' => $longContent,
+        ]);
+
+        $body = $this->fetchICSBody();
+
+        // Folding actually happened somewhere in the feed.
+        $this->assertGreaterThan(0, substr_count($body, "\r\n "), 'Long lines must be folded');
+
+        // Every physical line is within the 75-octet limit, and every
+        // continuation is a folded line (the unfold below must restore the
+        // exact logical content, checked next).
+        foreach (explode("\r\n", $body) as $line) {
+            $this->assertLessThanOrEqual(
+                75,
+                strlen($line),
+                'Content line exceeds the RFC 5545 75-octet limit: ' . $line
+            );
+        }
+
+        // Unfolding is lossless: the full DESCRIPTION comes back.
+        $unfolded = $this->unfoldICS($body);
+        $this->assertStringContainsString(
+            'DESCRIPTION:' . $longContent,
+            $unfolded
+        );
+        // The SUMMARY line was over the limit, so the raw body must NOT hold it
+        // contiguously while the unfolded body must restore it exactly.
+        $this->assertStringNotContainsString('SUMMARY:' . $longTitle, $body);
+        $this->assertStringContainsString(
+            'SUMMARY:' . $longTitle,
+            $unfolded
+        );
+    }
+
+    /**
+     * foldICSLine() must terminate on malformed UTF-8 and still respect the
+     * fold contract: a run of 74+ stray continuation bytes makes mb_strcut()
+     * return an empty string at a mid-sequence offset (a hang without
+     * handling), and a naive raw-octet workaround re-emits bytes when valid
+     * multi-byte text follows the stray run (a C3 C3 A9 corruption). The line
+     * is scrubbed to valid UTF-8 before cutting, so every case below
+     * terminates, stays within 75 octets per line, and comes back valid
+     * UTF-8. max_execution_time is pinned low so a regression that hangs
+     * fails as a timeout fatal instead of stalling the suite.
+     */
+    public function testFoldingTerminatesOnMalformedUtf8Input()
+    {
+        // 74 consecutive continuation bytes (0x80..0xBF are never valid lead
+        // bytes), long enough to trigger the empty-segment path at the
+        // 75-octet fold boundary.
+        $strayRun = str_repeat("\x80", 74);
+
+        // [input, expected lead-in after unfolding, expected tail after unfolding]
+        // The lead-in is pinned per case so the assertion below confirms the
+        // scrub preserved the whole ASCII run, not just its first 70 octets.
+        $cases = [
+            // ASCII trails the stray run
+            [
+                'X:' . str_repeat('a', 73) . $strayRun . str_repeat('b', 40),
+                'X:' . str_repeat('a', 73),
+                str_repeat('b', 40),
+            ],
+            // Valid multi-byte text trails it: the exact input a raw-octet
+            // fallback corrupted by stranding a lead byte at the cut.
+            [
+                'X:' . str_repeat('a', 73) . $strayRun . str_repeat("\xc3\xa9", 60),
+                'X:' . str_repeat('a', 73),
+                str_repeat("\xc3\xa9", 60),
+            ],
+            [
+                'X:' . str_repeat('a', 70) . str_repeat("\x80", 80) . str_repeat("\xe2\x98\x95", 40),
+                'X:' . str_repeat('a', 70),
+                str_repeat("\xe2\x98\x95", 40),
+            ],
+        ];
+
+        $previous = (int) ini_get('max_execution_time');
+        ini_set('max_execution_time', '10');
+        try {
+            $fold = new \ReflectionMethod(CalendarController::class, 'foldICSLine');
+            foreach ($cases as [$case, $lead, $tail]) {
+                $folded = $fold->invoke($this->controller, $case);
+
+                foreach (explode("\r\n", $folded) as $line) {
+                    $this->assertLessThanOrEqual(75, strlen($line), 'Folded line exceeds 75 octets');
+                }
+
+                // The output is valid UTF-8 end to end - this is what the
+                // byte-duplicating fallback broke (a stranded C3 lead byte).
+                $this->assertTrue(mb_check_encoding($folded, 'UTF-8'), 'Folded output is not valid UTF-8');
+                $unfolded = str_replace("\r\n ", '', $folded);
+                $this->assertStringNotContainsString("\x80", $unfolded, 'Stray continuation bytes survived scrubbing');
+
+                // The good text around the stray run is preserved: ASCII lead-in
+                // at the front, the tail (ASCII or multi-byte) intact at the end.
+                $this->assertStringStartsWith($lead, $unfolded, 'ASCII lead-in was not preserved intact');
+                $this->assertStringEndsWith($tail, $unfolded, 'Tail text after the stray run was not preserved intact');
+            }
+        } finally {
+            ini_set('max_execution_time', (string) $previous);
+        }
+    }
+
+    /**
+     * A CRLF inside an event's Content must produce exactly one \n escape in
+     * DESCRIPTION, not two. Pre-fix escapeICSValue() mapped "\n" and "\r" each
+     * to a "\\n" escape, so one visual line break carried as CRLF was escaped
+     * twice and readers showed a blank line (#297).
+     *
+     * Driven through a double so the exact byte sequence under test survives the
+     * trip into the generator: the DB HTML field round-trip normalises CRLF, so a
+     * stored page cannot carry it to the controller. Measured on this module's
+     * ddev MySQL test DB - writing "a\r\nb" as a page's Content and reading it
+     * back yields "a\nb" (column hex 610a62, input hex 610d0a62) - which is why
+     * the sequence has to be injected rather than stored.
+     */
+    public function testCRLFInContentIsEscapedOnce()
+    {
+        $double = new class {
+            public function hasMethod(string $method): bool
+            {
+                return false;
+            }
+
+            /**
+             * @param string $property
+             * @return mixed
+             */
+            public function __get(string $property)
+            {
+                switch ($property) {
+                    case 'ID':
+                        return 555;
+                    case 'Title':
+                        return 'CRLF Event';
+                    case 'Content':
+                        // One CRLF break and one lone-CR break: each must escape once.
+                        return "alpha\r\nbeta\rgamma";
+                    default:
+                        return null;
+                }
+            }
+
+            public function Categories()
+            {
+                return new ArrayList();
+            }
+
+            public function AbsoluteLink()
+            {
+                return '';
+            }
+        };
+
+        $hadHost = array_key_exists('HTTP_HOST', $_SERVER);
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+        $_SERVER['HTTP_HOST'] = 'localhost';
+
+        try {
+            $generate = new \ReflectionMethod(CalendarController::class, 'generateICSContent');
+            $ics = $generate->invoke($this->controller, ArrayList::create([$double]));
+
+            // Exactly one \n escape between each pair of words (the doubled form
+            // is what the unfixed escaper produced).
+            $this->assertStringContainsString('DESCRIPTION:alpha' . "\\n" . 'beta' . "\\n" . 'gamma', $ics);
+            $this->assertStringNotContainsString('alpha' . "\\n\\n" . 'beta', $ics);
+            $this->assertStringNotContainsString('beta' . "\\n\\n" . 'gamma', $ics);
+
+            // No raw CR or LF survives inside the feed at all - a stray one
+            // would break the CRLF-only line structure.
+            $stripped = str_replace("\r\n", '', $ics);
+            $this->assertStringNotContainsString("\r", $stripped);
+            $this->assertStringNotContainsString("\n", $stripped);
+        } finally {
+            if ($hadHost) {
+                $_SERVER['HTTP_HOST'] = $previousHost;
+            } else {
+                unset($_SERVER['HTTP_HOST']);
+            }
+        }
+    }
+
+    /**
+     * The DESCRIPTION must be html_entity_decode()'d after strip_tags(), so an
+     * entity such as &amp; shows up as '&' in the feed instead of the raw
+     * entity text (#297). The order matters: decoding before stripping would
+     * turn escaped markup into real markup and drop it; stripping first (this
+     * assertion's second half) keeps the decoded <b> as literal text.
+     */
+    public function testHTMLEntitiesAreDecodedInDescription()
+    {
+        $this->createPublishedICSEvent([
+            'Title' => 'Entity Event',
+            'Content' => 'Cats &amp; Dogs &lt;b&gt;bold&lt;/b&gt;',
+        ]);
+
+        $unfolded = $this->unfoldICS($this->fetchICSBody());
+
+        $this->assertStringContainsString('DESCRIPTION:Cats & Dogs <b>bold</b>', $unfolded);
+        $this->assertStringNotContainsString('&amp;', $unfolded);
+        $this->assertStringNotContainsString('&lt;b&gt;', $unfolded);
+    }
+
+    /**
+     * Folding must cut with mb_strcut() so a multi-byte UTF-8 character is
+     * never split across a fold boundary: cutting at an arbitrary octet would
+     * emit invalid UTF-8 inside the continuation line. Content is chosen so
+     * multi-byte sequences straddle the 75-octet boundary repeatedly (#297).
+     */
+    public function testMultibyteCharactersAreNotSplitAtFoldBoundary()
+    {
+        // 'é' is 2 octets and '☕' is 3 (E2 98 95), spread through a >75-octet line
+        // boundaries land mid-sequence on any naive octet cut.
+        $content = str_repeat('héllo wörld ☕ ', 20) . 'done';
+        $this->createPublishedICSEvent([
+            'Title' => 'Multibyte Event',
+            'Content' => $content,
+        ]);
+
+        $body = $this->fetchICSBody();
+
+        $this->assertTrue(mb_check_encoding($body, 'UTF-8'), 'Folded output must remain valid UTF-8');
+        $this->assertGreaterThan(0, substr_count($body, "\r\n "), 'The multi-byte line must have been folded');
+        foreach (explode("\r\n", $body) as $line) {
+            $this->assertLessThanOrEqual(75, strlen($line), 'Content line exceeds 75 octets: ' . $line);
+            $this->assertTrue(mb_check_encoding($line, 'UTF-8'), 'Physical line is not valid UTF-8: ' . $line);
+        }
+
+        // Unfolding restores the full description byte-for-byte.
+        $this->assertStringContainsString('DESCRIPTION:' . $content, $this->unfoldICS($body));
+    }
+
+    /**
+     * A calendar with no events still renders a well-formed feed: header and
+     * footer only, CRLF-joined, and nothing long enough to have been folded.
+     * Guards that the folding pass is a no-op on short lines (#297).
+     */
+    public function testEmptyCalendarFeedIsCRLFJoinedAndUnfolded()
+    {
+        foreach (EventPage::get()->filter('ParentID', $this->calendar->ID) as $event) {
+            $event->delete();
+        }
+
+        $body = $this->fetchICSBody();
+
+        $expected = "BEGIN:VCALENDAR\r\n"
+            . "VERSION:2.0\r\n"
+            . "PRODID:-//Dynamic SilverStripe Calendar//EN\r\n"
+            . "CALSCALE:GREGORIAN\r\n"
+            . "METHOD:PUBLISH\r\n"
+            . "END:VCALENDAR";
+        $this->assertSame($expected, $body);
+        $this->assertStringNotContainsString("\r\n ", $body);
+    }
 }

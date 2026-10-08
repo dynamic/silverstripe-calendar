@@ -847,7 +847,64 @@ class CalendarController extends \PageController
         // ICS Footer
         $ics[] = 'END:VCALENDAR';
 
+        // Fold every logical line to the RFC 5545 3.1 length limit in one place
+        // (issue #297): header lines, every VEVENT line, and the long ones
+        // (URL, DESCRIPTION, SUMMARY) all pass through here, so a line added in
+        // the future cannot bypass the limit just because its producer forgot.
+        $ics = array_map([$this, 'foldICSLine'], $ics);
+
         return implode("\r\n", $ics);
+    }
+
+    /**
+     * Fold one logical ICS line to the RFC 5545 line-length limit.
+     *
+     * RFC 5545 section 3.1 says lines SHOULD NOT be longer than 75 octets
+     * (excluding the CRLF) and that longer lines are split by inserting a CRLF
+     * followed by a single linear whitespace character. Continuation octets are
+     * insignificant to parsers, so unfolding restores the original value.
+     *
+     * The line is scrubbed with mb_scrub() before anything is cut, so it is
+     * valid UTF-8: mb_strcut() can otherwise return an empty string at an offset
+     * inside a run of stray continuation bytes, and a cut that lands inside a
+     * valid multi-byte character makes mb_strcut() back up and re-emit a byte
+     * that was already written. Scrubbing replaces each invalid byte with the
+     * mbstring substitute character, a literal "?" under mbstring's default
+     * mb_substitute_character() setting of 63. Every cut therefore stays on a
+     * character boundary and the loop always advances.
+     *
+     * The first segment is cut at 75 octets, each later one at 74: the "\r\n "
+     * that precedes a continuation line contributes one space to that line's
+     * budget.
+     *
+     * @param string $line One logical line, without its trailing CRLF
+     * @return string The line, possibly with "\r\n " folds inserted
+     */
+    private function foldICSLine(string $line): string
+    {
+        $line = mb_scrub($line, 'UTF-8');
+
+        if (strlen($line) <= 75) {
+            return $line;
+        }
+
+        $segments = [];
+        $offset = 0;
+        $length = strlen($line);
+        $limit = 75;
+
+        while ($offset < $length) {
+            $segment = mb_strcut($line, $offset, $limit, 'UTF-8');
+            // Valid UTF-8 after the scrub, so the cut lands on a character
+            // boundary and $offset always advances by a whole character.
+            $segmentLength = strlen($segment);
+            $segments[] = $segment;
+            $offset += $segmentLength;
+            // The continuation's leading space counts toward its 75 octets.
+            $limit = 74;
+        }
+
+        return implode("\r\n ", $segments);
     }
 
     /**
@@ -880,7 +937,15 @@ class CalendarController extends \PageController
 
             // Add description if available
             if ($event->Content) {
-                $ics[] = 'DESCRIPTION:' . $this->escapeICSValue(strip_tags($event->Content));
+                // strip_tags() first, then html_entity_decode() (issue #297):
+                // decoding before stripping would turn &lt;b&gt; into real markup
+                // for the stripper to remove, silently dropping text an editor
+                // meant as literal. Decoding after means entities such as
+                // &amp; render as their characters (&) and any markup the
+                // editor escaped stays as text.
+                $ics[] = 'DESCRIPTION:' . $this->escapeICSValue(
+                    html_entity_decode(strip_tags($event->Content), ENT_QUOTES | ENT_HTML5, 'UTF-8')
+                );
             }
 
             // Add location if available
@@ -951,7 +1016,15 @@ class CalendarController extends \PageController
      */
     private function escapeICSValue(string $value): string
     {
-        // Escape special characters
+        // Normalise CRLF and a lone CR to LF so each visual line break yields
+        // exactly one "\n" escape below. Content read back from an HTML field is
+        // LF-only; plain string fields, imported content and in-memory values
+        // can carry either form.
+        $value = str_replace(["\r\n", "\r"], "\n", $value);
+
+        // Escape special characters. The "\r" entry cannot match after the
+        // normalisation above; it stays as a guard so a future reorder of the two
+        // lines cannot emit a raw CR into the feed.
         $value = str_replace(['\\', ';', ',', "\n", "\r"], ['\\\\', '\\;', '\\,', '\\n', '\\n'], $value);
 
         return $value;

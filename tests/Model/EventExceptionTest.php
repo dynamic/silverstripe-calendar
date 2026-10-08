@@ -17,6 +17,20 @@ use SilverStripe\Forms\DateField;
 class EventExceptionTest extends SapphireTest
 {
     /**
+     * Declared explicitly rather than relied on by default: this class has no
+     * $fixture_file, and SapphireTest declares `protected $usesDatabase = null`,
+     * so without it no temp database is provisioned and the writes below go to
+     * whatever database is configured - erroring on every test with "Table
+     * 'db.SiteTree' doesn't exist" when that database has no schema of its own,
+     * or landing in the live dev database and never being rolled back when it
+     * does. Declared untyped and non-static to match SapphireTest's own
+     * declaration - a typed or static redeclaration is a compile-time fatal.
+     *
+     * @var bool
+     */
+    protected $usesDatabase = true;
+
+    /**
      * @var Calendar
      */
     protected $calendar;

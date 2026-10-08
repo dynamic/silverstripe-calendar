@@ -785,14 +785,26 @@ class CalendarControllerICSTest extends FunctionalTest
         // 75-octet fold boundary.
         $strayRun = str_repeat("\x80", 74);
 
+        // [input, expected lead-in after unfolding, expected tail after unfolding]
+        // The lead-in is pinned per case so the assertion below confirms the
+        // scrub preserved the whole ASCII run, not just its first 70 octets.
         $cases = [
-            // ASCII trails the stray run: [input, expected tail after unfolding]
-            ['X:' . str_repeat('a', 73) . $strayRun . str_repeat('b', 40), str_repeat('b', 40)],
+            // ASCII trails the stray run
+            [
+                'X:' . str_repeat('a', 73) . $strayRun . str_repeat('b', 40),
+                'X:' . str_repeat('a', 73),
+                str_repeat('b', 40),
+            ],
             // Valid multi-byte text trails it: the exact input a raw-octet
             // fallback corrupted by stranding a lead byte at the cut.
-            ['X:' . str_repeat('a', 73) . $strayRun . str_repeat("\xc3\xa9", 60), str_repeat("\xc3\xa9", 60)],
+            [
+                'X:' . str_repeat('a', 73) . $strayRun . str_repeat("\xc3\xa9", 60),
+                'X:' . str_repeat('a', 73),
+                str_repeat("\xc3\xa9", 60),
+            ],
             [
                 'X:' . str_repeat('a', 70) . str_repeat("\x80", 80) . str_repeat("\xe2\x98\x95", 40),
+                'X:' . str_repeat('a', 70),
                 str_repeat("\xe2\x98\x95", 40),
             ],
         ];
@@ -801,7 +813,7 @@ class CalendarControllerICSTest extends FunctionalTest
         ini_set('max_execution_time', '10');
         try {
             $fold = new \ReflectionMethod(CalendarController::class, 'foldICSLine');
-            foreach ($cases as [$case, $tail]) {
+            foreach ($cases as [$case, $lead, $tail]) {
                 $folded = $fold->invoke($this->controller, $case);
 
                 foreach (explode("\r\n", $folded) as $line) {
@@ -816,7 +828,7 @@ class CalendarControllerICSTest extends FunctionalTest
 
                 // The good text around the stray run is preserved: ASCII lead-in
                 // at the front, the tail (ASCII or multi-byte) intact at the end.
-                $this->assertStringStartsWith('X:' . str_repeat('a', 70), $unfolded);
+                $this->assertStringStartsWith($lead, $unfolded, 'ASCII lead-in was not preserved intact');
                 $this->assertStringEndsWith($tail, $unfolded, 'Tail text after the stray run was not preserved intact');
             }
         } finally {

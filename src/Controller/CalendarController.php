@@ -1016,19 +1016,15 @@ class CalendarController extends \PageController
      */
     private function escapeICSValue(string $value): string
     {
-        // Normalise line endings before escaping (issue #297). The table below
-        // maps both "\n" and "\r" to a single "\\n" escape, so one unnormalised
-        // CRLF became TWO \\n escapes for a single visual line break, and readers
-        // showed a blank line. Collapsing "\r\n" and a lone "\r" to "\n" here
-        // means one break in, one escape out. Values read back from a stored HTML
-        // field never carry a CR into this method - writing "a\r\nb" to a page and
-        // reading it back gives "a\nb" (measured against the ddev MySQL test DB,
-        // see the PR note) - so the CRLF case is load-bearing for the paths that
-        // skip that normalisation: plain string fields, imported or
-        // programmatically written content, and values assembled in memory.
+        // Normalise CRLF and a lone CR to LF so each visual line break yields
+        // exactly one "\n" escape below. Content read back from an HTML field is
+        // LF-only; plain string fields, imported content and in-memory values
+        // can carry either form.
         $value = str_replace(["\r\n", "\r"], "\n", $value);
 
-        // Escape special characters
+        // Escape special characters. The "\r" entry cannot match after the
+        // normalisation above; it stays as a guard so a future reorder of the two
+        // lines cannot emit a raw CR into the feed.
         $value = str_replace(['\\', ';', ',', "\n", "\r"], ['\\\\', '\\;', '\\,', '\\n', '\\n'], $value);
 
         return $value;

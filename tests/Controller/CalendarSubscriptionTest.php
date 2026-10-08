@@ -16,6 +16,19 @@ use SilverStripe\Dev\FunctionalTest;
  */
 class CalendarSubscriptionTest extends FunctionalTest
 {
+    /**
+     * Declared explicitly rather than relied on by default: this class has no
+     * $fixture_file, and FunctionalTest does not default $usesDatabase to
+     * true, so run standalone (not after a fixture-bearing class in the same
+     * process) it errors on every test with "Table 'db.SiteTree' doesn't
+     * exist." The setUp()/test methods below write DataObjects directly, so
+     * they need a schema of their own rather than one inherited from suite
+     * ordering.
+     *
+     * @var bool
+     */
+    protected $usesDatabase = true;
+
     public const TEST_CATEGORY_RED = 'FF0000';
     public const TEST_CATEGORY_GREEN = '00FF00';
     public const TEST_CATEGORY_BLUE = '0000FF';

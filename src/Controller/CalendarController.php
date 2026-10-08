@@ -872,9 +872,14 @@ class CalendarController extends \PageController
      * continuation bytes (a raw-octet fallback for it is not a fix either -
      * such a cut can strand a valid multi-byte character mid-sequence, after
      * which mb_strcut() backs up and re-emits a byte already written,
-     * corrupting the fold). Scrubbing replaces invalid bytes with U+FFFD, so
-     * every cut stays on a character boundary, the loop always advances, and
-     * the feed is always valid UTF-8. The first segment is cut at 75 octets;
+     * corrupting the fold). Scrubbing replaces each invalid byte with the
+     * mbstring substitute character, which under mbstring's default
+     * mb_substitute_character() setting of 63 is a literal "?" - emitting
+     * U+FFFD instead would mean changing that setting globally, which this
+     * method deliberately does not do. Either way the scrubbed line is valid
+     * UTF-8, so every cut stays on a character boundary, the loop always
+     * advances, and the feed is valid UTF-8. The first segment is cut at 75
+     * octets;
      * each later one at 74, because the "\r\n " that precedes it in the
      * folded output contributes one space to that continuation line's
      * length budget.

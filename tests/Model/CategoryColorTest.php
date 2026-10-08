@@ -165,8 +165,8 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Regression test for #319: bare 8-digit hex is stored alpha-first by the colorpicker
-     * and must not be handed to CSS in that order
+     * Regression test for #319: bare 8-digit hex arrives alpha-first (branch 2 wrote it that
+     * way) and must not be handed to CSS in that order
      */
     public function testBareEightDigitHex()
     {

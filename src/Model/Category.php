@@ -44,11 +44,12 @@ class Category extends DataObject implements PermissionProvider
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
-        // Color is stored bare by ColorField, which only ever writes 6 digits. An 8-digit
-        // value can only come from the field's looser validate() or from branch 2 data, and
-        // this module's own branch 2 documentation ('#334597 or #FF334597 for alpha') says
-        // those were written alpha-first. Legacy values may also be #-prefixed or a palette
-        // name from ColorPaletteField.
+        // Color is stored bare by ColorField, which only ever writes 6 digits. Longer values
+        // can only arrive from old data or from the field's looser validate() (which accepts
+        // 6-8 characters and, because its range is written [A-f0-9], some non-hex letters);
+        // this module's own branch 2 documentation ('#334597 or #FF334597 for alpha') says the
+        // 8-digit values it wrote were alpha-first. Legacy values may also be #-prefixed or a
+        // palette name from ColorPaletteField.
         'Color' => 'Varchar(9)',
     ];
 
@@ -236,9 +237,9 @@ class Category extends DataObject implements PermissionProvider
      * module's branch 2 documentation recorded 8-digit values as alpha-first (#FF334597 for
      * the default blue), which is the opposite of CSS's #rrggbbaa. The alpha byte is dropped
      * rather than moved, because the colorpicker's own picker writes 6 digits and the CMS
-     * swatch code never applies a stored alpha. Note that ColorField::Field() and
-     * Color::ColorCMS() emit '#' . value unconverted, so for an 8-digit value the CMS swatch
-     * keeps reading it as CSS #rrggbbaa and will disagree with the frontend.
+     * swatch code never applies a stored alpha. Note that ColorField::Field() emits
+     * '#' . value unconverted, so for an 8-digit value the CMS swatch keeps reading it as CSS
+     * #rrggbbaa and will disagree with the frontend.
      *
      * @param string $hex Hex digits without a leading # (3, 6 or 8 characters)
      * @return string Lowercase hex digits ready to be prefixed with #
@@ -309,20 +310,11 @@ class Category extends DataObject implements PermissionProvider
     {
         $colorMap = self::getLegacyColorMap();
 
-        // If it's already a hex color (3, 6, or 8 character), return without # prefix
+        // If it's already a hex color (3, 6, or 8 character), return normalised digits
+        // without a # prefix - the same normalisation the CSS readers use
         $pattern = '/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/';
         if ($this->Color && preg_match($pattern, $this->Color, $matches)) {
-            $hex = $matches[1];
-            // Expand 3-character hex codes to 6 characters (e.g., "fff" -> "ffffff")
-            if (strlen($hex) === 3) {
-                return strtolower($this->expandHexColor($hex));
-            }
-            // For 8-character hex, drop the leading alpha byte (see toCssHexDigits())
-            if (strlen($hex) === 8) {
-                return strtolower(substr($hex, 2));
-            }
-            // For 6-character hex, use lowercase
-            return strtolower($hex);
+            return $this->toCssHexDigits($matches[1]);
         }
 
         // Otherwise map from color name and remove # prefix

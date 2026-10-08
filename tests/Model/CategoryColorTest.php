@@ -196,7 +196,9 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Regression test for #319: bare 3-digit hex is expanded the same way a #-prefixed one is
+     * Bare 3-digit hex is expanded the same way a #-prefixed one is. Not a #319 regression
+     * case: ColorField::validate() requires 6-8 characters, so a bare 3-digit value cannot
+     * arrive through the field - only through old data or a direct write
      */
     public function testBareThreeDigitHexIsExpanded()
     {

@@ -47,8 +47,7 @@ class Category extends DataObject implements PermissionProvider
         // Color is stored bare by ColorField, whose picker only ever writes 6 digits. Longer
         // values can only arrive from old data or from the field's looser validate() (which
         // accepts 6-8 characters and, because its range is written [A-f0-9], some non-hex
-        // letters). Any 8-digit value is read in CSS order (#rrggbbaa); the branch 2 comment
-        // ('#334597 or #FF334597 for alpha') was aspirational - see toCssHexDigits(). Legacy
+        // letters). An 8-digit value is read as CSS #rrggbbaa; see toCssHexDigits(). Legacy
         // values may also be #-prefixed or a palette name from ColorPaletteField.
         'Color' => 'Varchar(9)',
     ];
@@ -233,30 +232,17 @@ class Category extends DataObject implements PermissionProvider
     /**
      * Normalise matched hex digits for use in CSS
      *
-     * Expands 3-character codes, and for 8-character codes keeps the RGB part in CSS order
-     * (#rrggbbaa) and drops the trailing alpha byte.
+     * Expands 3-character codes, and for 8-character codes drops the trailing alpha byte, so
+     * an 8-digit value is read as CSS #rrggbbaa and always renders opaque. That is the byte
+     * order CSS uses and the one CalendarController::getContrastColor() reads - r, g and b
+     * from the first three byte pairs - so the background that is drawn and the text colour
+     * picked against it agree.
      *
-     * The alpha byte is last, not first. This module's branch 2 documentation ('#334597 or
-     * #FF334597 for alpha') suggested alpha-first, but nothing renders an 8-digit value that
-     * way: branch 2's own getColorPreview() passed the stored value straight through to CSS,
-     * which reads #rrggbbaa (verified against origin/2), and its ColorField
-     * (ryanpotter/silverstripe-color-field) is reported to cap the value at 7 characters in
-     * its TextField constructor, so at most '#rrggbb' could be written through it - that last
-     * detail comes from a review of that package, which is not installed on this branch.
-     * Dropping the trailing byte therefore agrees with that historical rendering, with the
-     * CMS swatch background (ColorField::Field() emits '#' . value unconverted, which CSS
-     * reads in order) and with CalendarController::getContrastColor(), which reads r, g and b
-     * from the first three byte pairs and so picks the same text colour the frontend renders
-     * against. The difference against the CMS swatch is opacity only - the frontend renders
-     * the same hue fully opaque.
-     *
-     * The vendor package is not consistent with itself on 8-digit values: ColorField's text
-     * colour goes through Color::HEX_TO_RGB(), which does intval($hex, 16) and keeps only the
-     * low three byte pairs ($r = ($color >> 16) & 0xff, $g = ($color >> 8) & 0xff,
-     * $b = $color & 0xff), discarding the high byte - i.e. it reads alpha-first. So the CMS
-     * input's own text colour can disagree with its swatch background for an 8-digit value.
-     * That is third-party behaviour on a value its own picker cannot produce, not something
-     * this method can fix.
+     * The colorpicker package reads 8-digit values the other way round: Color::HEX_TO_RGB()
+     * keeps the low three byte pairs of intval($hex, 16) - $r = ($color >> 16) & 0xff, and so
+     * on - which is alpha-first, so that package's own text colour can disagree with the
+     * swatch background it draws next to it. Its picker never produces an 8-digit value, so
+     * this only affects values from old data or a direct write.
      *
      * @param string $hex Hex digits without a leading # (3, 6 or 8 characters)
      * @return string Lowercase hex digits ready to be prefixed with #

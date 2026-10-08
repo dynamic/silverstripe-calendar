@@ -59,23 +59,20 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * An 8-character value is read in CSS order (#rrggbbaa), so callers feeding CSS get the
-     * RGB part and the alpha byte is dropped. Changed by this fix: it used to return the raw
-     * 'FF0000FF' upper-cased, which CSS also reads as opaque red - same colour, but only
-     * because the alpha byte happens to be 'FF' here
+     * An 8-character value is read as CSS #rrggbbaa: the RGB part is returned lower-cased and
+     * the trailing alpha byte is dropped, so the colour renders opaque
      */
     public function testEightCharacterHexColor()
     {
         $category = new Category();
         $category->Color = '#FF0000FF';
 
-        // RGB kept in CSS order, trailing alpha byte dropped
         $this->assertEquals('ff0000', $category->getColorHex());
     }
 
     /**
-     * Same for a bare 8-character value stored through ColorField's looser validation. The
-     * trailing '97' is the alpha channel, so the colour is 'ff3345', not '334597'
+     * Same for a bare 8-character value, which can only arrive through ColorField's looser
+     * validation: 'FF334597' is the colour ff3345 at alpha 97
      */
     public function testBareEightCharacterHexColor()
     {
@@ -168,7 +165,7 @@ class CategoryColorTest extends SapphireTest
 
     /**
      * Regression test for #319: bare 8-digit hex arrives through ColorField::validate()
-     * (which accepts 6-8 characters) and is read in CSS order, #rrggbbaa
+     * (which accepts 6-8 characters) and is read as #rrggbbaa
      */
     public function testBareEightDigitHex()
     {
@@ -181,11 +178,7 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * A #-prefixed 8-digit legacy value renders its CSS-order RGB part with the alpha byte
-     * dropped. Branch 2's '#FF334597 for alpha' comment never described how such a value was
-     * rendered: that branch's getColorPreview() passed it through to CSS, which reads
-     * #rrggbbaa, and its ColorField is reported to cap the value at 7 characters so only
-     * '#rrggbb' could be written through it
+     * A #-prefixed 8-digit legacy value renders its RGB part, opaque: '#FF334597' is #ff3345
      */
     public function testLegacyPrefixedEightDigitHex()
     {
@@ -197,9 +190,9 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Bare 3-digit hex is expanded the same way a #-prefixed one is. Not a #319 regression
-     * case: ColorField::validate() requires 6-8 characters, so a bare 3-digit value cannot
-     * arrive through the field - only through old data or a direct write
+     * Bare 3-digit hex is expanded the same way a #-prefixed one is. ColorField::validate()
+     * requires 6-8 characters, so a bare 3-digit value can only come from old data or a
+     * direct write
      */
     public function testBareThreeDigitHexIsExpanded()
     {
@@ -211,7 +204,7 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Legacy #-prefixed values written by branch 2 still render as before
+     * Legacy #-prefixed values still render as their lower-case hex
      */
     public function testLegacyPrefixedHexStillRenders()
     {

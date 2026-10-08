@@ -768,34 +768,57 @@ class CalendarControllerICSTest extends FunctionalTest
     }
 
     /**
-     * foldICSLine() must terminate on malformed UTF-8: a run of 74+ stray
-     * continuation bytes makes mb_strcut() return an empty string at a
-     * mid-sequence offset, and without the raw-octet fallback the fold loop
-     * never advances the offset - the request hangs until max_execution_time
-     * kills it. max_execution_time is pinned low here so an unfixed loop fails
-     * this test as a timeout fatal instead of stalling the suite.
+     * foldICSLine() must terminate on malformed UTF-8 and still respect the
+     * fold contract: a run of 74+ stray continuation bytes makes mb_strcut()
+     * return an empty string at a mid-sequence offset (a hang without
+     * handling), and a naive raw-octet workaround re-emits bytes when valid
+     * multi-byte text follows the stray run (a C3 C3 A9 corruption). The line
+     * is scrubbed to valid UTF-8 before cutting, so every case below
+     * terminates, stays within 75 octets per line, and comes back valid
+     * UTF-8. max_execution_time is pinned low so a regression that hangs
+     * fails as a timeout fatal instead of stalling the suite.
      */
     public function testFoldingTerminatesOnMalformedUtf8Input()
     {
         // 74 consecutive continuation bytes (0x80..0xBF are never valid lead
-        // bytes), long enough to trigger the empty-segment path at the 75-octet
-        // fold boundary.
-        $malformed = 'X:' . str_repeat('a', 73) . str_repeat("\x80", 74) . str_repeat('b', 40);
+        // bytes), long enough to trigger the empty-segment path at the
+        // 75-octet fold boundary.
+        $strayRun = str_repeat("\x80", 74);
+
+        $cases = [
+            // ASCII trails the stray run: [input, expected tail after unfolding]
+            ['X:' . str_repeat('a', 73) . $strayRun . str_repeat('b', 40), str_repeat('b', 40)],
+            // Valid multi-byte text trails it: the exact input a raw-octet
+            // fallback corrupted by stranding a lead byte at the cut.
+            ['X:' . str_repeat('a', 73) . $strayRun . str_repeat("\xc3\xa9", 60), str_repeat("\xc3\xa9", 60)],
+            [
+                'X:' . str_repeat('a', 70) . str_repeat("\x80", 80) . str_repeat("\xe2\x98\x95", 40),
+                str_repeat("\xe2\x98\x95", 40),
+            ],
+        ];
 
         $previous = (int) ini_get('max_execution_time');
         ini_set('max_execution_time', '10');
         try {
             $fold = new \ReflectionMethod(CalendarController::class, 'foldICSLine');
-            $folded = $fold->invoke($this->controller, $malformed);
+            foreach ($cases as [$case, $tail]) {
+                $folded = $fold->invoke($this->controller, $case);
 
-            // Terminated, and still respects the geometry contract: every
-            // physical line within 75 octets, and unfolding restores the
-            // input byte-for-byte (the fallback cuts raw octets, which are
-            // preserved, not dropped).
-            foreach (explode("\r\n", $folded) as $line) {
-                $this->assertLessThanOrEqual(75, strlen($line), 'Folded line exceeds 75 octets');
+                foreach (explode("\r\n", $folded) as $line) {
+                    $this->assertLessThanOrEqual(75, strlen($line), 'Folded line exceeds 75 octets');
+                }
+
+                // The output is valid UTF-8 end to end - this is what the
+                // byte-duplicating fallback broke (a stranded C3 lead byte).
+                $this->assertTrue(mb_check_encoding($folded, 'UTF-8'), 'Folded output is not valid UTF-8');
+                $unfolded = str_replace("\r\n ", '', $folded);
+                $this->assertStringNotContainsString("\x80", $unfolded, 'Stray continuation bytes survived scrubbing');
+
+                // The good text around the stray run is preserved: ASCII lead-in
+                // at the front, the tail (ASCII or multi-byte) intact at the end.
+                $this->assertStringStartsWith('X:' . str_repeat('a', 70), $unfolded);
+                $this->assertStringEndsWith($tail, $unfolded, 'Tail text after the stray run was not preserved intact');
             }
-            $this->assertSame($malformed, str_replace("\r\n ", '', $folded));
         } finally {
             ini_set('max_execution_time', (string) $previous);
         }

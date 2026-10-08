@@ -866,9 +866,17 @@ class CalendarController extends \PageController
      *
      * Segments are cut with mb_strcut() so a multi-byte UTF-8 character is
      * never split across a fold - cutting at an arbitrary octet would emit
-     * invalid UTF-8 inside the continuation line. The first segment is cut at
-     * 75 octets; each later one at 74, because the "\r\n " that precedes it in
-     * the folded output contributes one space to that continuation line's
+     * invalid UTF-8 inside the continuation line. The line is first scrubbed
+     * with mb_scrub() so it is valid UTF-8: without that, mb_strcut() can
+     * return an empty string at an offset inside a long run of stray
+     * continuation bytes (a raw-octet fallback for it is not a fix either -
+     * such a cut can strand a valid multi-byte character mid-sequence, after
+     * which mb_strcut() backs up and re-emits a byte already written,
+     * corrupting the fold). Scrubbing replaces invalid bytes with U+FFFD, so
+     * every cut stays on a character boundary, the loop always advances, and
+     * the feed is always valid UTF-8. The first segment is cut at 75 octets;
+     * each later one at 74, because the "\r\n " that precedes it in the
+     * folded output contributes one space to that continuation line's
      * length budget.
      *
      * @param string $line One logical line, without its trailing CRLF
@@ -876,6 +884,8 @@ class CalendarController extends \PageController
      */
     private function foldICSLine(string $line): string
     {
+        $line = mb_scrub($line, 'UTF-8');
+
         if (strlen($line) <= 75) {
             return $line;
         }
@@ -887,16 +897,9 @@ class CalendarController extends \PageController
 
         while ($offset < $length) {
             $segment = mb_strcut($line, $offset, $limit, 'UTF-8');
-            if ($segment === '') {
-                // Malformed input: a long run of stray UTF-8 continuation
-                // bytes makes mb_strcut() return an empty string at a
-                // mid-sequence offset. Without this raw-octet fallback the
-                // offset would never advance and folding would spin until
-                // max_execution_time kills the request. Valid UTF-8 always
-                // advances by at least one whole character, so this cannot
-                // loop forever.
-                $segment = substr($line, $offset, $limit);
-            }
+            // The line is valid UTF-8 after scrubbing, so mb_strcut() cuts on
+            // character boundaries and the offset always advances by at least
+            // one whole character; this cannot loop forever.
             $segmentLength = strlen($segment);
             $segments[] = $segment;
             $offset += $segmentLength;

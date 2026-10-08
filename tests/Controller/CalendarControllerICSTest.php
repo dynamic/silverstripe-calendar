@@ -723,13 +723,16 @@ class CalendarControllerICSTest extends FunctionalTest
      * CRLF), and long lines are folded by inserting CRLF plus one space. This is
      * the #297 regression: pre-fix the generator emitted the long DESCRIPTION,
      * SUMMARY and URL lines unfolded, so the per-line length assertion below
-     * fails on the unfixed code.
+     * fails on the unfixed code. The Title is deliberately longer than 67
+     * characters so its SUMMARY line itself exceeds 75 octets and is folded,
+     * not just checked for surviving unfolding.
      */
     public function testLongLinesAreFoldedAt75Octets()
     {
         $longContent = 'Start marker ' . str_repeat('abcdefghij ', 30) . 'end marker';
+        $longTitle = 'A Summary Long Enough That It Must Be Folded In The ICS Output For Consumers';
         $this->createPublishedICSEvent([
-            'Title' => 'A Summary Long Enough That It Must Be Folded In The ICS Output',
+            'Title' => $longTitle,
             'Content' => $longContent,
         ]);
 
@@ -755,10 +758,47 @@ class CalendarControllerICSTest extends FunctionalTest
             'DESCRIPTION:' . $longContent,
             $unfolded
         );
+        // The SUMMARY line was over the limit, so the raw body must NOT hold it
+        // contiguously while the unfolded body must restore it exactly.
+        $this->assertStringNotContainsString('SUMMARY:' . $longTitle, $body);
         $this->assertStringContainsString(
-            'SUMMARY:A Summary Long Enough That It Must Be Folded In The ICS Output',
+            'SUMMARY:' . $longTitle,
             $unfolded
         );
+    }
+
+    /**
+     * foldICSLine() must terminate on malformed UTF-8: a run of 74+ stray
+     * continuation bytes makes mb_strcut() return an empty string at a
+     * mid-sequence offset, and without the raw-octet fallback the fold loop
+     * never advances the offset - the request hangs until max_execution_time
+     * kills it. max_execution_time is pinned low here so an unfixed loop fails
+     * this test as a timeout fatal instead of stalling the suite.
+     */
+    public function testFoldingTerminatesOnMalformedUtf8Input()
+    {
+        // 74 consecutive continuation bytes (0x80..0xBF are never valid lead
+        // bytes), long enough to trigger the empty-segment path at the 75-octet
+        // fold boundary.
+        $malformed = 'X:' . str_repeat('a', 73) . str_repeat("\x80", 74) . str_repeat('b', 40);
+
+        $previous = (int) ini_get('max_execution_time');
+        ini_set('max_execution_time', '10');
+        try {
+            $fold = new \ReflectionMethod(CalendarController::class, 'foldICSLine');
+            $folded = $fold->invoke($this->controller, $malformed);
+
+            // Terminated, and still respects the geometry contract: every
+            // physical line within 75 octets, and unfolding restores the
+            // input byte-for-byte (the fallback cuts raw octets, which are
+            // preserved, not dropped).
+            foreach (explode("\r\n", $folded) as $line) {
+                $this->assertLessThanOrEqual(75, strlen($line), 'Folded line exceeds 75 octets');
+            }
+            $this->assertSame($malformed, str_replace("\r\n ", '', $folded));
+        } finally {
+            ini_set('max_execution_time', (string) $previous);
+        }
     }
 
     /**

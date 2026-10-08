@@ -887,9 +887,16 @@ class CalendarController extends \PageController
 
         while ($offset < $length) {
             $segment = mb_strcut($line, $offset, $limit, 'UTF-8');
-            // mb_strcut() cuts on character boundaries, so the offset always
-            // advances by at least one whole character and this cannot loop
-            // forever.
+            if ($segment === '') {
+                // Malformed input: a long run of stray UTF-8 continuation
+                // bytes makes mb_strcut() return an empty string at a
+                // mid-sequence offset. Without this raw-octet fallback the
+                // offset would never advance and folding would spin until
+                // max_execution_time kills the request. Valid UTF-8 always
+                // advances by at least one whole character, so this cannot
+                // loop forever.
+                $segment = substr($line, $offset, $limit);
+            }
             $segmentLength = strlen($segment);
             $segments[] = $segment;
             $offset += $segmentLength;

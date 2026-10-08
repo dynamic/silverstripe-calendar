@@ -44,7 +44,9 @@ class Category extends DataObject implements PermissionProvider
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
-        'Color' => 'Varchar(9)', // Hex color code (e.g., #334597 or #FF334597 for alpha)
+        // Color is stored bare by ColorField (e.g. 334597 or FF334597 with alpha).
+        // Legacy values may still be #-prefixed or a palette name from ColorPaletteField.
+        'Color' => 'Varchar(9)',
     ];
 
     /**
@@ -236,8 +238,8 @@ class Category extends DataObject implements PermissionProvider
             return null;
         }
 
-        // Check if it's a valid hex color (3 or 6 characters with optional #)
-        if (preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6})$/', $this->Color)) {
+        // Check if it's a valid hex color (3, 6 or 8 characters with optional #)
+        if (preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/', $this->Color)) {
             return $this->getColorPreview();
         }
 
@@ -262,15 +264,10 @@ class Category extends DataObject implements PermissionProvider
             return '#334597'; // Default blue fallback if no color set
         }
 
-        // If the color starts with #, it's already a hex value (from ColorField)
-        if ($this->Color && strpos($this->Color, '#') === 0) {
+        // ColorField stores bare hex (no #), legacy values may carry one; accept both
+        if (preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/', $this->Color, $matches)) {
             // Expand 3-character hex codes to 6 characters for consistency
-            if (preg_match('/^#([a-fA-F0-9]{3})$/', $this->Color, $matches)) {
-                $expanded = $this->expandHexColor($matches[1]);
-                return '#' . strtolower($expanded);
-            }
-            // For all hex values, ensure consistent lowercase
-            return '#' . strtolower(ltrim($this->Color, '#'));
+            return '#' . strtolower($this->expandHexColor($matches[1]));
         }
 
         // Otherwise, it's a legacy color name from ColorPaletteField - map to hex values

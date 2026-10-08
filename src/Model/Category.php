@@ -44,8 +44,9 @@ class Category extends DataObject implements PermissionProvider
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
-        // Color is stored bare by ColorField (e.g. 334597 or FF334597 with alpha).
-        // Legacy values may still be #-prefixed or a palette name from ColorPaletteField.
+        // Color is stored bare by ColorField (e.g. 334597). An 8-digit value is stored
+        // alpha-first (AARRGGBB, the layout Color::HEX_TO_RGB reads), and legacy values may
+        // be #-prefixed or a palette name from ColorPaletteField.
         'Color' => 'Varchar(9)',
     ];
 
@@ -227,6 +228,25 @@ class Category extends DataObject implements PermissionProvider
     }
 
     /**
+     * Normalise matched hex digits for use in CSS
+     *
+     * Expands 3-character codes, and for 8-character codes keeps only the RGB part:
+     * the colorpicker stores the alpha byte first (Color::HEX_TO_RGB reads the low 24
+     * bits), which is the opposite of CSS's #rrggbbaa, and the library itself never
+     * applies that stored alpha to CSS output either.
+     *
+     * @param string $hex Hex digits without a leading # (3, 6 or 8 characters)
+     * @return string Lowercase hex digits ready to be prefixed with #
+     */
+    private function toCssHexDigits(string $hex): string
+    {
+        if (strlen($hex) === 8) {
+            $hex = substr($hex, 2);
+        }
+        return strtolower($this->expandHexColor($hex));
+    }
+
+    /**
      * Get a validated color safe for use in inline styles
      * Returns null if color is not a valid hex format
      *
@@ -266,8 +286,7 @@ class Category extends DataObject implements PermissionProvider
 
         // ColorField stores bare hex (no #), legacy values may carry one; accept both
         if (preg_match('/^#?([a-fA-F0-9]{3}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8})$/', $this->Color, $matches)) {
-            // Expand 3-character hex codes to 6 characters for consistency
-            return '#' . strtolower($this->expandHexColor($matches[1]));
+            return '#' . $this->toCssHexDigits($matches[1]);
         }
 
         // Otherwise, it's a legacy color name from ColorPaletteField - map to hex values

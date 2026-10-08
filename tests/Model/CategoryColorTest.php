@@ -127,8 +127,8 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Regression test for #319: ColorField stores bare 6-digit hex, which used to
-     * fall through to the default blue in getColorPreview() and null in getValidatedColor()
+     * Regression test for #319: ColorField stores bare 6-digit hex, which used to fall
+     * through to the default blue in both getColorPreview() and getValidatedColor()
      */
     public function testBareSixDigitHexIsReadBackAsPrefixedHex()
     {
@@ -152,15 +152,29 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Regression test for #319: bare 8-digit (alpha) hex is also stored by the picker
+     * Regression test for #319: bare 8-digit hex is stored alpha-first by the colorpicker
+     * and must not be handed to CSS in that order
      */
     public function testBareEightDigitHex()
     {
         $category = new Category();
+        // AARRGGBB: opaque (ff) blue (0000ff)
         $category->Color = 'ff0000ff';
 
-        $this->assertSame('#ff0000ff', $category->getColorPreview());
-        $this->assertSame('#ff0000ff', $category->getValidatedColor());
+        $this->assertSame('#0000ff', $category->getColorPreview());
+        $this->assertSame('#0000ff', $category->getValidatedColor());
+    }
+
+    /**
+     * An alpha-first legacy value written by branch 2 renders its RGB part, not red
+     */
+    public function testLegacyPrefixedEightDigitHex()
+    {
+        $category = new Category();
+        $category->Color = '#FF334597';
+
+        $this->assertSame('#334597', $category->getColorPreview());
+        $this->assertSame('#334597', $category->getValidatedColor());
     }
 
     /**

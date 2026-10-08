@@ -847,7 +847,58 @@ class CalendarController extends \PageController
         // ICS Footer
         $ics[] = 'END:VCALENDAR';
 
+        // Fold every logical line to the RFC 5545 3.1 length limit in one place
+        // (issue #297): header lines, every VEVENT line, and the long ones
+        // (URL, DESCRIPTION, SUMMARY) all pass through here, so a line added in
+        // the future cannot bypass the limit just because its producer forgot.
+        $ics = array_map([$this, 'foldICSLine'], $ics);
+
         return implode("\r\n", $ics);
+    }
+
+    /**
+     * Fold one logical ICS line to the RFC 5545 line-length limit.
+     *
+     * RFC 5545 section 3.1 says lines MUST NOT be longer than 75 octets
+     * (excluding the CRLF) and that longer lines are split by inserting a CRLF
+     * followed by a single linear whitespace character. Continuation octets are
+     * insignificant to parsers, so unfolding restores the original value.
+     *
+     * Segments are cut with mb_strcut() so a multi-byte UTF-8 character is
+     * never split across a fold - cutting at an arbitrary octet would emit
+     * invalid UTF-8 inside the continuation line. The first segment is cut at
+     * 75 octets; each later one at 74, because the "\r\n " that precedes it in
+     * the folded output contributes one space to that continuation line's
+     * length budget.
+     *
+     * @param string $line One logical line, without its trailing CRLF
+     * @return string The line, possibly with "\r\n " folds inserted
+     */
+    private function foldICSLine(string $line): string
+    {
+        if (strlen($line) <= 75) {
+            return $line;
+        }
+
+        $segments = [];
+        $offset = 0;
+        $length = strlen($line);
+        $limit = 75;
+
+        while ($offset < $length) {
+            $segment = mb_strcut($line, $offset, $limit, 'UTF-8');
+            // mb_strcut() cuts on character boundaries, so the offset always
+            // advances by at least one whole character and this cannot loop
+            // forever.
+            $segmentLength = strlen($segment);
+            $segments[] = $segment;
+            $offset += $segmentLength;
+            // Continuation lines carry the leading space within their 75-octet
+            // budget, so only 74 octets are left for content.
+            $limit = 74;
+        }
+
+        return implode("\r\n ", $segments);
     }
 
     /**
@@ -880,7 +931,15 @@ class CalendarController extends \PageController
 
             // Add description if available
             if ($event->Content) {
-                $ics[] = 'DESCRIPTION:' . $this->escapeICSValue(strip_tags($event->Content));
+                // strip_tags() first, then html_entity_decode() (issue #297):
+                // decoding before stripping would turn &lt;b&gt; into real markup
+                // for the stripper to remove, silently dropping text an editor
+                // meant as literal. Decoding after means entities such as
+                // &amp; render as their characters (&) and any markup the
+                // editor escaped stays as text.
+                $ics[] = 'DESCRIPTION:' . $this->escapeICSValue(
+                    html_entity_decode(strip_tags($event->Content), ENT_QUOTES | ENT_HTML5, 'UTF-8')
+                );
             }
 
             // Add location if available
@@ -951,6 +1010,13 @@ class CalendarController extends \PageController
      */
     private function escapeICSValue(string $value): string
     {
+        // Normalise line endings before escaping (issue #297). The table below
+        // maps both "\n" and "\r" to a single "\\n" escape, so an unnormalised
+        // CRLF - what a browser editor actually stores in a Content area -
+        // became TWO \\n escapes for one visual line break. Collapsing "\r\n"
+        // and a lone "\r" to "\n" here means one break in, one escape out.
+        $value = str_replace(["\r\n", "\r"], "\n", $value);
+
         // Escape special characters
         $value = str_replace(['\\', ';', ',', "\n", "\r"], ['\\\\', '\\;', '\\,', '\\n', '\\n'], $value);
 

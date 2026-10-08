@@ -719,9 +719,9 @@ class CalendarControllerICSTest extends FunctionalTest
     }
 
     /**
-     * RFC 5545 3.1: no content line may be longer than 75 octets (excluding the
-     * CRLF), and long lines are folded by inserting CRLF plus one space. This is
-     * the #297 regression: pre-fix the generator emitted the long DESCRIPTION,
+     * RFC 5545 3.1: content lines SHOULD NOT be longer than 75 octets (excluding
+     * the CRLF), and long lines are folded by inserting CRLF plus one space. This
+     * is the #297 regression: pre-fix the generator emitted the long DESCRIPTION,
      * SUMMARY and URL lines unfolded, so the per-line length assertion below
      * fails on the unfixed code. The Title is deliberately longer than 67
      * characters so its SUMMARY line itself exceeds 75 octets and is folded,
@@ -827,12 +827,15 @@ class CalendarControllerICSTest extends FunctionalTest
     /**
      * A CRLF inside an event's Content must produce exactly one \n escape in
      * DESCRIPTION, not two. Pre-fix escapeICSValue() mapped "\n" and "\r" each
-     * to a "\\n" escape, so one visual line break stored as CRLF (what a browser
-     * editor writes) was escaped twice and readers showed a blank line (#297).
+     * to a "\\n" escape, so one visual line break carried as CRLF was escaped
+     * twice and readers showed a blank line (#297).
      *
      * Driven through a double so the exact byte sequence under test survives the
-     * trip into the generator - the DB HTML field round-trip would normalise it
-     * before the controller ever sees it.
+     * trip into the generator: the DB HTML field round-trip normalises CRLF, so a
+     * stored page cannot carry it to the controller. Measured on this module's
+     * ddev MySQL test DB - writing "a\r\nb" as a page's Content and reading it
+     * back yields "a\nb" (column hex 610a62, input hex 610d0a62) - which is why
+     * the sequence has to be injected rather than stored.
      */
     public function testCRLFInContentIsEscapedOnce()
     {
@@ -929,7 +932,7 @@ class CalendarControllerICSTest extends FunctionalTest
      */
     public function testMultibyteCharactersAreNotSplitAtFoldBoundary()
     {
-        // 'é' is 2 octets and '☕' is 4, spread through a >75-octet line so fold
+        // 'é' is 2 octets and '☕' is 3 (E2 98 95), spread through a >75-octet line
         // boundaries land mid-sequence on any naive octet cut.
         $content = str_repeat('héllo wörld ☕ ', 20) . 'done';
         $this->createPublishedICSEvent([

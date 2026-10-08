@@ -859,7 +859,7 @@ class CalendarController extends \PageController
     /**
      * Fold one logical ICS line to the RFC 5545 line-length limit.
      *
-     * RFC 5545 section 3.1 says lines MUST NOT be longer than 75 octets
+     * RFC 5545 section 3.1 says lines SHOULD NOT be longer than 75 octets
      * (excluding the CRLF) and that longer lines are split by inserting a CRLF
      * followed by a single linear whitespace character. Continuation octets are
      * insignificant to parsers, so unfolding restores the original value.
@@ -1017,10 +1017,15 @@ class CalendarController extends \PageController
     private function escapeICSValue(string $value): string
     {
         // Normalise line endings before escaping (issue #297). The table below
-        // maps both "\n" and "\r" to a single "\\n" escape, so an unnormalised
-        // CRLF - what a browser editor actually stores in a Content area -
-        // became TWO \\n escapes for one visual line break. Collapsing "\r\n"
-        // and a lone "\r" to "\n" here means one break in, one escape out.
+        // maps both "\n" and "\r" to a single "\\n" escape, so one unnormalised
+        // CRLF became TWO \\n escapes for a single visual line break, and readers
+        // showed a blank line. Collapsing "\r\n" and a lone "\r" to "\n" here
+        // means one break in, one escape out. Values read back from a stored HTML
+        // field never carry a CR into this method - writing "a\r\nb" to a page and
+        // reading it back gives "a\nb" (measured against the ddev MySQL test DB,
+        // see the PR note) - so the CRLF case is load-bearing for the paths that
+        // skip that normalisation: plain string fields, imported or
+        // programmatically written content, and values assembled in memory.
         $value = str_replace(["\r\n", "\r"], "\n", $value);
 
         // Escape special characters

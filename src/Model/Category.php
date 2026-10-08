@@ -44,12 +44,12 @@ class Category extends DataObject implements PermissionProvider
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
-        // Color is stored bare by ColorField, which only ever writes 6 digits. Longer values
-        // can only arrive from old data or from the field's looser validate() (which accepts
-        // 6-8 characters and, because its range is written [A-f0-9], some non-hex letters);
-        // this module's own branch 2 documentation ('#334597 or #FF334597 for alpha') says the
-        // 8-digit values it wrote were alpha-first. Legacy values may also be #-prefixed or a
-        // palette name from ColorPaletteField.
+        // Color is stored bare by ColorField, whose picker only ever writes 6 digits. Longer
+        // values can only arrive from old data or from the field's looser validate() (which
+        // accepts 6-8 characters and, because its range is written [A-f0-9], some non-hex
+        // letters). Any 8-digit value is read in CSS order (#rrggbbaa); the branch 2 comment
+        // ('#334597 or #FF334597 for alpha') was aspirational - see toCssHexDigits(). Legacy
+        // values may also be #-prefixed or a palette name from ColorPaletteField.
         'Color' => 'Varchar(9)',
     ];
 
@@ -233,13 +233,21 @@ class Category extends DataObject implements PermissionProvider
     /**
      * Normalise matched hex digits for use in CSS
      *
-     * Expands 3-character codes, and for 8-character codes keeps only the RGB part: this
-     * module's branch 2 documentation recorded 8-digit values as alpha-first (#FF334597 for
-     * the default blue), which is the opposite of CSS's #rrggbbaa. The alpha byte is dropped
-     * rather than moved, because the colorpicker's own picker writes 6 digits and the CMS
-     * swatch code never applies a stored alpha. Note that ColorField::Field() emits
-     * '#' . value unconverted, so for an 8-digit value the CMS swatch keeps reading it as CSS
-     * #rrggbbaa and will disagree with the frontend.
+     * Expands 3-character codes, and for 8-character codes keeps the RGB part in CSS order
+     * (#rrggbbaa) and drops the trailing alpha byte.
+     *
+     * The alpha byte is last, not first. This module's branch 2 documentation ('#334597 or
+     * #FF334597 for alpha') suggested alpha-first, but no alpha-first data can exist: branch
+     * 2 used ryanpotter/silverstripe-color-field's ColorField, whose constructor passes a
+     * maxLength of 7 to TextField, so only '#rrggbb' could be stored through it - and branch
+     * 2's own getColorPreview() passed an 8-digit value straight through to CSS, which reads
+     * it as #rrggbbaa. Dropping the trailing byte therefore agrees with both that historical
+     * rendering and with the two live readers of a stored value: ColorField::Field() emits
+     * '#' . value unconverted for the CMS swatch (CSS order), and
+     * CalendarController::getContrastColor() reads r, g and b from the first three byte pairs.
+     * The difference against the CMS swatch is opacity only - the frontend renders the same
+     * hue fully opaque, which is what getContrastColor() already picks the text colour
+     * against.
      *
      * @param string $hex Hex digits without a leading # (3, 6 or 8 characters)
      * @return string Lowercase hex digits ready to be prefixed with #
@@ -247,7 +255,8 @@ class Category extends DataObject implements PermissionProvider
     private function toCssHexDigits(string $hex): string
     {
         if (strlen($hex) === 8) {
-            $hex = substr($hex, 2);
+            // CSS order: the alpha channel is the trailing byte
+            $hex = substr($hex, 0, 6);
         }
         return strtolower($this->expandHexColor($hex));
     }

@@ -59,28 +59,30 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * An 8-character value is written alpha-first by branch 2, so the RGB part is what
-     * callers feeding CSS should receive (changed by this fix: it used to return the raw
-     * 'FF0000FF', which CSS reads as opaque red)
+     * An 8-character value is read in CSS order (#rrggbbaa), so callers feeding CSS get the
+     * RGB part and the alpha byte is dropped. Changed by this fix: it used to return the raw
+     * 'FF0000FF' upper-cased, which CSS also reads as opaque red - same colour, but only
+     * because the alpha byte happens to be 'FF' here
      */
     public function testEightCharacterHexColor()
     {
         $category = new Category();
         $category->Color = '#FF0000FF';
 
-        // Alpha byte dropped, RGB kept
-        $this->assertEquals('0000ff', $category->getColorHex());
+        // RGB kept in CSS order, trailing alpha byte dropped
+        $this->assertEquals('ff0000', $category->getColorHex());
     }
 
     /**
-     * Same for a bare 8-character value stored by ColorField's looser validation
+     * Same for a bare 8-character value stored through ColorField's looser validation. The
+     * trailing '97' is the alpha channel, so the colour is 'ff3345', not '334597'
      */
     public function testBareEightCharacterHexColor()
     {
         $category = new Category();
         $category->Color = 'FF334597';
 
-        $this->assertEquals('334597', $category->getColorHex());
+        $this->assertEquals('ff3345', $category->getColorHex());
     }
 
     /**
@@ -165,29 +167,32 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Regression test for #319: bare 8-digit hex arrives alpha-first (branch 2 wrote it that
-     * way) and must not be handed to CSS in that order
+     * Regression test for #319: bare 8-digit hex arrives through ColorField::validate()
+     * (which accepts 6-8 characters) and is read in CSS order, #rrggbbaa
      */
     public function testBareEightDigitHex()
     {
         $category = new Category();
-        // AARRGGBB: opaque (ff) blue (0000ff)
-        $category->Color = 'ff0000ff';
+        // CSS order: pink (e91e63) with a fully opaque alpha byte
+        $category->Color = 'e91e63ff';
 
-        $this->assertSame('#0000ff', $category->getColorPreview());
-        $this->assertSame('#0000ff', $category->getValidatedColor());
+        $this->assertSame('#e91e63', $category->getColorPreview());
+        $this->assertSame('#e91e63', $category->getValidatedColor());
     }
 
     /**
-     * An alpha-first legacy value written by branch 2 renders its RGB part, not red
+     * A #-prefixed 8-digit legacy value renders its CSS-order RGB part with the alpha byte
+     * dropped. Branch 2's '#FF334597 for alpha' comment never described stored data: that
+     * branch's ColorField limited the field to 7 characters, so only '#rrggbb' could be
+     * written through it
      */
     public function testLegacyPrefixedEightDigitHex()
     {
         $category = new Category();
         $category->Color = '#FF334597';
 
-        $this->assertSame('#334597', $category->getColorPreview());
-        $this->assertSame('#334597', $category->getValidatedColor());
+        $this->assertSame('#ff3345', $category->getColorPreview());
+        $this->assertSame('#ff3345', $category->getValidatedColor());
     }
 
     /**

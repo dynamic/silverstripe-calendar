@@ -44,9 +44,11 @@ class Category extends DataObject implements PermissionProvider
         'Title' => 'Varchar(100)',
         'Description' => 'Varchar(255)',
         'URLSegment' => 'Varchar(255)',
-        // Color is stored bare by ColorField (e.g. 334597). An 8-digit value is stored
-        // alpha-first (AARRGGBB, the layout Color::HEX_TO_RGB reads), and legacy values may
-        // be #-prefixed or a palette name from ColorPaletteField.
+        // Color is stored bare by ColorField, which only ever writes 6 digits. An 8-digit
+        // value can only come from the field's looser validate() or from branch 2 data, and
+        // this module's own branch 2 documentation ('#334597 or #FF334597 for alpha') says
+        // those were written alpha-first. Legacy values may also be #-prefixed or a palette
+        // name from ColorPaletteField.
         'Color' => 'Varchar(9)',
     ];
 
@@ -230,10 +232,13 @@ class Category extends DataObject implements PermissionProvider
     /**
      * Normalise matched hex digits for use in CSS
      *
-     * Expands 3-character codes, and for 8-character codes keeps only the RGB part:
-     * the colorpicker stores the alpha byte first (Color::HEX_TO_RGB reads the low 24
-     * bits), which is the opposite of CSS's #rrggbbaa, and the library itself never
-     * applies that stored alpha to CSS output either.
+     * Expands 3-character codes, and for 8-character codes keeps only the RGB part: this
+     * module's branch 2 documentation recorded 8-digit values as alpha-first (#FF334597 for
+     * the default blue), which is the opposite of CSS's #rrggbbaa. The alpha byte is dropped
+     * rather than moved, because the colorpicker's own picker writes 6 digits and the CMS
+     * swatch code never applies a stored alpha. Note that ColorField::Field() and
+     * Color::ColorCMS() emit '#' . value unconverted, so for an 8-digit value the CMS swatch
+     * keeps reading it as CSS #rrggbbaa and will disagree with the frontend.
      *
      * @param string $hex Hex digits without a leading # (3, 6 or 8 characters)
      * @return string Lowercase hex digits ready to be prefixed with #
@@ -312,9 +317,9 @@ class Category extends DataObject implements PermissionProvider
             if (strlen($hex) === 3) {
                 return strtolower($this->expandHexColor($hex));
             }
-            // For 8-character hex (with alpha), keep uppercase as expected by tests
+            // For 8-character hex, drop the leading alpha byte (see toCssHexDigits())
             if (strlen($hex) === 8) {
-                return strtoupper($hex);
+                return strtolower(substr($hex, 2));
             }
             // For 6-character hex, use lowercase
             return strtolower($hex);

@@ -59,15 +59,28 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Test 8-character hex color with alpha (future support)
+     * An 8-character value is written alpha-first by branch 2, so the RGB part is what
+     * callers feeding CSS should receive (changed by this fix: it used to return the raw
+     * 'FF0000FF', which CSS reads as opaque red)
      */
     public function testEightCharacterHexColor()
     {
         $category = new Category();
         $category->Color = '#FF0000FF';
 
-        // Should return as-is (8 characters for alpha support)
-        $this->assertEquals('FF0000FF', $category->getColorHex());
+        // Alpha byte dropped, RGB kept
+        $this->assertEquals('0000ff', $category->getColorHex());
+    }
+
+    /**
+     * Same for a bare 8-character value stored by ColorField's looser validation
+     */
+    public function testBareEightCharacterHexColor()
+    {
+        $category = new Category();
+        $category->Color = 'FF334597';
+
+        $this->assertEquals('334597', $category->getColorHex());
     }
 
     /**

@@ -864,25 +864,18 @@ class CalendarController extends \PageController
      * followed by a single linear whitespace character. Continuation octets are
      * insignificant to parsers, so unfolding restores the original value.
      *
-     * Segments are cut with mb_strcut() so a multi-byte UTF-8 character is
-     * never split across a fold - cutting at an arbitrary octet would emit
-     * invalid UTF-8 inside the continuation line. The line is first scrubbed
-     * with mb_scrub() so it is valid UTF-8: without that, mb_strcut() can
-     * return an empty string at an offset inside a long run of stray
-     * continuation bytes (a raw-octet fallback for it is not a fix either -
-     * such a cut can strand a valid multi-byte character mid-sequence, after
-     * which mb_strcut() backs up and re-emits a byte already written,
-     * corrupting the fold). Scrubbing replaces each invalid byte with the
-     * mbstring substitute character, which under mbstring's default
-     * mb_substitute_character() setting of 63 is a literal "?" - emitting
-     * U+FFFD instead would mean changing that setting globally, which this
-     * method deliberately does not do. Either way the scrubbed line is valid
-     * UTF-8, so every cut stays on a character boundary, the loop always
-     * advances, and the feed is valid UTF-8. The first segment is cut at 75
-     * octets;
-     * each later one at 74, because the "\r\n " that precedes it in the
-     * folded output contributes one space to that continuation line's
-     * length budget.
+     * The line is scrubbed with mb_scrub() before anything is cut, so it is
+     * valid UTF-8: mb_strcut() can otherwise return an empty string at an offset
+     * inside a run of stray continuation bytes, and a cut that lands inside a
+     * valid multi-byte character makes mb_strcut() back up and re-emit a byte
+     * that was already written. Scrubbing replaces each invalid byte with the
+     * mbstring substitute character, a literal "?" under mbstring's default
+     * mb_substitute_character() setting of 63. Every cut therefore stays on a
+     * character boundary and the loop always advances.
+     *
+     * The first segment is cut at 75 octets, each later one at 74: the "\r\n "
+     * that precedes a continuation line contributes one space to that line's
+     * budget.
      *
      * @param string $line One logical line, without its trailing CRLF
      * @return string The line, possibly with "\r\n " folds inserted
@@ -902,14 +895,12 @@ class CalendarController extends \PageController
 
         while ($offset < $length) {
             $segment = mb_strcut($line, $offset, $limit, 'UTF-8');
-            // The line is valid UTF-8 after scrubbing, so mb_strcut() cuts on
-            // character boundaries and the offset always advances by at least
-            // one whole character; this cannot loop forever.
+            // Valid UTF-8 after the scrub, so the cut lands on a character
+            // boundary and $offset always advances by a whole character.
             $segmentLength = strlen($segment);
             $segments[] = $segment;
             $offset += $segmentLength;
-            // Continuation lines carry the leading space within their 75-octet
-            // budget, so only 74 octets are left for content.
+            // The continuation's leading space counts toward its 75 octets.
             $limit = 74;
         }
 

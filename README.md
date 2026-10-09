@@ -431,10 +431,12 @@ discarded, and that occurrence stays all-day. Making the column nullable would f
 which is tracked in issue #143. Until then, an all-day event cannot have a single timed
 occurrence.
 
-One further pre-existing quirk, unchanged here: FullCalendar reads an all-day `end` as
-exclusive, but the feed emits `EndDate` unchanged, so a multi-day all-day event renders one
-day short. The ICS export does add the day, so the two exports of one event differ. Filed
-as issue #187.
+The far edge of an all-day event is exclusive in both exports (issue #187). FullCalendar
+reads an all-day `end` as the first moment *after* the event, and RFC 5545 reads `DTEND`
+the same way, so for *All Day* on the feed emits the day after `EndDate` — `end: "2027-03-06"`
+for an event stored as 2027-03-03 to 2027-03-05 — and the ICS export emits the matching
+`DTEND;VALUE=DATE:20270306`. Emitting `EndDate` unchanged drew such an event one day short.
+A timed `end` is unchanged, and a row with no `EndDate` still omits the key.
 
 ## Troubleshooting
 

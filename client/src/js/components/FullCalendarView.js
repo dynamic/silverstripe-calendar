@@ -415,8 +415,22 @@ export class FullCalendarView {
         const end = event.end ? new Date(event.end) : null;
 
         if (event.allDay) {
-            if (end && start.toDateString() !== end.toDateString()) {
-                return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+            // FullCalendar's all-day `end` is exclusive - the feed emits EndDate + 1 day for
+            // exactly that reason (issue #187), matching RFC 5545's DTEND - so the last day
+            // the event actually covers is the day *before* it. Printing `end` verbatim named
+            // a day the event never had, and gave every single-day all-day event a two-date
+            // range. setDate() rather than an 86400000 ms subtraction: a calendar step is
+            // immune to the daylight-saving day that a millisecond step is not.
+            const lastDay = end ? new Date(end.getTime()) : null;
+            if (lastDay) {
+                lastDay.setDate(lastDay.getDate() - 1);
+            }
+
+            // Strictly-after rather than not-equal: a feed that still hands back an inclusive
+            // end (a cached response from before #187, or an end equal to the start) would
+            // otherwise render a range that ends before it begins.
+            if (lastDay && lastDay.getTime() > start.getTime()) {
+                return `${start.toLocaleDateString()} - ${lastDay.toLocaleDateString()}`;
             } else {
                 return start.toLocaleDateString();
             }

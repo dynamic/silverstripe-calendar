@@ -437,6 +437,8 @@ the same way, so for an *All Day* event the feed emits the day after `EndDate` (
 "2027-03-06"` for an event stored as 2027-03-03 to 2027-03-05), and the ICS export emits
 the matching `DTEND;VALUE=DATE:20270306`. Emitting `EndDate` unchanged drew such an event
 one day short. A timed `end` is unchanged, and a row with no `EndDate` still omits the key.
+The event modal follows the same rule: its date line names the last covered day, which is
+the day before that exclusive end, so a single-day all-day event shows one date.
 
 ## Troubleshooting
 

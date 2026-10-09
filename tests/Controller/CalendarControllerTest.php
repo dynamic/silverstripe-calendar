@@ -291,14 +291,13 @@ class CalendarControllerTest extends FunctionalTest
         $this->assertTrue($serialised['allDay'], 'allDay must follow the AllDay column, not StartTime');
         $this->assertSame('2027-03-04', $serialised['start'], 'An all-day event must serialise a date-only start');
         // The write path derived EndTime 20:30:00 before the row was flagged all-day. The
-        // far edge must go date-only too, or FullCalendar gets an all-day start with a
-        // timed end. Asserted against the value as it is emitted today: the feed does not
-        // make an all-day end exclusive the way the ICS export does, which issue #187
-        // tracks. Update this alongside that fix, not before it.
+        // far edge must stay date-only, or FullCalendar gets an all-day start with a timed
+        // end, and it must carry the exclusive boundary the renderer (and RFC 5545 for the
+        // ICS export) expects: the day after EndDate, per issue #187.
         $this->assertSame(
-            '2027-03-04',
+            '2027-03-05',
             $serialised['end'],
-            'An all-day event must serialise a date-only end (exclusive boundary: see #187)'
+            'An all-day event must serialise a date-only exclusive end (EndDate + 1 day, see #187)'
         );
     }
 
@@ -337,6 +336,102 @@ class CalendarControllerTest extends FunctionalTest
         // Pins the derived 1-hour EndTime reaching the feed as a composite, not just
         // sitting in the column.
         $this->assertSame('2027-05-05T10:15:00', $serialised['end']);
+    }
+
+    /**
+     * Issue #187, multi-day case: FullCalendar reads an all-day end as exclusive, so a
+     * range covering 2027-03-03 through 2027-03-05 must emit 2027-03-06. Emitting
+     * EndDate unchanged drew the event through 2027-03-04 and dropped its last day.
+     */
+    public function testMultiDayAllDayEventEmitsExclusiveEnd(): void
+    {
+        $event = EventPage::create([
+            'Title' => 'Three Day Festival',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => '2027-03-03',
+            'EndDate' => '2027-03-05',
+            'AllDay' => 1,
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $feed = $this->fetchFeed('2027-03-01', '2027-03-31');
+        $serialised = $this->findFeedEvent($feed, $event->ID);
+
+        $this->assertNotNull($serialised, 'The all-day event must appear in the feed');
+        $this->assertTrue($serialised['allDay']);
+        $this->assertSame('2027-03-03', $serialised['start']);
+        $this->assertSame(
+            '2027-03-06',
+            $serialised['end'],
+            'An all-day end must be the day after EndDate, or the last day is never drawn'
+        );
+    }
+
+    /**
+     * Issue #187, single-day case: the convention is always EndDate + 1 day for an
+     * all-day row - the key is emitted, not omitted - which matches the RFC 5545 DTEND
+     * the ICS export already produces for the same record.
+     */
+    public function testSingleDayAllDayEventEmitsStartPlusOneAsEnd(): void
+    {
+        $event = $this->createFeedEvent('Single Day Fair', '2027-03-04', null, 1);
+
+        $feed = $this->fetchFeed('2027-03-01', '2027-03-31');
+        $serialised = $this->findFeedEvent($feed, $event->ID);
+
+        $this->assertNotNull($serialised);
+        $this->assertTrue($serialised['allDay']);
+        $this->assertSame('2027-03-04', $serialised['start']);
+        $this->assertSame(
+            '2027-03-05',
+            $serialised['end'],
+            'A single-day all-day event ends the day after it starts'
+        );
+    }
+
+    /**
+     * The feed and the ICS export must not disagree about the far edge of one all-day
+     * record: DTEND;VALUE=DATE already carried the exclusive day, the feed did not.
+     */
+    public function testFeedEndMatchesICSDTENDForAllDayEvent(): void
+    {
+        $event = EventPage::create([
+            'Title' => 'Shared Boundary',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => '2027-11-03',
+            'EndDate' => '2027-11-05',
+            'AllDay' => 1,
+            'Recursion' => 'NONE',
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $feed = $this->fetchFeed('2027-11-01', '2027-11-30');
+        $serialised = $this->findFeedEvent($feed, $event->ID);
+        $this->assertNotNull($serialised);
+
+        // Reach the private ICS serialiser directly rather than over HTTP: the point is
+        // that the two serialisations of one record agree, not that the ICS action
+        // routes (CalendarControllerICSTest already covers that).
+        $transform = new \ReflectionMethod(CalendarController::class, 'transformEventToICS');
+        $transform->setAccessible(true);
+        $entry = $transform->invoke($this->controller, $event);
+
+        $this->assertNotNull($entry, 'The event must be transformable to ICS');
+        $dtend = null;
+        foreach ($entry as $line) {
+            if (str_starts_with($line, 'DTEND;VALUE=DATE:')) {
+                $dtend = substr($line, strlen('DTEND;VALUE=DATE:'));
+            }
+        }
+        $this->assertNotNull($dtend, 'An all-day event must carry an exclusive DTEND');
+        $this->assertSame(
+            str_replace('-', '', (string) $serialised['end']),
+            $dtend,
+            'The feed end and the ICS DTEND must describe the same exclusive boundary'
+        );
     }
 
     /**
@@ -484,8 +579,13 @@ class CalendarControllerTest extends FunctionalTest
         $this->assertTrue($overridden[0]['allDay'], 'ModifiedAllDay must reach the serialised payload');
         $this->assertSame('2027-08-17', $overridden[0]['start'], 'An overridden all-day occurrence stays date-only');
         // EventInstance resolves EndDate through __get() to a DBField, which json_encode()
-        // used to emit as {}. The far edge of an occurrence must be a plain date string.
-        $this->assertSame('2027-08-17', $overridden[0]['end'], 'Occurrence end must be a date string, not {}');
+        // used to emit as {}. The far edge of an occurrence must be a plain date string -
+        // and, like any all-day row, the exclusive day after the occurrence (#187).
+        $this->assertSame(
+            '2027-08-18',
+            $overridden[0]['end'],
+            'Occurrence end must be an exclusive date string, not {}'
+        );
 
         // The parent's other occurrences remain timed - the override is per-occurrence.
         $timedSiblings = array_values(array_filter(

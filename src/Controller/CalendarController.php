@@ -256,10 +256,24 @@ class CalendarController extends \PageController
                 }
 
                 if ($event->EndDate) {
-                    // Same rule on the far edge: an all-day range stays date-only.
-                    $eventData['end'] = (!$allDay && $event->EndTime)
-                        ? $event->EndDate . 'T' . $event->EndTime
-                        : (string) $event->EndDate;
+                    if ($allDay) {
+                        // FullCalendar reads an all-day end as exclusive, and RFC 5545 reads
+                        // DTEND the same way, so the ICS export already emits the day after
+                        // EndDate (see transformEventToICS()). Emitting EndDate unchanged here
+                        // drew a multi-day all-day event one day short and left the two
+                        // exports of one record a day apart. Cast first: an EventInstance
+                        // resolves EndDate through __get() to a DBField, which Carbon::parse()
+                        // only accepts as a string.
+                        $eventData['end'] = Carbon::parse((string) $event->EndDate)
+                            ->addDay()
+                            ->format('Y-m-d');
+                    } elseif ($event->EndTime) {
+                        // A timed range ends at an exact instant; there is nothing to add.
+                        $eventData['end'] = $event->EndDate . 'T' . $event->EndTime;
+                    } else {
+                        // A timed row with no clock time entered stays date-only, as before.
+                        $eventData['end'] = (string) $event->EndDate;
+                    }
                 }
 
                 // Add category information with colors

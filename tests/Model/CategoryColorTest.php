@@ -59,15 +59,27 @@ class CategoryColorTest extends SapphireTest
     }
 
     /**
-     * Test 8-character hex color with alpha (future support)
+     * An 8-character value is read as CSS #rrggbbaa: the RGB part is returned lower-cased and
+     * the trailing alpha byte is dropped, so the colour renders opaque
      */
     public function testEightCharacterHexColor()
     {
         $category = new Category();
         $category->Color = '#FF0000FF';
 
-        // Should return as-is (8 characters for alpha support)
-        $this->assertEquals('FF0000FF', $category->getColorHex());
+        $this->assertEquals('ff0000', $category->getColorHex());
+    }
+
+    /**
+     * Same for a bare 8-character value, which can only arrive through ColorField's looser
+     * validation: 'FF334597' is the colour ff3345 at alpha 97
+     */
+    public function testBareEightCharacterHexColor()
+    {
+        $category = new Category();
+        $category->Color = 'FF334597';
+
+        $this->assertEquals('ff3345', $category->getColorHex());
     }
 
     /**
@@ -124,5 +136,135 @@ class CategoryColorTest extends SapphireTest
         // Test mixed case
         $category->Color = '#AbCdEf';
         $this->assertEquals('abcdef', $category->getColorHex());
+    }
+
+    /**
+     * Regression test for #319: ColorField stores bare 6-digit hex, which used to fall
+     * through to the default blue in both getColorPreview() and getValidatedColor()
+     */
+    public function testBareSixDigitHexIsReadBackAsPrefixedHex()
+    {
+        $category = new Category();
+        $category->Color = 'e91e63';
+
+        $this->assertSame('#e91e63', $category->getColorPreview());
+        $this->assertSame('#e91e63', $category->getValidatedColor());
+    }
+
+    /**
+     * Regression test for #319: upper case bare hex is normalised to lower case
+     */
+    public function testBareUpperCaseSixDigitHexIsLowercased()
+    {
+        $category = new Category();
+        $category->Color = 'E91E63';
+
+        $this->assertSame('#e91e63', $category->getColorPreview());
+        $this->assertSame('#e91e63', $category->getValidatedColor());
+    }
+
+    /**
+     * Regression test for #319: bare 8-digit hex arrives through ColorField::validate()
+     * (which accepts 6-8 characters) and is read as #rrggbbaa
+     */
+    public function testBareEightDigitHex()
+    {
+        $category = new Category();
+        // CSS order: pink (e91e63) with a fully opaque alpha byte
+        $category->Color = 'e91e63ff';
+
+        $this->assertSame('#e91e63', $category->getColorPreview());
+        $this->assertSame('#e91e63', $category->getValidatedColor());
+    }
+
+    /**
+     * A #-prefixed 8-digit legacy value renders its RGB part, opaque: '#FF334597' is #ff3345
+     */
+    public function testLegacyPrefixedEightDigitHex()
+    {
+        $category = new Category();
+        $category->Color = '#FF334597';
+
+        $this->assertSame('#ff3345', $category->getColorPreview());
+        $this->assertSame('#ff3345', $category->getValidatedColor());
+    }
+
+    /**
+     * Bare 3-digit hex is expanded the same way a #-prefixed one is. ColorField::validate()
+     * requires 6-8 characters, so a bare 3-digit value can only come from old data or a
+     * direct write
+     */
+    public function testBareThreeDigitHexIsExpanded()
+    {
+        $category = new Category();
+        $category->Color = 'F00';
+
+        $this->assertSame('#ff0000', $category->getColorPreview());
+        $this->assertSame('#ff0000', $category->getValidatedColor());
+    }
+
+    /**
+     * Legacy #-prefixed values still render as their lower-case hex
+     */
+    public function testLegacyPrefixedHexStillRenders()
+    {
+        $category = new Category();
+        $category->Color = '#FF0000';
+
+        $this->assertSame('#ff0000', $category->getColorPreview());
+        $this->assertSame('#ff0000', $category->getValidatedColor());
+    }
+
+    /**
+     * Legacy palette names from ColorPaletteField still map to their hex values
+     */
+    public function testLegacyPaletteNameStillMaps()
+    {
+        $category = new Category();
+        $category->Color = 'Blue';
+
+        $this->assertSame('#334597', $category->getColorPreview());
+        $this->assertSame('#334597', $category->getValidatedColor());
+    }
+
+    /**
+     * No color at all keeps the default preview and a null validated color
+     */
+    public function testEmptyColorUsesDefaults()
+    {
+        $category = new Category();
+        $category->Color = '';
+
+        $this->assertSame('#334597', $category->getColorPreview());
+        $this->assertNull($category->getValidatedColor());
+    }
+
+    /**
+     * Non-hex, non-palette values still get the default preview and a null validated color
+     */
+    public function testInvalidColorStillFallsBack()
+    {
+        $category = new Category();
+        $category->Color = 'zzzzzz';
+
+        $this->assertSame('#334597', $category->getColorPreview());
+        $this->assertNull($category->getValidatedColor());
+    }
+
+    /**
+     * Four- and five-digit values are not a hex color in any supported format
+     */
+    public function testFourAndFiveDigitValuesAreRejected()
+    {
+        $category = new Category();
+        $category->Color = 'abcd';
+
+        $this->assertSame('#334597', $category->getColorPreview());
+        $this->assertNull($category->getValidatedColor());
+
+        $category->Color = '#abcde';
+
+        $this->assertSame('#334597', $category->getColorPreview());
+        $this->assertNull($category->getValidatedColor());
     }
 }

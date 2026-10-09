@@ -433,10 +433,10 @@ occurrence.
 
 The far edge of an all-day event is exclusive in both exports (issue #187). FullCalendar
 reads an all-day `end` as the first moment *after* the event, and RFC 5545 reads `DTEND`
-the same way, so for *All Day* on the feed emits the day after `EndDate` — `end: "2027-03-06"`
-for an event stored as 2027-03-03 to 2027-03-05 — and the ICS export emits the matching
-`DTEND;VALUE=DATE:20270306`. Emitting `EndDate` unchanged drew such an event one day short.
-A timed `end` is unchanged, and a row with no `EndDate` still omits the key.
+the same way, so for an *All Day* event the feed emits the day after `EndDate` (`end:
+"2027-03-06"` for an event stored as 2027-03-03 to 2027-03-05), and the ICS export emits
+the matching `DTEND;VALUE=DATE:20270306`. Emitting `EndDate` unchanged drew such an event
+one day short. A timed `end` is unchanged, and a row with no `EndDate` still omits the key.
 
 ## Troubleshooting
 

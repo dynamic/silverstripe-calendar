@@ -9,6 +9,7 @@ use Dynamic\Calendar\Model\Category;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
 use Psr\Log\LoggerInterface;
+use SilverStripe\Core\Config\Config;
 use SilverStripe\Control\HTTPRequest;
 use SilverStripe\Core\Injector\Injector;
 use SilverStripe\Model\List\ArrayList;
@@ -711,6 +712,43 @@ class CalendarControllerICSTest extends FunctionalTest
     }
 
     /**
+     * Run a callable with PHP's default timezone forced, restoring the previous value
+     * in a finally block so a failure inside the callable cannot leak the timezone
+     * into the rest of the suite.
+     *
+     * @return mixed Whatever the callable returned, captured before the restore
+     */
+    private function withPhpTimezone(string $timezone, callable $callable)
+    {
+        $previous = date_default_timezone_get();
+        date_default_timezone_set($timezone);
+
+        try {
+            return $callable();
+        } finally {
+            date_default_timezone_set($previous);
+        }
+    }
+
+    /**
+     * Return the (unfolded) VEVENT block whose SUMMARY matches the given title.
+     *
+     * The feed carries the setUp() event alongside anything a test adds, so an
+     * assertion on a bare DTSTART substring could be satisfied by the wrong event;
+     * scoping to the block pins it to the event under test.
+     */
+    private function veventBlockForSummary(string $body, string $summary): string
+    {
+        $unfolded = $this->unfoldICS($body);
+        foreach (explode("BEGIN:VEVENT", $unfolded) as $block) {
+            if (strpos($block, 'SUMMARY:' . $summary) !== false) {
+                return explode("END:VEVENT", $block)[0];
+            }
+        }
+        $this->fail('No VEVENT block found for SUMMARY: ' . $summary);
+    }
+
+    /**
      * Fetch the /ical feed body through the controller action.
      */
     private function fetchICSBody(): string
@@ -974,6 +1012,124 @@ class CalendarControllerICSTest extends FunctionalTest
 
         // Unfolding restores the full description byte-for-byte.
         $this->assertStringContainsString('DESCRIPTION:' . $content, $this->unfoldICS($body));
+    }
+
+    /**
+     * A timed event is authored in venue-local wall-clock time, so it must be resolved
+     * in the site's own timezone before it is converted to UTC. Pre-fix
+     * CalendarController::$timezone defaulted to the literal 'UTC', so on a site whose
+     * PHP timezone is America/Chicago a 10:00 event emitted DTSTART:20261015T100000Z -
+     * five hours early from the subscriber's point of view (#329).
+     */
+    public function testICSTimedEventDefaultsToSiteTimezone()
+    {
+        $this->createPublishedICSEvent([
+            'Title' => 'Site Timezone Event',
+            'StartDate' => '2026-10-15',
+            'StartTime' => '10:00:00',
+            'EndDate' => '2026-10-15',
+            'EndTime' => '11:00:00',
+        ]);
+
+        $body = $this->withPhpTimezone('America/Chicago', function () {
+            return $this->fetchICSBody();
+        });
+
+        $vevent = $this->veventBlockForSummary($body, 'Site Timezone Event');
+
+        // 10:00 CDT is 15:00Z; 11:00 CDT is 16:00Z.
+        $this->assertStringContainsString('DTSTART:20261015T150000Z', $vevent);
+        $this->assertStringContainsString('DTEND:20261015T160000Z', $vevent);
+        // The pre-fix output, stated explicitly so a change that merely dropped the
+        // field could not pass the assertions above.
+        $this->assertStringNotContainsString('DTSTART:20261015T100000Z', $vevent);
+    }
+
+    /**
+     * An explicit CalendarController.timezone config value still wins over the site
+     * default - the override path added by #329 must keep working for sites that store
+     * events in UTC while their PHP default is something else.
+     */
+    public function testICSTimedEventHonoursConfiguredTimezoneOverride()
+    {
+        $this->createPublishedICSEvent([
+            'Title' => 'Configured Timezone Event',
+            'StartDate' => '2026-10-15',
+            'StartTime' => '10:00:00',
+            'EndDate' => '2026-10-15',
+            'EndTime' => '11:00:00',
+        ]);
+
+        Config::nest();
+
+        try {
+            $body = $this->withPhpTimezone('America/Chicago', function () {
+                Config::modify()->set(CalendarController::class, 'timezone', 'UTC');
+
+                return $this->fetchICSBody();
+            });
+        } finally {
+            Config::unnest();
+        }
+
+        $vevent = $this->veventBlockForSummary($body, 'Configured Timezone Event');
+
+        // The override is UTC, so the wall-clock time passes through unchanged.
+        $this->assertStringContainsString('DTSTART:20261015T100000Z', $vevent);
+        $this->assertStringContainsString('DTEND:20261015T110000Z', $vevent);
+    }
+
+    /**
+     * The default one-hour duration for a timed event with no EndTime must be added in
+     * the resolved timezone, not after conversion - the same code path #329 changed, on
+     * the branch where EndDate/EndTime are absent.
+     */
+    public function testICSTimedEventWithoutEndTimeGetsOneHourInSiteTimezone()
+    {
+        $this->createPublishedICSEvent([
+            'Title' => 'Open Ended Event',
+            'StartDate' => '2026-10-15',
+            'StartTime' => '10:00:00',
+            'EndDate' => null,
+            'EndTime' => null,
+        ]);
+
+        $body = $this->withPhpTimezone('America/Chicago', function () {
+            return $this->fetchICSBody();
+        });
+
+        $vevent = $this->veventBlockForSummary($body, 'Open Ended Event');
+
+        $this->assertStringContainsString('DTSTART:20261015T150000Z', $vevent);
+        $this->assertStringContainsString('DTEND:20261015T160000Z', $vevent);
+    }
+
+    /**
+     * All-day events are date-valued (DTSTART;VALUE=DATE) and carry no time to resolve,
+     * so the timezone change must not touch them: they stay bare dates with no UTC
+     * conversion, offset and all (#329 regression guard on the untouched branch).
+     */
+    public function testICSAllDayEventIsUnaffectedBySiteTimezone()
+    {
+        $this->createPublishedICSEvent([
+            'Title' => 'All Day Zone Event',
+            'StartDate' => '2026-10-15',
+            'EndDate' => '2026-10-15',
+            'StartTime' => null,
+            'EndTime' => null,
+            'AllDay' => true,
+        ]);
+
+        $body = $this->withPhpTimezone('America/Chicago', function () {
+            return $this->fetchICSBody();
+        });
+
+        $vevent = $this->veventBlockForSummary($body, 'All Day Zone Event');
+
+        $this->assertStringContainsString('DTSTART;VALUE=DATE:20261015', $vevent);
+        // DTEND for an all-day event is the day after, still date-valued.
+        $this->assertStringContainsString('DTEND;VALUE=DATE:20261016', $vevent);
+        $this->assertStringNotContainsString('DTSTART:2026', $vevent);
     }
 
     /**

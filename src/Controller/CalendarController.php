@@ -70,12 +70,20 @@ class CalendarController extends \PageController
     private static int $events_per_page = 12;
 
     /**
-     * Timezone for events (should match where events are created)
-     * Events are stored in this timezone and converted to UTC for ICS feeds
+     * Timezone events are stored in, used to resolve the wall-clock StartDate/StartTime
+     * and EndDate/EndTime values when emitting ICS (issue #329).
      *
-     * @var string
+     * Null - the default - means "use the site's own timezone", i.e. whatever
+     * date_default_timezone_get() reports, which is the timezone editors create events
+     * in. Set a value (e.g. 'UTC' or 'America/New_York') to override it when events are
+     * authored in a timezone other than the server's default.
+     *
+     * The previous default was the literal 'UTC', which read venue-local wall-clock
+     * times as UTC instants and shifted every subscribed calendar by the site offset.
+     *
+     * @var string|null
      */
-    private static string $timezone = 'UTC';
+    private static ?string $timezone = null;
 
     /**
      * @var bool
@@ -977,8 +985,11 @@ class CalendarController extends \PageController
                     $ics[] = 'DTEND;VALUE=DATE:' . $endDate->format('Ymd');
                 }
             } else {
-                // Timed event - parse in the configured timezone, then convert to UTC
-                $timezone = $this->config()->get('timezone');
+                // Timed event - parse in the configured timezone, then convert to UTC.
+                // An unset CalendarController.timezone falls back to the site's default
+                // timezone rather than to UTC, so a venue-local 10:00 event emits the
+                // UTC instant a subscriber's calendar should show as 10:00 local (#329).
+                $timezone = $this->config()->get('timezone') ?: date_default_timezone_get();
 
                 $startDateTime = Carbon::parse($event->StartDate . ' ' . $event->StartTime, $timezone);
                 $ics[] = 'DTSTART:' . $startDateTime->utc()->format('Ymd\THis\Z');

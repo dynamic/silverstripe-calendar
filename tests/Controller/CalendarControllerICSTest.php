@@ -1047,8 +1047,9 @@ class CalendarControllerICSTest extends FunctionalTest
 
     /**
      * An explicit CalendarController.timezone config value still wins over the site
-     * default - the override path added by #329 must keep working for sites that store
-     * events in UTC while their PHP default is something else.
+     * default - the existing override path must keep working for sites that store
+     * events in UTC while their PHP default is something else (#329 changed only the
+     * default, not the override).
      */
     public function testICSTimedEventHonoursConfiguredTimezoneOverride()
     {
@@ -1080,7 +1081,7 @@ class CalendarControllerICSTest extends FunctionalTest
     }
 
     /**
-     * A timed event that carries a StartTime but no EndTime/EndTime gets the default
+     * A timed event that carries a StartTime but no EndDate/EndTime gets the default
      * one-hour DTEND, and that hour must land on the instant the event actually starts -
      * with the site timezone at America/Chicago a 10:00 start emits DTSTART 15:00Z and
      * DTEND 16:00Z, not 10:00Z/11:00Z (#329).

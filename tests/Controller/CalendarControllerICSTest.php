@@ -1080,28 +1080,83 @@ class CalendarControllerICSTest extends FunctionalTest
     }
 
     /**
-     * The default one-hour duration for a timed event with no EndTime must be added in
-     * the resolved timezone, not after conversion - the same code path #329 changed, on
-     * the branch where EndDate/EndTime are absent.
+     * A timed event that carries a StartTime but no EndTime/EndTime gets the default
+     * one-hour DTEND, and that hour must land on the instant the event actually starts -
+     * with the site timezone at America/Chicago a 10:00 start emits DTSTART 15:00Z and
+     * DTEND 16:00Z, not 10:00Z/11:00Z (#329).
+     *
+     * Driven with a double rather than a stored page because EventPage::onBeforeWrite()
+     * derives EndTime (and EndDate) from StartTime whenever EndTime is blank, so a saved
+     * record can never reach the transform's 'Default 1 hour duration' branch - passing
+     * nulls to createPublishedICSEvent() would silently exercise the explicit-end branch
+     * a different test already covers. Note the implementation adds the hour to the
+     * already-UTC-converted start value (Carbon mutates in place on utc()), which is the
+     * same instant as start-plus-one-hour in the source timezone because a one-hour span
+     * has the same length either side of a conversion.
      */
     public function testICSTimedEventWithoutEndTimeGetsOneHourInSiteTimezone()
     {
-        $this->createPublishedICSEvent([
-            'Title' => 'Open Ended Event',
-            'StartDate' => '2026-10-15',
-            'StartTime' => '10:00:00',
-            'EndDate' => null,
-            'EndTime' => null,
-        ]);
+        $noEnd = new class {
+            public function hasMethod(string $method): bool
+            {
+                return false;
+            }
 
-        $body = $this->withPhpTimezone('America/Chicago', function () {
-            return $this->fetchICSBody();
-        });
+            /**
+             * @param string $property
+             * @return mixed
+             */
+            public function __get(string $property)
+            {
+                switch ($property) {
+                    case 'ID':
+                        return 777;
+                    case 'Title':
+                        return 'Open Ended Event';
+                    case 'StartDate':
+                        return '2026-10-15';
+                    case 'StartTime':
+                        return '10:00:00';
+                    default:
+                        // EndDate, EndTime, AllDay, Content, Location: nothing to resolve.
+                        return null;
+                }
+            }
 
-        $vevent = $this->veventBlockForSummary($body, 'Open Ended Event');
+            public function Categories()
+            {
+                return new ArrayList();
+            }
 
-        $this->assertStringContainsString('DTSTART:20261015T150000Z', $vevent);
-        $this->assertStringContainsString('DTEND:20261015T160000Z', $vevent);
+            public function AbsoluteLink()
+            {
+                return '';
+            }
+        };
+
+        $hadHost = array_key_exists('HTTP_HOST', $_SERVER);
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+        $_SERVER['HTTP_HOST'] = 'localhost';
+
+        try {
+            $body = $this->withPhpTimezone('America/Chicago', function () use ($noEnd) {
+                $generate = new \ReflectionMethod(CalendarController::class, 'transformEventToICS');
+
+                return implode("\r\n", $generate->invoke($this->controller, $noEnd));
+            });
+        } finally {
+            if ($hadHost) {
+                $_SERVER['HTTP_HOST'] = $previousHost;
+            } else {
+                unset($_SERVER['HTTP_HOST']);
+            }
+        }
+
+        $this->assertStringContainsString('DTSTART:20261015T150000Z', $body);
+        $this->assertStringContainsString('DTEND:20261015T160000Z', $body);
+        // The pre-fix pair, stated so a transform that simply omitted DTEND could not
+        // pass the assertion above.
+        $this->assertStringNotContainsString('DTSTART:20261015T100000Z', $body);
     }
 
     /**

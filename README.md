@@ -227,7 +227,7 @@ Dynamic\Calendar\Controller\CalendarController:
 - `'Europe/London'` - Greenwich Mean Time
 - `'Australia/Sydney'` - Australian Eastern Time
 
-**Note**: If not configured, the default is the site's PHP timezone. Before 3.1.0 it was the literal `UTC`, so on a site whose PHP timezone is not UTC this change moves the emitted `DTSTART`/`DTEND` values to the instant the event actually starts.
+**Note**: If not configured, the default is the site's PHP timezone (`date_default_timezone_get()`). On a site whose PHP timezone is not UTC, that is the timezone ICS `DTSTART`/`DTEND` values are resolved in, so set `timezone` explicitly if events are stored in a different one.
 
 ### Category Configuration
 

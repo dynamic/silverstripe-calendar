@@ -76,10 +76,8 @@ class CalendarController extends \PageController
      * Null - the default - means "use the site's own timezone", i.e. whatever
      * date_default_timezone_get() reports, which is the timezone editors create events
      * in. Set a value (e.g. 'UTC' or 'America/New_York') to override it when events are
-     * authored in a timezone other than the server's default.
-     *
-     * The previous default was the literal 'UTC', which read venue-local wall-clock
-     * times as UTC instants and shifted every subscribed calendar by the site offset.
+     * authored in a timezone other than the server's default; an empty string counts as
+     * unset.
      *
      * @var string|null
      */

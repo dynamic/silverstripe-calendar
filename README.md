@@ -204,7 +204,7 @@ Dynamic\Calendar\Page\EventPage:
 
 ### Timezone Configuration
 
-**IMPORTANT**: If your events are stored in a timezone other than UTC, you must configure the timezone to ensure ICS calendar feeds display correct times.
+**IMPORTANT**: ICS feeds resolve a timed event's `StartDate`/`StartTime` in this timezone before converting to UTC. When it is left unset the site's own PHP timezone (`date_default_timezone_get()`) is used, which is the timezone editors create events in; set `timezone` only when events are stored in a different one.
 
 ```yaml
 # app/_config/calendar.yml (or mysite/_config/calendar.yml for older projects)
@@ -227,7 +227,7 @@ Dynamic\Calendar\Controller\CalendarController:
 - `'Europe/London'` - Greenwich Mean Time
 - `'Australia/Sydney'` - Australian Eastern Time
 
-**Note**: If not configured, the default timezone is `UTC`.
+**Note**: If not configured, the default is the site's PHP timezone. Before 3.1.0 it was the literal `UTC`, so on a site whose PHP timezone is not UTC this change moves the emitted `DTSTART`/`DTEND` values to the instant the event actually starts.
 
 ### Category Configuration
 

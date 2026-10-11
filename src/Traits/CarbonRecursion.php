@@ -408,10 +408,22 @@ trait CarbonRecursion
             return $eventStart->gt($after) ? $this->createVirtualInstance($eventStart) : null;
         }
 
-        // For recurring events, get occurrences for the next year and return the first one
-        $occurrences = $this->getOccurrences($after, $after->copy()->addYear(), 1);
+        // For recurring events, expand the next year and return the first occurrence that
+        // actually starts after $after. The generator is lazy, so stopping at the first
+        // match costs the same one-step advance as the previous limit = 1 call.
+        $occurrences = $this->getOccurrences($after, $after->copy()->addYear());
 
         foreach ($occurrences as $occurrence) {
+            // "Next" means starting after $after. #312's widened generation window makes
+            // getOccurrences() include a multi-day occurrence that started before $after
+            // and is still running at it - correct for a window/feed query, wrong for a
+            // "next" query whose whole contract is a future start (the old start-only
+            // bound made that occurrence unreachable here). The comparison is against
+            // $after exactly, which is the same inclusive lower bound the pre-#312 range
+            // filter used, so a date-only $after still keeps its start-date occurrence.
+            if (Carbon::parse($occurrence->StartDate)->lt($after)) {
+                continue;
+            }
             return $occurrence;
         }
 

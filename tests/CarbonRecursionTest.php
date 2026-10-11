@@ -1064,6 +1064,34 @@ class CarbonRecursionTest extends SapphireTest
     }
 
     /**
+     * The #312 widening must not leak into getNextOccurrence(): asked on 2025-06-24,
+     * the multi-day event whose 2025-06-23 occurrence is still running must report the
+     * NEXT occurrence (2025-06-30), not the already-started one. Before the widening no
+     * occurrence starting before $after was even generated, so "next" was always future;
+     * the skip in getNextOccurrence() keeps that contract.
+     */
+    public function testNextOccurrenceSkipsAlreadyStartedMultiDayOccurrence()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+
+        $next = $event->getNextOccurrence('2025-06-24');
+
+        $this->assertInstanceOf(EventInstance::class, $next);
+        $this->assertEquals(
+            '2025-06-30',
+            (string) $next->StartDate,
+            'A multi-day occurrence that already started is not the next occurrence'
+        );
+
+        // Positive control for the same call shape: a plain date at an occurrence start
+        // still returns that day's occurrence, so the skip above cannot pass by
+        // returning nothing / a too-late date.
+        $onLattice = $event->getNextOccurrence('2025-06-23');
+        $this->assertNotNull($onLattice);
+        $this->assertEquals('2025-06-23', (string) $onLattice->StartDate);
+    }
+
+    /**
      * Persist and publish the #312 fixture: a WEEKLY event on Mondays whose occurrences
      * run three days (Mon-Wed), open-ended (no RecursionEndDate).
      *

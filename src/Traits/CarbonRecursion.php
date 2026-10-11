@@ -200,6 +200,16 @@ trait CarbonRecursion
             $rangeEnd = $rangeStart->copy()->addYears(2);
         }
 
+        // dynamic/silverstripe-calendar#312: a multi-day occurrence that started before
+        // $rangeStart but has not ended by it is still running inside the window, so the
+        // lattice must be generated from far enough back to include it. Occurrences are
+        // at most occurrenceDurationDays long, so starting durationDays before the window
+        // reaches every occurrence still overlapping it - and no occurrence that has
+        // already ended (the earliest such start, generationStart, ends exactly on
+        // $rangeStart). Single-day events have durationDays 0 and generate exactly as
+        // before.
+        $generationStart = $rangeStart->copy()->subDays($this->occurrenceDurationDays());
+
         try {
             $interval = max(1, (int) $this->Interval);
 
@@ -216,11 +226,11 @@ trait CarbonRecursion
             // 1000-rejection limit.
             $period = match ($this->Recursion) {
                 'DAILY' => $this->createDailyPeriod(
-                    $this->snapToLattice($eventStart, $rangeStart, $interval),
+                    $this->snapToLattice($eventStart, $generationStart, $interval),
                     $rangeEnd
                 ),
                 'WEEKLY' => $this->createWeeklyPeriod(
-                    $this->snapToLattice($eventStart, $rangeStart, 7 * $interval),
+                    $this->snapToLattice($eventStart, $generationStart, 7 * $interval),
                     $rangeEnd
                 ),
                 'MONTHLY' => $this->createMonthlyPeriod($eventStart, $rangeEnd),
@@ -232,11 +242,14 @@ trait CarbonRecursion
                 return null;
             }
 
-            // Filter period to only include dates within our range. After the snap this
-            // rejects at most one candidate for DAILY/WEEKLY; it remains the range guard
-            // for the un-snapped MONTHLY/YEARLY.
-            return $period->filter(function (Carbon $date) use ($rangeStart, $rangeEnd) {
-                return $date->between($rangeStart, $rangeEnd, true);
+            // Filter period to only include dates within our generation range. After the
+            // snap this rejects at most one candidate for DAILY/WEEKLY; it remains the
+            // range guard for the un-snapped MONTHLY/YEARLY. The lower bound is
+            // $generationStart (not $rangeStart) so the multi-day occurrences the
+            // generation window was widened to reach actually survive the filter
+            // (dynamic/silverstripe-calendar#312).
+            return $period->filter(function (Carbon $date) use ($generationStart, $rangeEnd) {
+                return $date->between($generationStart, $rangeEnd, true);
             });
         } catch (\Throwable $e) {
             // A failed period build yields no instances at all. Mark the expansion as
@@ -254,6 +267,37 @@ trait CarbonRecursion
             );
             return null;
         }
+    }
+
+    /**
+     * How many whole days after its StartDate one occurrence of this event ends.
+     *
+     * The generation window in createCarbonPeriod() is widened by this many days so a
+     * multi-day occurrence already running at the window start is generated
+     * (dynamic/silverstripe-calendar#312). Deliberately not a copy of
+     * EventInstance::calculateVirtualProperties()'s raw diffInDays: any unusable value -
+     * empty or unparseable EndDate, or one before StartDate - yields 0 here, which makes
+     * the generation window the plain query window instead of silently shifting it.
+     *
+     * @return int Whole days between StartDate and EndDate, 0 when unusable or negative.
+     */
+    protected function occurrenceDurationDays(): int
+    {
+        if (!$this->EndDate) {
+            return 0;
+        }
+
+        try {
+            $eventStart = Carbon::parse($this->StartDate);
+            $eventEnd = Carbon::parse($this->EndDate);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+
+        // Carbon 3 diffInDays() is signed; positive when the argument is later.
+        $durationDays = (int) round($eventStart->diffInDays($eventEnd));
+
+        return max(0, $durationDays);
     }
 
     /**

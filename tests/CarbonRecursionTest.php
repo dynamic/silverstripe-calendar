@@ -936,6 +936,157 @@ class CarbonRecursionTest extends SapphireTest
     }
 
     /**
+     * Regression test for dynamic/silverstripe-calendar#312.
+     *
+     * A WEEKLY event whose occurrences span three days (StartDate 2025-06-16,
+     * EndDate 2025-06-18) has an occurrence starting 2025-06-23 that is still running
+     * when a window opening 2025-06-24 begins. Before the fix the generation window was
+     * clamped to the query window, so that occurrence was never generated and was
+     * missing from the feed.
+     */
+    public function testMultiDayOccurrenceRunningAtWindowStartIsGenerated()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-24', '2025-06-30'));
+        $dates = array_map(function ($occurrence) {
+            return (string) $occurrence->StartDate;
+        }, $occurrences);
+
+        $this->assertContains(
+            '2025-06-23',
+            $dates,
+            'An occurrence that started before the window but is still running inside it must be generated'
+        );
+        $this->assertEquals(
+            ['2025-06-23', '2025-06-30'],
+            $dates,
+            'The window yields the still-running occurrence and the next one, and nothing else'
+        );
+
+        // The occurrence carries its instance-relative end date (2025-06-23 + 2 days).
+        $running = null;
+        foreach ($occurrences as $occurrence) {
+            if ((string) $occurrence->StartDate === '2025-06-23') {
+                $running = $occurrence;
+            }
+        }
+        $this->assertNotNull($running);
+        $this->assertEquals('2025-06-25', (string) $running->EndDate, 'The virtual EndDate is instance-relative');
+    }
+
+    /**
+     * Regression test for dynamic/silverstripe-calendar#312, end to end through the feed.
+     *
+     * Calendar::getEventsFeed()'s #267 end-overlap pass already KEEPS an occurrence whose
+     * end overlaps the window start - it was simply never handed one by the occurrence
+     * generator. With the generation window widened by the occurrence duration, the
+     * feed for 2025-06-24..2025-06-30 must include the 2025-06-23 occurrence.
+     */
+    public function testMultiDayOccurrenceRunningAtWindowStartAppearsInFeed()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+
+        EventInstanceCache::clearAllCache();
+
+        $feed = $this->parentPage->getEventsFeed(null, null, '2025-06-24', '2025-06-30');
+
+        $found = false;
+        foreach ($feed as $feedEvent) {
+            if ($feedEvent instanceof EventInstance
+                && (string) $feedEvent->Title === 'Multi Day Weekly Camp'
+                && (string) $feedEvent->StartDate === '2025-06-23'
+            ) {
+                $found = true;
+                $this->assertSame($event->ID, $feedEvent->getOriginalEvent()->ID);
+                $this->assertEquals('2025-06-25', (string) $feedEvent->EndDate);
+            }
+        }
+
+        $this->assertTrue(
+            $found,
+            'The feed must include the multi-day occurrence that was already running at the window start'
+        );
+    }
+
+    /**
+     * The #312 widening must stay minimal: the 2025-06-23 occurrence ends 2025-06-25, so
+     * a window opening 2025-06-26 does not overlap it and must not receive it. Only
+     * occurrences that actually overlap the widened window are generated - occurrences
+     * that ended before the window start stay excluded.
+     */
+    public function testMultiDayOccurrenceEndedBeforeWindowStartIsExcluded()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-26', '2025-07-05'));
+        $dates = array_map(function ($occurrence) {
+            return (string) $occurrence->StartDate;
+        }, $occurrences);
+
+        $this->assertNotContains(
+            '2025-06-23',
+            $dates,
+            'An occurrence that ended (2025-06-25) before the window start (2025-06-26) must not appear'
+        );
+        $this->assertContains('2025-06-30', $dates, 'Occurrences inside the window are unaffected');
+    }
+
+    /**
+     * Bad input: an EndDate that precedes StartDate is nonsensical. It must fall back to
+     * a zero occurrence duration - no fatal, no shifted generation window - matching how
+     * the feed's #267 pass treats the same broken data.
+     */
+    public function testInvertedEndDateDoesNotFatalGeneration()
+    {
+        $event = EventPage::create([
+            'Title' => 'Inverted End Date Event',
+            'StartDate' => '2025-06-16',
+            'EndDate' => '2025-06-10',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $occurrences = iterator_to_array($event->getOccurrences('2025-06-23', '2025-07-07'));
+        $dates = array_map(function ($occurrence) {
+            return (string) $occurrence->StartDate;
+        }, $occurrences);
+
+        $this->assertEquals(
+            ['2025-06-23', '2025-06-30', '2025-07-07'],
+            $dates,
+            'An inverted EndDate behaves like a single-day event: same lattice, no fatal'
+        );
+    }
+
+    /**
+     * Persist and publish the #312 fixture: a WEEKLY event on Mondays whose occurrences
+     * run three days (Mon-Wed), open-ended (no RecursionEndDate).
+     *
+     * @return EventPage
+     */
+    private function createMultiDayWeeklyEvent(): EventPage
+    {
+        $event = EventPage::create([
+            'Title' => 'Multi Day Weekly Camp',
+            'StartDate' => '2025-06-16', // Monday
+            'EndDate' => '2025-06-18', // occurrence spans 3 days
+            'StartTime' => '09:00:00',
+            'EndTime' => '17:00:00',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        return $event;
+    }
+
+    /**
      * Test that createCarbonPeriod handles Throwable (such as Error) and returns null safely
      */
     public function testCreateCarbonPeriodHandlesThrowable()

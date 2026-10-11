@@ -21,6 +21,15 @@ use Generator;
 class RecurringFeedSpyEventPage extends EventPage
 {
     /**
+     * Declared explicitly rather than derived from the class name: a DataObject subclass
+     * that lets the table name fall back to its class would change stored table with every
+     * rename, and silverstan requires the property on any DataObject configuration.
+     *
+     * @var string
+     */
+    private static string $table_name = 'recurring_feed_spy_event_page';
+
+    /**
      * Titles of every spy event whose getCachedOccurrences() was called, keyed by record ID.
      *
      * Reset by RecurringFeedSpyEventPage::resetExpansions() so one test cannot see another

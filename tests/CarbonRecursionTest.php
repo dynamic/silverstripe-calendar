@@ -993,7 +993,8 @@ class CarbonRecursionTest extends SapphireTest
 
         $found = false;
         foreach ($feed as $feedEvent) {
-            if ($feedEvent instanceof EventInstance
+            if (
+                $feedEvent instanceof EventInstance
                 && (string) $feedEvent->Title === 'Multi Day Weekly Camp'
                 && (string) $feedEvent->StartDate === '2025-06-23'
             ) {

@@ -533,8 +533,9 @@ class Calendar extends \Page
                     // compares the event's END, because a recurring occurrence and a
                     // one-time event both reach this loop. EventInstance already carries an
                     // instance-relative EndDate, so multi-day occurrences spanning the
-                    // window start survive here too; widening their generation window is
-                    // still tracked separately in dynamic/silverstripe-calendar#312.
+                    // window start survive here too, and the occurrence generator widens
+                    // its window by the occurrence duration (#312) so this pass receives
+                    // them at all.
                     if ($fromDate) {
                         $eventEnd = $this->resolveFeedEndDate($event, $eventDate);
 

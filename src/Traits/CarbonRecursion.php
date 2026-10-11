@@ -418,10 +418,12 @@ trait CarbonRecursion
             // getOccurrences() include a multi-day occurrence that started before $after
             // and is still running at it - correct for a window/feed query, wrong for a
             // "next" query whose whole contract is a future start (the old start-only
-            // bound made that occurrence unreachable here). The comparison is against
-            // $after exactly, which is the same inclusive lower bound the pre-#312 range
-            // filter used, so a date-only $after still keeps its start-date occurrence.
-            if (Carbon::parse($occurrence->StartDate)->lt($after)) {
+            // bound made that occurrence unreachable here). The skip is keyed on the
+            // instance (pattern) date, not the overridable StartDate: the widening is
+            // defined by the pattern date, and the pre-#312 range filter also compared
+            // that, so this restores the old bound exactly even when an exception
+            // reschedules the instance's displayed StartDate.
+            if ($occurrence->getInstanceDate()->lt($after)) {
                 continue;
             }
             return $occurrence;

@@ -1092,6 +1092,34 @@ class CarbonRecursionTest extends SapphireTest
     }
 
     /**
+     * The #312 skip in getNextOccurrence() must key on the instance (pattern) date, not
+     * the overridable StartDate: the pre-#312 range filter compared the pattern date, and
+     * the widening is defined by it. An occurrence on the 2025-06-30 lattice point that a
+     * MODIFIED exception reschedules to 2025-06-20 (before the query moment) is still the
+     * next occurrence for 2025-06-24, exactly as it was before #312. Skipping on the
+     * overridden StartDate would wrongly return 2025-07-07 here.
+     */
+    public function testNextOccurrenceSkipIgnoresOverriddenStartDate()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+        $event->createException('2025-06-30', 'MODIFIED', ['StartDate' => '2025-06-20'], 'Rescheduled');
+
+        $next = $event->getNextOccurrence('2025-06-24');
+
+        $this->assertInstanceOf(EventInstance::class, $next);
+        $this->assertEquals(
+            '2025-06-30',
+            $next->getInstanceDate()->format('Y-m-d'),
+            'The rescheduled instance is still the next occurrence by pattern date'
+        );
+        $this->assertEquals(
+            '2025-06-20',
+            (string) $next->StartDate,
+            'The StartDate override is still what the caller reads back'
+        );
+    }
+
+    /**
      * Persist and publish the #312 fixture: a WEEKLY event on Mondays whose occurrences
      * run three days (Mon-Wed), open-ended (no RecursionEndDate).
      *

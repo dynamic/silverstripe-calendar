@@ -492,6 +492,47 @@ class CalendarDateFilteringTest extends SapphireTest
     }
 
     /**
+     * The window bounds are inclusive on both sides, and the two boundary dates are where an
+     * off-by-one would hide: a series whose RecursionEndDate is exactly the window start
+     * still overlaps that first day, and a series starting exactly on the window end still
+     * lands inside it. Flipping either comparison to exclusive prunes both, and nothing else
+     * in this file's tests would notice.
+     */
+    public function testGetEventsFeedWindowBoundsAreInclusive(): void
+    {
+        $calendar = $this->objFromFixture(Calendar::class, 'calendar1');
+        $calendar->publishRecursive();
+
+        $endsOnWindowStart = $this->makeRecurringEvent(
+            $calendar,
+            'Series Ending On Window Start',
+            '2025-09-01',
+            '2025-10-01'
+        );
+        $startsOnWindowEnd = $this->makeRecurringEvent(
+            $calendar,
+            'Series Starting On Window End',
+            '2025-10-31',
+            null
+        );
+
+        RecurringFeedSpyEventPage::resetExpansions();
+        $calendar->getEventsFeed(null, null, Carbon::parse('2025-10-01'), Carbon::parse('2025-10-31'));
+        $expanded = RecurringFeedSpyEventPage::$expanded;
+
+        $this->assertArrayHasKey(
+            (int)$endsOnWindowStart->ID,
+            $expanded,
+            'A recurrence ending exactly on the window start still overlaps the window'
+        );
+        $this->assertArrayHasKey(
+            (int)$startsOnWindowEnd->ID,
+            $expanded,
+            'A series starting exactly on the window end is inside the window'
+        );
+    }
+
+    /**
      * Guard for the EndDate > StartDate arm of the window predicate. A multi-day series
      * whose RecursionEndDate sits just before the window can still produce an occurrence
      * overlapping the window start, because occurrence generation widens the generation
@@ -547,10 +588,14 @@ class CalendarDateFilteringTest extends SapphireTest
 
         $undated = $this->makeRecurringEvent($calendar, 'Recurring Without StartDate', null, null);
 
+        // A window five years in the past rather than a fixed year: a NULL StartDate is read
+        // as "now" by Carbon, so a hard-coded window would only stay empty until the calendar
+        // caught up with it.
+        $windowFrom = Carbon::now()->subYears(5)->startOfMonth();
+        $windowTo = $windowFrom->copy()->addMonth();
+
         RecurringFeedSpyEventPage::resetExpansions();
-        $titles = $this->titles(
-            $calendar->getEventsFeed(null, null, Carbon::parse('2025-10-01'), Carbon::parse('2025-10-31'))
-        );
+        $titles = $this->titles($calendar->getEventsFeed(null, null, $windowFrom, $windowTo));
 
         $this->assertArrayHasKey(
             (int)$undated->ID,

@@ -38,8 +38,8 @@ class RecurringFeedSpyEventPage extends EventPage implements TestOnly
      * Titles of every spy event whose getCachedOccurrences() was called, keyed by record ID.
      *
      * Reset by RecurringFeedSpyEventPage::resetExpansions() so one test cannot see another
-     * test's expansions (the test database is rebuilt per test, but this array is static
-     * and would survive that rebuild).
+     * test's expansions: SapphireTest rolls the database back between tests, but this static
+     * array outlives that rollback.
      *
      * @var array<int,string>
      */

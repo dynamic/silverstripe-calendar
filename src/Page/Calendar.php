@@ -420,10 +420,13 @@ class Calendar extends \Page
         // these predicates only drop records that could yield no instance inside it.
         //
         // The upper bound is on StartDate, mirroring the regular branch: an event that
-        // has not started by the window end cannot overlap it. StartDate IS NULL is kept
-        // as a candidate so this stays purely additive for rows the CMS can save but
-        // cannot expand meaningfully - they are admitted, and the PHP pass at the bottom
-        // of this method decides, exactly as it did before.
+        // has not started by the window end cannot overlap it. StartDate IS NULL is kept as
+        // a candidate so this bound stays additive for the undated rows the CMS can save:
+        // Carbon reads a missing StartDate as "now", so such a row was expanded before this
+        // change and still is, and the PHP pass at the bottom of this method decides whether
+        // it is listed. It is not exempt from the lower bound below - an undated row with a
+        // RecursionEndDate before the window is pruned by that arm, which matches the
+        // generator, whose output for such a row is empty either way.
         //
         // The lower bound is the interval-overlap predicate of #267, applied to the
         // recurrence rather than to a single event: a closed-ended series whose last

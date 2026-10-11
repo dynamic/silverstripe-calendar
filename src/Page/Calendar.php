@@ -397,22 +397,56 @@ class Calendar extends \Page
             $recurringEventsFilter['ParentID'] = $this->ID;
         }
 
-        $recurringEvents = EventPage::get()
-            ->filter($recurringEventsFilter)
-            ->exclude('Recursion', 'NONE');
-
         // Retrieve the recurring window years config value once before the loop for performance
         $windowYears = $this->config()->get('default_recurring_window_years')
             ?? self::config()->get('default_recurring_window_years');
 
+        // For recurring events, we need date ranges for occurrence generation
+        // If no dates provided, use configurable default range for recurring events.
+        // These depend only on the request and this calendar's config, never on the event,
+        // so they are resolved once here and reused below - which is also what lets the
+        // query that feeds the loop prune itself (issue #299).
+        $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
+        $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
+
+        $recurringEvents = EventPage::get()
+            ->filter($recurringEventsFilter)
+            ->exclude('Recursion', 'NONE');
+
+        // Issue #299: the recurring branch used to load every recurring event in the
+        // calendar and expand it, however narrow the requested window was, so a feed for
+        // one day cost one occurrence expansion (and one EventInstanceCache read) per
+        // recurring record. The window resolved above is the generator's own bound, so
+        // these predicates only drop records that could yield no instance inside it.
+        //
+        // The upper bound is on StartDate, mirroring the regular branch: an event that
+        // has not started by the window end cannot overlap it. StartDate IS NULL is kept
+        // as a candidate so this stays purely additive for rows the CMS can save but
+        // cannot expand meaningfully - they are admitted, and the PHP pass at the bottom
+        // of this method decides, exactly as it did before.
+        //
+        // The lower bound is the interval-overlap predicate of #267, applied to the
+        // recurrence rather than to a single event: a closed-ended series whose last
+        // occurrence precedes the window can produce nothing in it, while an open-ended
+        // one (RecursionEndDate NULL) runs indefinitely and always stays a candidate.
+        // The EndDate > StartDate arm deliberately departs from the literal bound and
+        // keeps every multi-day series: occurrence generation is widened by the
+        // occurrence's duration in dynamic/silverstripe-calendar#312, so a series whose
+        // RecursionEndDate sits just before the window can still produce an occurrence
+        // overlapping its start, and pruning those records here would undo that fix once
+        // it lands. Like #267's predicate there is deliberately no "RecursionEndDate =
+        // ''" arm: it is a Date column, so no row can hold an empty string and MySQL 8
+        // rejects the comparison outright (ERROR 1525 "Incorrect DATE value: ''").
+        $recurringEvents = $recurringEvents->where([
+            '(StartDate IS NULL OR StartDate <= ?)' => $occurrenceToDate->format('Y-m-d'),
+            '(RecursionEndDate IS NULL OR RecursionEndDate >= ? OR EndDate > StartDate)' => [
+                $occurrenceFromDate->format('Y-m-d'),
+            ],
+        ]);
+
         // eventType === 'one-time' excludes recurring events entirely.
         if ($eventType !== 'one-time') {
             foreach ($recurringEvents as $event) {
-                // For recurring events, we need date ranges for occurrence generation
-                // If no dates provided, use configurable default range for recurring events
-                $occurrenceFromDate = $fromDate ?: Carbon::now()->startOfYear();
-                $occurrenceToDate = $toDate ?: Carbon::now()->copy()->addYears($windowYears)->endOfYear();
-
                 // Get occurrences within the date range using Carbon recursion with caching
                 $occurrences = $event->getCachedOccurrences($occurrenceFromDate, $occurrenceToDate);
 

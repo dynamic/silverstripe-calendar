@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Tests\Page;
 
 use Dynamic\Calendar\Page\EventPage;
 use Generator;
+use SilverStripe\Dev\TestOnly;
 
 /**
  * An EventPage that records every occurrence expansion it is asked for.
@@ -17,8 +18,12 @@ use Generator;
  * It is a DataObject subclass rather than a mock because the feed queries
  * EventPage::get() directly - only a stored record of a subclass that list includes can
  * observe that query.
+ *
+ * It implements TestOnly like the module's other test-only classes: without it this would
+ * be a real EventPage subclass to the manifest - a page type in the CMS, and a table in
+ * every test class's schema, not just the one that declares it.
  */
-class RecurringFeedSpyEventPage extends EventPage
+class RecurringFeedSpyEventPage extends EventPage implements TestOnly
 {
     /**
      * Declared explicitly rather than derived from the class name: a DataObject subclass

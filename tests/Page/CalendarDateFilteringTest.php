@@ -329,10 +329,12 @@ class CalendarDateFilteringTest extends SapphireTest
      * here: the static `DataList` result-cache reset helper only arrived in framework 6.1,
      * and calling it from here made this test fatal wherever composer resolved a 6.0.x
      * framework (dynamic/silverstripe-calendar#392, the "prf-low" CI leg).
-     * `DataObject::flushCache()` is enough on its own - it drops the object's own cached
-     * fields and the `get_one` cache for its class ancestry - and the feed reads through a
-     * plain `EventPage::get()`, which never populates the 6.1+ `DataList` result cache
-     * (that cache is only filled for queries built with `setUseCache(true)`).
+     * `DataObject::flushCache()` is enough on its own: it drops the object's own cached
+     * fields and the `get_one` cache for its class ancestry, and on framework 6.1+ it calls
+     * `DataList::reset(static::class)` itself, so the extra call was redundant there. It is
+     * not needed on a 6.0.x resolution either, where the feed reads through a plain
+     * `EventPage::get()` that never populates the `DataList` result cache (that cache is
+     * only filled for queries built with `setUseCache(true)`).
      *
      * @param EventPage $event
      * @return void

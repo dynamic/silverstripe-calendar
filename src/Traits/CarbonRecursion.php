@@ -49,6 +49,15 @@ trait CarbonRecursion
     /**
      * Get cached event occurrences for better performance
      *
+     * Unlike the other occurrence readers in this trait, the lower bound here is an
+     * OVERLAP bound: an occurrence that started before $startDate and has not ended by it
+     * is included, because it is still running inside the window
+     * (dynamic/silverstripe-calendar#312). This is the feed path - the method's only
+     * caller is Calendar::getEventsFeed(), whose #267 pass keeps an occurrence whose END
+     * overlaps the window start and must actually be handed one. Callers that want
+     * start-date semantics use getOccurrences() instead. The cache key stays the caller's
+     * $start/$end; only generation widens.
+     *
      * @param Carbon|string|null $startDate
      * @param Carbon|string|null $endDate
      * @param int|null $limit
@@ -78,7 +87,12 @@ trait CarbonRecursion
         $instances = [];
         $count = 0;
 
-        foreach ($this->getOccurrences($startDate, $endDate, $limit) as $instance) {
+        // $includeRunning is opted in HERE and only here: this method's single caller is
+        // Calendar::getEventsFeed(), whose #267 pass already keeps an occurrence whose END
+        // overlaps the window start - it was simply never handed one by the generator
+        // (dynamic/silverstripe-calendar#312). Every other public API below keeps the
+        // start-date semantics its callers rely on.
+        foreach ($this->getOccurrences($startDate, $endDate, $limit, true) as $instance) {
             $instances[] = $instance->toArray();
             yield $instance;
 
@@ -97,13 +111,23 @@ trait CarbonRecursion
     /**
      * Generate event occurrences using Carbon periods
      *
+     * The lower bound is a start-date bound by default: an occurrence that began before
+     * $startDate is not returned even when it is still running inside the window.
+     * $includeRunning opts a single caller into overlap semantics for the lower bound -
+     * see getCachedOccurrences(), which is the only place that passes true.
+     *
      * @param Carbon|string|null $startDate
      * @param Carbon|string|null $endDate
      * @param int|null $limit
+     * @param bool $includeRunning Widen generation to occurrences already running at $startDate
      * @return Generator<EventInstance>
      */
-    public function getOccurrences($startDate = null, $endDate = null, ?int $limit = null): Generator
-    {
+    public function getOccurrences(
+        $startDate = null,
+        $endDate = null,
+        ?int $limit = null,
+        bool $includeRunning = false
+    ): Generator {
         // Reset before anything can set it, so a false value once this generator is done
         // means the expansion covered the whole window. It sits at the very top because
         // createCarbonPeriod() can also fail, and that path must not be judged by an older
@@ -124,7 +148,7 @@ trait CarbonRecursion
 
         $count = 0;
 
-        $period = $this->createCarbonPeriod($startDate, $endDate);
+        $period = $this->createCarbonPeriod($startDate, $endDate, $includeRunning);
 
         if (!$period) {
             return;
@@ -174,10 +198,14 @@ trait CarbonRecursion
      *
      * @param Carbon|string|null $startDate
      * @param Carbon|string|null $endDate
+     * @param bool $includeRunning Also generate occurrences that started before $rangeStart
      * @return CarbonPeriod|null
      */
-    protected function createCarbonPeriod($startDate = null, $endDate = null): ?CarbonPeriod
-    {
+    protected function createCarbonPeriod(
+        $startDate = null,
+        $endDate = null,
+        bool $includeRunning = false
+    ): ?CarbonPeriod {
         if (!$this->eventRecurs()) {
             return null;
         }
@@ -200,6 +228,22 @@ trait CarbonRecursion
             $rangeEnd = $rangeStart->copy()->addYears(2);
         }
 
+        // dynamic/silverstripe-calendar#312: a multi-day occurrence that started before
+        // $rangeStart but has not ended by it is still running inside the window. When -
+        // and only when - the caller asked for overlap semantics, open generation
+        // durationDays earlier so the lattice reaches that occurrence; the filter below
+        // then keeps it. Occurrences are at most occurrenceDurationDays() long, so the
+        // earliest one that can still be running at $rangeStart starts exactly there, and
+        // no occurrence that has already ended is included (the earliest generated start,
+        // $generationStart, ends on $rangeStart). Callers that leave $includeRunning false
+        // - every other public method in this trait - get the un-widened window and the
+        // un-widened filter, so their start-date semantics are unchanged and
+        // getNextOccurrence() needs no compensating skip.
+        $generationStart = $rangeStart->copy();
+        if ($includeRunning === true) {
+            $generationStart->subDays($this->occurrenceDurationDays());
+        }
+
         try {
             $interval = max(1, (int) $this->Interval);
 
@@ -216,11 +260,11 @@ trait CarbonRecursion
             // 1000-rejection limit.
             $period = match ($this->Recursion) {
                 'DAILY' => $this->createDailyPeriod(
-                    $this->snapToLattice($eventStart, $rangeStart, $interval),
+                    $this->snapToLattice($eventStart, $generationStart, $interval),
                     $rangeEnd
                 ),
                 'WEEKLY' => $this->createWeeklyPeriod(
-                    $this->snapToLattice($eventStart, $rangeStart, 7 * $interval),
+                    $this->snapToLattice($eventStart, $generationStart, 7 * $interval),
                     $rangeEnd
                 ),
                 'MONTHLY' => $this->createMonthlyPeriod($eventStart, $rangeEnd),
@@ -235,8 +279,12 @@ trait CarbonRecursion
             // Filter period to only include dates within our range. After the snap this
             // rejects at most one candidate for DAILY/WEEKLY; it remains the range guard
             // for the un-snapped MONTHLY/YEARLY.
-            return $period->filter(function (Carbon $date) use ($rangeStart, $rangeEnd) {
-                return $date->between($rangeStart, $rangeEnd, true);
+            // The lower bound is $generationStart rather than $rangeStart so the occurrence
+            // the window was widened to reach actually survives the filter; when
+            // $includeRunning is false the two hold the same date (one is a copy of the
+            // other) and this is the original start-date filter.
+            return $period->filter(function (Carbon $date) use ($generationStart, $rangeEnd) {
+                return $date->between($generationStart, $rangeEnd, true);
             });
         } catch (\Throwable $e) {
             // A failed period build yields no instances at all. Mark the expansion as
@@ -254,6 +302,44 @@ trait CarbonRecursion
             );
             return null;
         }
+    }
+
+    /**
+     * How many whole days after its StartDate one occurrence of this event ends.
+     *
+     * Used by createCarbonPeriod() to widen the generation window for the events feed
+     * only (dynamic/silverstripe-calendar#312). Deliberately not a copy of
+     * EventInstance::calculateVirtualProperties()'s raw diffInDays: any unusable value -
+     * empty or unparseable EndDate, or one that precedes StartDate - yields 0 here, which
+     * leaves the generation window as the plain query window instead of silently shifting
+     * it by a garbage span.
+     *
+     * @return int Whole days between StartDate and EndDate, 0 when unusable or negative.
+     */
+    protected function occurrenceDurationDays(): int
+    {
+        if (!$this->EndDate) {
+            return 0;
+        }
+
+        try {
+            $eventStart = Carbon::parse($this->StartDate);
+            $eventEnd = Carbon::parse($this->EndDate);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+
+        if (!$eventStart || !$eventEnd) {
+            return 0;
+        }
+
+        // Carbon 3 diffInDays() is signed: positive when the argument is later, negative
+        // when it is earlier. Taking max(0, ...) on the SIGNED value is what keeps an
+        // inverted EndDate from widening the window - abs() would widen it by the same
+        // amount in the wrong direction.
+        $durationDays = (int) round($eventStart->diffInDays($eventEnd));
+
+        return max(0, $durationDays);
     }
 
     /**

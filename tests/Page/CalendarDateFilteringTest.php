@@ -9,7 +9,6 @@ use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Model\List\ArrayList;
 use SilverStripe\ORM\DB;
-use SilverStripe\ORM\DataList;
 
 /**
  * Tests for date range filtering in Calendar::getEventsFeed()
@@ -326,6 +325,15 @@ class CalendarDateFilteringTest extends SapphireTest
      * Blank the EndDate column behind the ORM's back, the way a row written before
      * EventPage::onBeforeWrite() derived EndDate would look in the database.
      *
+     * Only APIs that exist across the whole `silverstripe/framework: ^6.0` range are used
+     * here: the static `DataList` result-cache reset helper only arrived in framework 6.1,
+     * and calling it from here made this test fatal wherever composer resolved a 6.0.x
+     * framework (dynamic/silverstripe-calendar#392, the "prf-low" CI leg).
+     * `DataObject::flushCache()` is enough on its own - it drops the object's own cached
+     * fields and the `get_one` cache for its class ancestry - and the feed reads through a
+     * plain `EventPage::get()`, which never populates the 6.1+ `DataList` result cache
+     * (that cache is only filled for queries built with `setUseCache(true)`).
+     *
      * @param EventPage $event
      * @return void
      */
@@ -333,9 +341,6 @@ class CalendarDateFilteringTest extends SapphireTest
     {
         DB::query(sprintf('UPDATE EventPage SET EndDate = NULL WHERE ID = %d', (int)$event->ID));
         $event->flushCache();
-        // The raw UPDATE bypasses the ORM, so drop any cached result set that still
-        // holds the derived EndDate for this class.
-        DataList::reset(EventPage::class);
     }
 
     /**

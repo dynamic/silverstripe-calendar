@@ -49,6 +49,15 @@ trait CarbonRecursion
     /**
      * Get cached event occurrences for better performance
      *
+     * Unlike the other occurrence readers in this trait, the lower bound here is an
+     * OVERLAP bound: an occurrence that started before $startDate and has not ended by it
+     * is included, because it is still running inside the window
+     * (dynamic/silverstripe-calendar#312). This is the feed path - the method's only
+     * caller is Calendar::getEventsFeed(), whose #267 pass keeps an occurrence whose END
+     * overlaps the window start and must actually be handed one. Callers that want
+     * start-date semantics use getOccurrences() instead. The cache key stays the caller's
+     * $start/$end; only generation widens.
+     *
      * @param Carbon|string|null $startDate
      * @param Carbon|string|null $endDate
      * @param int|null $limit
@@ -272,8 +281,8 @@ trait CarbonRecursion
             // for the un-snapped MONTHLY/YEARLY.
             // The lower bound is $generationStart rather than $rangeStart so the occurrence
             // the window was widened to reach actually survives the filter; when
-            // $includeRunning is false the two are the same object and this is the original
-            // start-date filter.
+            // $includeRunning is false the two hold the same date (one is a copy of the
+            // other) and this is the original start-date filter.
             return $period->filter(function (Carbon $date) use ($generationStart, $rangeEnd) {
                 return $date->between($generationStart, $rangeEnd, true);
             });

@@ -26,7 +26,7 @@ package name and constraint verbatim.
 - `symbiote/silverstripe-gridfieldextensions`: `^5.0`
 - `symbiote/silverstripe-queuedjobs`: `^6.0`
 - `unclecheese/display-logic`: `^4.0`
-- `tractorcow/silverstripe-colorpicker`: `dev-master as 5.0` — see [Color picker dependency source](#color-picker-dependency-source)
+- `tractorcow/silverstripe-colorpicker`: `dev-master as 5.0`, see [Color picker dependency source](#color-picker-dependency-source)
 - `nesbot/carbon`: `^3.0`
 - `symfony/console`: `^7.0`
 - `psr/log`: `^3.0`
@@ -42,13 +42,16 @@ No Bootstrap JavaScript or Bootstrap Icons stylesheet is in any of them, so the 
   builds the event detail dialog with `new bootstrap.Modal(...)` and marks event elements with
   `data-bs-toggle="tooltip"` and `data-bs-placement`, and `templates/Dynamic/Calendar/Page/Layout/Calendar.ss`
   drives its filter panel, subscribe dialog and dismiss buttons through `data-bs-*` attributes. The webpack
-  entry imports no `bootstrap` module, so nothing in the bundle defines that global.
+  entry imports no `bootstrap` module, so nothing in the bundle defines that global. The tooltip attributes are
+  markup only: this module never calls `bootstrap.Tooltip`, and FullCalendar renders the event elements after
+  page load, so a theme that wants those tooltips has to initialize tooltips itself, including for elements that
+  appear later.
 - **Bootstrap Icons CSS**, for the `bi bi-*` classes the front-end templates render: `Calendar.ss`,
   `EventPage.ss` and `Dynamic/Calendar/Form/CalendarFilterForm.ss`. `client/src/scss/calendar.scss` is written
   as a drop-in layer over a Bootstrap 5.3 theme and imports no icon font of its own.
 
-Without them the page still renders, but the event detail dialog never opens, the tooltips, filter panel and
-subscribe dialog do not respond, and the `bi` icon slots render empty.
+Without them the page still renders, but the event detail dialog never opens, the filter panel and subscribe
+dialog do not respond, and the `bi` icon slots render empty.
 
 ## Installation
 

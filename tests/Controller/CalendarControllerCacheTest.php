@@ -2192,10 +2192,10 @@ class CalendarControllerCacheTest extends FunctionalTest
      * database, failed to encode it again and logged again, for as long as the row
      * existed - uncached and log-flooding indefinitely, not for one TTL.
      *
-     * The four assertions are the whole of the #248 decision (option 1): the feed
-     * renders (not '[]') with the bad bytes visible as U+FFFD, the body is
-     * cached, so the identical repeat is a HIT rather than another rebuild, and
-     * exactly one warning covers both requests - the fill's, not one per request.
+     * The four claims under test - the feed renders (not '[]') with the bad bytes
+     * visible as U+FFFD, the body is cached, so the identical repeat is a HIT rather
+     * than another rebuild, and exactly one warning covers both requests (the fill's,
+     * not one per request) - are the whole of the #248 decision.
      *
      * Round-trips through the default cache adapter rather than a spy, the way
      * testNonSearchFilteredRequestsStillRoundTripThroughTheCache() does: the

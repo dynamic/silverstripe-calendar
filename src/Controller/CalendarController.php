@@ -376,18 +376,28 @@ class CalendarController extends \PageController
                 && json_last_error() === JSON_ERROR_UTF8
                 && $this->config()->get('substitute_invalid_utf8')
             ) {
-                // Logged before the repair, which is the only thing that order is
-                // load-bearing for: the re-encode below resets json_last_error(), so
-                // doing it first would report the second attempt instead of the
-                // strict failure that names the fault. describeUnencodableEvents()
-                // encodes strictly wherever it is called, so it names the same row
-                // either way - see its docblock.
-                $this->logWithFallback(
-                    'CalendarController: json_encode failed - ' . json_last_error_msg()
-                        . '; invalid UTF-8 substituted with U+FFFD'
-                        . $this->describeUnencodableEvents($eventsData)
-                );
-                $json = json_encode($eventsData, JSON_INVALID_UTF8_SUBSTITUTE);
+                // Captured before anything else re-encodes: describeUnencodableEvents()
+                // encodes each event strictly and json_encode() overwrites
+                // json_last_error(), so this is the only chance to report what the
+                // strict encode actually said.
+                $strictError = json_last_error_msg();
+                $substituted = json_encode($eventsData, JSON_INVALID_UTF8_SUBSTITUTE);
+
+                // Logged only once the repair is known to have worked, and then on
+                // this cache-fill path alone: the body written below is cached, so one
+                // bad row costs one warning per fill rather than one per request - the
+                // cost #248 is actually about. When substitution does not work (the
+                // strict encode stopped on bad UTF-8 and a later value is INF or NaN)
+                // nothing is claimed here, and the branch below logs the failure that
+                // really stands.
+                if ($substituted !== false) {
+                    $this->logWithFallback(
+                        'CalendarController: json_encode failed - ' . $strictError
+                            . '; invalid UTF-8 substituted with U+FFFD'
+                            . $this->describeUnencodableEvents($eventsData)
+                    );
+                    $json = $substituted;
+                }
             }
 
             if ($json === false) {

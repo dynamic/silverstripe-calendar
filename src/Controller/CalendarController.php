@@ -376,10 +376,12 @@ class CalendarController extends \PageController
                 && json_last_error() === JSON_ERROR_UTF8
                 && $this->config()->get('substitute_invalid_utf8')
             ) {
-                // Logged before the repair: json_last_error_msg() still describes
-                // the strict failure, and describeUnencodableEvents() re-encodes
-                // each event strictly, so it still names the row - after
-                // substitution every event encodes alone and the list is empty.
+                // Logged before the repair, which is the only thing that order is
+                // load-bearing for: the re-encode below resets json_last_error(), so
+                // doing it first would report the second attempt instead of the
+                // strict failure that names the fault. describeUnencodableEvents()
+                // encodes strictly wherever it is called, so it names the same row
+                // either way - see its docblock.
                 $this->logWithFallback(
                     'CalendarController: json_encode failed - ' . json_last_error_msg()
                         . '; invalid UTF-8 substituted with U+FFFD'

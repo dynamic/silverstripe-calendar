@@ -371,7 +371,8 @@ class CalendarController extends \PageController
             // complaint that #248 is actually about. With the flag off, or for an
             // encode failure substitution cannot fix (INF/NaN, depth), the empty
             // feed is withheld and nothing is written, as in #226.
-            if ($json === false
+            if (
+                $json === false
                 && json_last_error() === JSON_ERROR_UTF8
                 && $this->config()->get('substitute_invalid_utf8')
             ) {

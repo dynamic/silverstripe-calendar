@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Tests\Page;
 
 use Carbon\Carbon;
 use Dynamic\Calendar\Model\Category;
+use Dynamic\Calendar\Model\EventInstanceCache;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
@@ -147,6 +148,11 @@ class CalendarTest extends SapphireTest
         // skipValidation: validate() rejects a second row for one date, which is what
         // makes this state reachable only through fixtures or direct DB writes.
         $deleted->write(false, false, false, false, true);
+
+        // Isolate this expansion from other tests' cached ones: clearEventCache(), which
+        // each write above calls, matches key prefixes generateCacheKey() never builds, so
+        // a stale in-memory expansion would otherwise leak in here.
+        EventInstanceCache::clearAllCache();
 
         $this->assertLessThan(
             $deleted->ID,

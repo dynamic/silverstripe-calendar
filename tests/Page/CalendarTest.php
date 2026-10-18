@@ -119,6 +119,89 @@ class CalendarTest extends SapphireTest
     }
 
     /**
+     * Duplicate exceptions for one date must resolve to the lowest ID in the feed too,
+     * which is what CarbonRecursion::exceptionMap() keeps. Only direct DB writes or
+     * fixtures produce duplicates - there is no unique index on those two columns.
+     */
+    public function testGetEventsFeedKeepsLowestIdExceptionForDuplicateDates()
+    {
+        $event = $this->objFromFixture(EventPage::class, 'one');
+        $instanceDate = '2025-07-09';
+
+        // Written first so it holds the lower ID: the MODIFIED row must win over the
+        // DELETED one written after it for the same date.
+        $modified = EventException::create([
+            'OriginalEventID' => $event->ID,
+            'InstanceDate' => $instanceDate,
+            'Action' => 'MODIFIED',
+            'IsModified' => 1,
+            'ModifiedTitle' => 'Duplicate Winner Title',
+        ]);
+        $modified->write();
+
+        $deleted = EventException::create([
+            'OriginalEventID' => $event->ID,
+            'InstanceDate' => $instanceDate,
+            'Action' => 'DELETED',
+        ]);
+        // skipValidation: validate() rejects a second row for one date, which is what
+        // makes this state reachable only through fixtures or direct DB writes.
+        $deleted->write(false, false, false, false, true);
+
+        $this->assertLessThan(
+            $deleted->ID,
+            $modified->ID,
+            'Precondition: the MODIFIED row holds the lower ID'
+        );
+
+        $fromDate = Carbon::parse($event->StartDate);
+        $toDate = Carbon::parse($event->RecursionEndDate);
+
+        // The trait's own expansion keeps the lowest-ID exception, which is not a
+        // deletion, so the occurrence survives there.
+        $traitOccurrence = null;
+        foreach ($event->getOccurrences($fromDate, $toDate) as $occurrence) {
+            if ($occurrence->getInstanceDate()->format('Y-m-d') === $instanceDate) {
+                $traitOccurrence = $occurrence;
+                break;
+            }
+        }
+
+        $this->assertNotNull(
+            $traitOccurrence,
+            'The trait keeps the occurrence, because its winning exception is not a deletion'
+        );
+        $this->assertNotNull($traitOccurrence->getException());
+        $this->assertEquals(
+            $modified->ID,
+            $traitOccurrence->getException()->ID,
+            'The trait resolves the date to the lowest-ID exception'
+        );
+
+        // The feed must apply that same exception rather than the last row it read.
+        $feedOccurrence = null;
+        foreach ($this->calendar->getEventsFeed(null, null, $fromDate, $toDate) as $instance) {
+            if (!method_exists($instance, 'getInstanceDate')) {
+                continue;
+            }
+            if ($instance->getInstanceDate()->format('Y-m-d') === $instanceDate) {
+                $feedOccurrence = $instance;
+                break;
+            }
+        }
+
+        $this->assertNotNull(
+            $feedOccurrence,
+            'The feed keeps the same occurrence the trait keeps'
+        );
+        $this->assertSame(
+            'Duplicate Winner Title',
+            $feedOccurrence->Title,
+            'The feed applies the lowest-ID exception, the same one the trait keeps'
+        );
+    }
+
+    /**
      * Test getEventsFeed with EventException modifications
      */
     public function testGetEventsFeedWithEventExceptionModifications()

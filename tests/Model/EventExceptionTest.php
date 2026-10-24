@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
+use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\DateField;
@@ -235,6 +236,68 @@ class EventExceptionTest extends SapphireTest
         // Should be a date field for non-recurring events
         $this->assertInstanceOf(DateField::class, $instanceField);
         $this->assertEquals('Instance Date', $instanceField->Title());
+    }
+
+    /**
+     * Test getCMSFields event dropdown excludes non-recurring events and is capped
+     */
+    public function testGetCMSFieldsEventDropdownExcludesNonRecurring(): void
+    {
+        // Create a non-recurring event
+        $nonRecurringEvent = EventPage::create([
+            'Title' => 'Non-Recurring Dropdown Event',
+            'URLSegment' => 'non-recurring-dropdown-event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::today()->format('Y-m-d'),
+            'EndDate' => Carbon::today()->format('Y-m-d'),
+            'StartTime' => '10:00:00',
+            'EndTime' => '11:00:00',
+            'Recursion' => 'NONE',
+        ]);
+        $nonRecurringEvent->write();
+
+        $fields = EventException::create()->getCMSFields();
+        $eventField = $fields->fieldByName('Root.Main.OriginalEventID');
+
+        $this->assertInstanceOf(DropdownField::class, $eventField);
+        $source = $eventField->getSource();
+        $this->assertArrayNotHasKey(
+            $nonRecurringEvent->ID,
+            $source,
+            'A non-recurring (NONE) event must not be offered in the event dropdown'
+        );
+        $this->assertArrayHasKey(
+            $this->recurringEvent->ID,
+            $source,
+            'A recurring event must be offered in the event dropdown'
+        );
+
+        // With the cap set to 1, only one event may be offered
+        Config::modify()->set(EventException::class, 'event_dropdown_limit', 1);
+
+        $secondRecurringEvent = EventPage::create([
+            'Title' => 'Second Recurring Event',
+            'URLSegment' => 'second-recurring-event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::today()->format('Y-m-d'),
+            'EndDate' => Carbon::today()->format('Y-m-d'),
+            'StartTime' => '10:00:00',
+            'EndTime' => '11:00:00',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'RecursionEndDate' => Carbon::today()->addWeeks(10)->format('Y-m-d'),
+        ]);
+        $secondRecurringEvent->write();
+
+        $cappedSource = EventException::create()
+            ->getCMSFields()
+            ->fieldByName('Root.Main.OriginalEventID')
+            ->getSource();
+        $this->assertLessThanOrEqual(
+            1,
+            count($cappedSource),
+            'The dropdown source must respect the configured event_dropdown_limit cap'
+        );
     }
 
     /**

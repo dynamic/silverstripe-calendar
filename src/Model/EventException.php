@@ -147,6 +147,14 @@ class EventException extends DataObject implements PermissionProvider
     ];
 
     /**
+     * Maximum number of recurring events offered in the CMS event dropdown.
+     * The dropdown would otherwise grow unbounded as the calendar fills up.
+     *
+     * @var int
+     */
+    private static int $event_dropdown_limit = 200;
+
+    /**
      * Check if a specific property has an override value
      *
      * @param string $property
@@ -479,11 +487,28 @@ class EventException extends DataObject implements PermissionProvider
         // Remove the OriginalEventID field as it's managed by the relationship
         $fields->removeByName('OriginalEventID');
 
-        // Add event selection dropdown
-        $eventOptions = [];
-        $events = EventPage::get()->filter('Recursion:not', '')->sort('Title ASC');
-        foreach ($events as $event) {
-            $eventOptions[$event->ID] = $event->Title;
+        // Add event selection dropdown. Only recurring events can have
+        // per-instance exceptions, so non-recurring (NONE) events are
+        // excluded, and the list is capped so it cannot grow unbounded.
+        $eventOptions = EventPage::get()
+            ->exclude('Recursion', 'NONE')
+            ->sort('Title ASC')
+            ->limit((int) $this->config()->get('event_dropdown_limit'))
+            ->map('ID', 'Title')
+            ->toArray();
+
+        // Get the original event to populate instance dropdown
+        $originalEvent = $this->OriginalEvent();
+
+        // An existing exception must never lose its saved event, even when
+        // the configured cap cut that event out of the list above
+        if (
+            $this->OriginalEventID
+            && !isset($eventOptions[$this->OriginalEventID])
+            && $originalEvent
+            && $originalEvent->exists()
+        ) {
+            $eventOptions[$this->OriginalEventID] = $originalEvent->Title;
         }
 
         $eventField = DropdownField::create('OriginalEventID', 'Event')
@@ -491,8 +516,6 @@ class EventException extends DataObject implements PermissionProvider
             ->setDescription('Select the recurring event this exception applies to')
             ->setEmptyString('-- Select an event --');
 
-        // Get the original event to populate instance dropdown
-        $originalEvent = $this->OriginalEvent();
         $instanceOptions = [];
 
         if ($originalEvent && $originalEvent->exists() && $originalEvent->eventRecurs()) {

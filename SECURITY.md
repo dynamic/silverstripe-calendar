@@ -11,10 +11,7 @@ Security fixes are made for the current major release only. Older major versions
 
 ## Reporting a Vulnerability
 
-Please report security vulnerabilities in one of these two ways:
-
-- Email dev@dynamicagency.com, or
-- Use GitHub private vulnerability reporting on this repository. Open the Security tab and choose "Report a vulnerability".
+Please report security vulnerabilities by email to dev@dynamicagency.com.
 
 Do not open a public GitHub issue for a security report.
 

@@ -955,4 +955,234 @@ class CarbonRecursionTest extends SapphireTest
         $occurrences = iterator_to_array($event->getOccurrences('2025-06-20', '2025-06-25'));
         $this->assertCount(0, $occurrences);
     }
+
+    /**
+     * Persist and publish the #312 fixture: a WEEKLY event on Mondays whose occurrences
+     * run three days (Mon-Wed), open-ended (no RecursionEndDate).
+     *
+     * @return EventPage
+     */
+    private function createMultiDayWeeklyEvent(): EventPage
+    {
+        $event = EventPage::create([
+            'Title' => 'Multi Day Weekly Camp',
+            'StartDate' => '2025-06-16', // Monday
+            'EndDate' => '2025-06-18', // each occurrence spans 3 days
+            'StartTime' => '09:00:00',
+            'EndTime' => '17:00:00',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        return $event;
+    }
+
+    /**
+     * Collect the instance start dates of a set of occurrences, in generation order.
+     *
+     * @param iterable $occurrences
+     * @return array<int,string>
+     */
+    private function occurrenceStartDates(iterable $occurrences): array
+    {
+        $dates = [];
+        foreach ($occurrences as $occurrence) {
+            $dates[] = Carbon::parse($occurrence->StartDate)->format('Y-m-d');
+        }
+
+        return $dates;
+    }
+
+    /**
+     * Regression test for dynamic/silverstripe-calendar#312 (feed path).
+     *
+     * A WEEKLY event whose occurrences span three days (StartDate 2025-06-16, EndDate
+     * 2025-06-18) has an occurrence starting 2025-06-23 that is still running when a
+     * window opening 2025-06-24 begins. Before the fix the generation window was clamped
+     * to the query window, so that occurrence was never generated.
+     */
+    public function testRunningOccurrenceIsGeneratedForFeedWindow()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+        EventInstanceCache::clearAllCache();
+
+        $dates = $this->occurrenceStartDates($event->getCachedOccurrences('2025-06-24', '2025-06-30'));
+
+        $this->assertSame(
+            ['2025-06-23', '2025-06-30'],
+            $dates,
+            'The occurrence still running at the window start is generated, then the next one'
+        );
+
+        $running = null;
+        foreach ($event->getCachedOccurrences('2025-06-24', '2025-06-30') as $occurrence) {
+            if (Carbon::parse($occurrence->StartDate)->format('Y-m-d') === '2025-06-23') {
+                $running = $occurrence;
+            }
+        }
+
+        $this->assertNotNull($running, 'The still-running occurrence must be present');
+        $this->assertEquals(
+            '2025-06-25',
+            (string) $running->EndDate,
+            'The virtual EndDate stays instance-relative (2025-06-23 + 2 days)'
+        );
+    }
+
+    /**
+     * Regression test for dynamic/silverstripe-calendar#312, end to end through the feed.
+     *
+     * Calendar::getEventsFeed()'s #267 end-overlap pass already KEEPS an occurrence whose
+     * end overlaps the window start - it was simply never handed one by the generator.
+     */
+    public function testRunningOccurrenceAppearsInEventsFeed()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+        EventInstanceCache::clearAllCache();
+
+        $feed = $this->parentPage->getEventsFeed(null, null, '2025-06-24', '2025-06-30');
+
+        $found = null;
+        foreach ($feed as $feedEvent) {
+            if (
+                $feedEvent instanceof EventInstance
+                && (string) $feedEvent->Title === 'Multi Day Weekly Camp'
+                && Carbon::parse($feedEvent->StartDate)->format('Y-m-d') === '2025-06-23'
+            ) {
+                $found = $feedEvent;
+            }
+        }
+
+        $this->assertInstanceOf(
+            EventInstance::class,
+            $found,
+            'The feed must include the multi-day occurrence that was already running at the window start'
+        );
+        $this->assertSame($event->ID, $found->getOriginalEvent()->ID);
+        $this->assertEquals('2025-06-25', (string) $found->EndDate);
+    }
+
+    /**
+     * The #312 widening must stay minimal: the 2025-06-23 occurrence ends 2025-06-25, so a
+     * window opening 2025-06-26 does not overlap it and must not receive it. Occurrences
+     * that ended before the window start stay excluded.
+     */
+    public function testOccurrenceEndedBeforeWindowStartIsStillExcluded()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+        EventInstanceCache::clearAllCache();
+
+        $dates = $this->occurrenceStartDates($event->getCachedOccurrences('2025-06-26', '2025-07-05'));
+
+        $this->assertNotContains(
+            '2025-06-23',
+            $dates,
+            'An occurrence that ended (2025-06-25) before the window start (2025-06-26) must not appear'
+        );
+        $this->assertSame(
+            ['2025-06-30'],
+            $dates,
+            'Occurrences that start inside the window are unaffected by the widening'
+        );
+    }
+
+    /**
+     * Bad input: an EndDate that precedes StartDate is nonsensical and must fall back to a
+     * zero occurrence duration - no fatal, no shifted generation window. The window opens
+     * 2025-06-24 (one day after the lattice point 2025-06-23) so that a duration computed
+     * with an ABSOLUTE day difference would widen the window by 6 days, snap to 2025-06-23
+     * and put it in the result; the signed clamp must not.
+     */
+    public function testInvertedEndDateDoesNotWidenTheGenerationWindow()
+    {
+        $event = EventPage::create([
+            'Title' => 'Inverted End Date Event',
+            'StartDate' => '2025-06-16',
+            'EndDate' => '2025-06-10',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        $this->assertEquals('2025-06-10', (string) $event->EndDate, 'The inverted range is stored as written');
+
+        EventInstanceCache::clearAllCache();
+        $dates = $this->occurrenceStartDates($event->getCachedOccurrences('2025-06-24', '2025-07-07'));
+
+        $this->assertSame(
+            ['2025-06-30', '2025-07-07'],
+            $dates,
+            'An inverted EndDate behaves like a single-day event: same lattice, no widening, no fatal'
+        );
+    }
+
+    /**
+     * An empty EndDate must widen nothing (the duration falls back to 0) and must not
+     * error: the no-match/empty-input case for the new derivation.
+     */
+    public function testMissingEndDateLeavesTheWindowUnwidened()
+    {
+        $event = EventPage::create([
+            'Title' => 'No End Date Weekly',
+            'StartDate' => '2025-06-16',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'ParentID' => $this->parentPage->ID,
+        ]);
+        $event->write();
+        $event->publishRecursive();
+
+        EventInstanceCache::clearAllCache();
+        $dates = $this->occurrenceStartDates($event->getCachedOccurrences('2025-06-24', '2025-07-05'));
+
+        $this->assertSame(
+            ['2025-06-30'],
+            $dates,
+            'A single-day event generates exactly as it did before #312'
+        );
+    }
+
+    /**
+     * The widening is confined to the feed path: the other public APIs of this trait keep
+     * their start-date semantics for the very same event, so they need no compensating
+     * skip and no caller outside Calendar::getEventsFeed() changes behaviour.
+     */
+    public function testOtherPublicApisKeepStartDateSemantics()
+    {
+        $event = $this->createMultiDayWeeklyEvent();
+        EventInstanceCache::clearAllCache();
+
+        $this->assertSame(
+            ['2025-06-30'],
+            $this->occurrenceStartDates($event->getOccurrences('2025-06-24', '2025-06-30')),
+            'getOccurrences() still filters by start date'
+        );
+        $this->assertFalse(
+            $event->hasOccurrenceOn('2025-06-24'),
+            'hasOccurrenceOn() still means "an occurrence starts on this date"'
+        );
+        $this->assertTrue($event->hasOccurrenceOn('2025-06-23'), 'The lattice point itself is unchanged');
+
+        $this->assertEquals(
+            '2025-06-30',
+            $event->getNextOccurrence('2025-06-24')->getInstanceDate()->format('Y-m-d'),
+            'getNextOccurrence() still returns a future start without any compensating skip'
+        );
+
+        $this->assertSame(
+            ['2025-06-16', '2025-06-23', '2025-06-30'],
+            $this->occurrenceStartDates($event->getOccurrencesInMonth('2025-06-20')),
+            'getOccurrencesInMonth() is untouched by the widening'
+        );
+        $this->assertSame(
+            ['2025-06-23'],
+            $this->occurrenceStartDates($event->getOccurrencesInWeek('2025-06-24')),
+            'getOccurrencesInWeek() is untouched by the widening'
+        );
+    }
 }

@@ -83,8 +83,8 @@ class Calendar extends \Page
      * - ShowCategoryFilter: Whether to show the category filter in the UI
      * - ShowEventTypeFilter: Whether to show the event type filter in the UI
      * - ShowAllDayFilter: Whether to show the all-day event filter in the UI
-     * - DefaultFromDateMonths: The default number of months from current date for "from" filter
-     * - DefaultToDateMonths: The default number of months from current date for "to" filter
+     * - DefaultFromDateMonths: Deprecated, not used; removed in 4.0.0
+     * - DefaultToDateMonths: Deprecated, not used; removed in 4.0.0
      *
      * @var array
      */
@@ -194,12 +194,12 @@ class Calendar extends \Page
                 ->setDescription('Number of events to display per page (default: 12)'),
 
             NumericField::create('DefaultFromDateMonths')
-                ->setTitle('Default Start Date (Months from Now)')
-                ->setDescription('How many months from current date to start showing events (0 = current month)'),
+                ->setTitle('Default Start Date (Months from Now) (deprecated)')
+                ->setDescription('Not used; removed in 4.0.0 (#334). Changing this has no effect on the calendar.'),
 
             NumericField::create('DefaultToDateMonths')
-                ->setTitle('Default End Date (Months from Now)')
-                ->setDescription('How many months from current date to show events until (6 = 6 months from now)'),
+                ->setTitle('Default End Date (Months from Now) (deprecated)')
+                ->setDescription('Not used; removed in 4.0.0 (#334). Changing this has no effect on the calendar.'),
 
             HeaderField::create('CategoryDefaultsHeader', 'Default Category Selection'),
 

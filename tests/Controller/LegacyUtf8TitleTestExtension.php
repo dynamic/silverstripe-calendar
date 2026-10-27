@@ -22,7 +22,9 @@ use SilverStripe\Model\List\ArrayList;
  * encode. Only the arrival of the bytes is doubled; the encode, cache and log paths under test
  * are unmocked.
  *
- * Only ever applied inside CalendarControllerCacheTest::testJsonEncodeFailureIsNotCachedAndLogs().
+ * Only ever applied inside CalendarControllerCacheTest, by
+ * testJsonEncodeFailureIsNotCachedAndLogs() (which turns substitute_invalid_utf8 off) and
+ * testInvalidUtf8TitleIsSubstitutedAndCached() (which leaves it on).
  * Arm it through `LegacyUtf8TitleTestExtension::$corruptTitleAfter` and disarm it in a
  * `finally` block: it fires on every feed the extended calendar builds while armed.
  *
@@ -60,9 +62,9 @@ class LegacyUtf8TitleTestExtension extends Extension implements TestOnly
             }
 
             // "\xB1\x31" is the byte pair the issue names: 0xB1 is not a valid UTF-8 lead
-            // sequence, so json_encode() fails on the string with
-            // JSON_ERROR_INVALID_UTF8 - the same bytes MySQL's own
-            // "Incorrect string value: '\xB11'" message reports.
+            // sequence, so json_encode() fails on the string with JSON_ERROR_UTF8 -
+            // the same bytes MySQL's own "Incorrect string value: '\xB11'" message
+            // reports.
             $event->setField('Title', $event->Title . "\xB1\x31");
         }
     }

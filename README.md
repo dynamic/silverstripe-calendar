@@ -12,14 +12,51 @@ A comprehensive calendar module for the SilverStripe CMS with event management, 
 
 ## Requirements
 
-- SilverStripe CMS ^5.0
-- SilverStripe Lumberjack ^3.0
-- Nesbot Carbon ^3.0
-- Symbiote GridField Extensions ^4.0
-- Symbiote Queued Jobs ^5.0
-- Uncle Cheese Display Logic ^3.0
-- Ryan Potter Color Field ^1.0
-- DFT Frontend MultiSelectField ^1.0
+`composer.json` is the source of truth for this list; the entries below are its `require` block,
+package name and constraint verbatim.
+
+- `php`: `^8.3`
+- `silverstripe/framework`: `^6.0`
+- `silverstripe/cms`: `^6.0`
+- `silverstripe/admin`: `^3.0`
+- `silverstripe/asset-admin`: `^3.0`
+- `silverstripe/assets`: `^3.0`
+- `silverstripe/versioned`: `^3.0`
+- `silverstripe/lumberjack`: `^4.0`
+- `symbiote/silverstripe-gridfieldextensions`: `^5.0`
+- `symbiote/silverstripe-queuedjobs`: `^6.0`
+- `unclecheese/display-logic`: `^4.0`
+- `tractorcow/silverstripe-colorpicker`: `dev-master as 5.0`, see
+  [Color picker dependency source](#color-picker-dependency-source)
+- `nesbot/carbon`: `^3.0`
+- `symfony/console`: `^7.0`
+- `psr/log`: `^3.0`
+- `psr/simple-cache`: `^3.0`
+
+### Theme requirements
+
+The module's own assets are `client/dist/js/calendar.bundle.js`, `client/dist/js/vendors.bundle.js` and
+`client/dist/css/calendar.bundle.css`, required in by `CalendarFrontendExtension` and `CalendarFilterForm`.
+No Bootstrap JavaScript or Bootstrap Icons stylesheet is in any of them, so the theme has to supply both:
+
+- **Bootstrap 5.3 JavaScript**, available as the global `bootstrap`. `client/src/js/components/FullCalendarView.js`
+  builds the event detail dialog with `new bootstrap.Modal(...)` and marks event elements with
+  `data-bs-toggle="tooltip"` and `data-bs-placement`, and `templates/Dynamic/Calendar/Page/Layout/Calendar.ss`
+  drives its filter panel, subscribe dialog and dismiss buttons through `data-bs-*` attributes. The webpack
+  entry imports no `bootstrap` module, so nothing in the bundle defines that global. The tooltip attributes are
+  markup only: this module never calls `bootstrap.Tooltip`, and FullCalendar renders the event elements after
+  page load, so a theme that wants those tooltips has to initialize tooltips itself, including for elements that
+  appear later.
+- **Bootstrap Icons CSS**, for the icon classes the module renders: the `bi bi-*` classes in the front-end
+  templates (`Calendar.ss`, `EventPage.ss` and `Dynamic/Calendar/Form/CalendarFilterForm.ss`), the icons the
+  JavaScript injects (`bi bi-calendar` in `CalendarView.js`, `bi bi-check` in `CalendarSubscription.js`), and
+  FullCalendar's `bootstrap5` theme, which draws its toolbar and close buttons with Bootstrap Icons
+  (`bi-chevron-left`, `bi-chevron-right`, `bi-chevron-double-left`, `bi-chevron-double-right`, `bi-x-lg`).
+  `client/src/scss/calendar.scss` is written as a drop-in layer over a Bootstrap 5.3 theme and imports no icon
+  font of its own.
+
+Without them the page still renders, but the event detail dialog never opens, the filter panel and subscribe
+dialog do not respond, and the icon slots, including the calendar toolbar's prev/next buttons, render blank.
 
 ## Installation
 
@@ -439,6 +476,15 @@ the matching `DTEND;VALUE=DATE:20270306`. Emitting `EndDate` unchanged drew such
 one day short. A timed `end` is unchanged, and a row with no `EndDate` still omits the key.
 The event modal follows the same rule: its date line names the last covered day, which is
 the day before that exclusive end, so a single-day all-day event shows one date.
+
+### Deprecations
+
+`DefaultFromDateMonths` and `DefaultToDateMonths` on the Calendar page are deprecated as
+of 3.x. They are read by no code — the events feed's window does not use them — so
+changing either has no effect on the calendar. The columns remain in the database
+through 3.x to avoid a destructive migration, and both will be removed in 4.0.0
+([#334](https://github.com/dynamic/silverstripe-calendar/issues/334)). No action is
+needed beyond not relying on them; their CMS fields now say so.
 
 ## Troubleshooting
 

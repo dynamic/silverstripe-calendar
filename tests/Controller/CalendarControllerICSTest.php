@@ -483,11 +483,15 @@ class CalendarControllerICSTest extends FunctionalTest
                         return 42;
                     case 'Title':
                         return 'X';
+                    // A real start moment: Carbon::parse() on a blank string throws on
+                    // PHP 8.4.27+, and the transform's catch would skip the event.
+                    case 'StartDate':
+                        return '2030-01-15';
+                    case 'StartTime':
+                        return '10:00:00';
                     case 'Content':
                     case 'Location':
-                    case 'StartDate':
                     case 'EndDate':
-                    case 'StartTime':
                     case 'EndTime':
                     case 'AllDay':
                         return null;
@@ -553,11 +557,15 @@ class CalendarControllerICSTest extends FunctionalTest
                         return 42;
                     case 'Title':
                         return 'X';
+                    // A real start moment: Carbon::parse() on a blank string throws on
+                    // PHP 8.4.27+, and the transform's catch would skip the event.
+                    case 'StartDate':
+                        return '2030-01-15';
+                    case 'StartTime':
+                        return '10:00:00';
                     case 'Content':
                     case 'Location':
-                    case 'StartDate':
                     case 'EndDate':
-                    case 'StartTime':
                     case 'EndTime':
                     case 'AllDay':
                         return null;
@@ -920,6 +928,12 @@ class CalendarControllerICSTest extends FunctionalTest
                     case 'Content':
                         // One CRLF break and one lone-CR break: each must escape once.
                         return "alpha\r\nbeta\rgamma";
+                    // A real start moment: Carbon::parse() on a blank string throws on
+                    // PHP 8.4.27+, and the transform's catch would skip the event.
+                    case 'StartDate':
+                        return '2030-01-15';
+                    case 'StartTime':
+                        return '10:00:00';
                     default:
                         return null;
                 }

@@ -2097,6 +2097,12 @@ class CalendarControllerCacheTest extends FunctionalTest
      */
     public function testJsonEncodeFailureIsNotCachedAndLogs(): void
     {
+        // Substitution off (issue #248 made it the default): this test covers the
+        // withheld-feed branch, which is what the flag off means. Without this line
+        // the same event encodes as U+FFFD, gets cached, and neither branch under
+        // test is reached.
+        Config::modify()->set(CalendarController::class, 'substitute_invalid_utf8', false);
+
         // Registered before the calendar the request runs on is built: a class-level
         // extension is read the first time the object extends, and setUp() has already
         // written and published $this->calendar by now - so its extension set is
@@ -2170,6 +2176,104 @@ class CalendarControllerCacheTest extends FunctionalTest
             // Everything from add_extension() is inside the try, so a throwing write
             // still unarms the helper, drops the extension and unwinds Injector rather
             // than leaking the corruption into the next test in the process.
+            LegacyUtf8TitleTestExtension::$corruptTitleAfter = '';
+            Calendar::remove_extension(LegacyUtf8TitleTestExtension::class);
+            Injector::unnest();
+        }
+    }
+
+    /**
+     * Test 22b (#248): malformed UTF-8 is substituted with U+FFFD, and the feed
+     * is cached, so one bad row costs one warning per cache fill.
+     *
+     * #226 stopped a failed encode from being cached as `false`, which was the
+     * right call for the pool but left the other half of the report standing: a
+     * single row with a bad byte meant every request rebuilt the feed from the
+     * database, failed to encode it again and logged again, for as long as the row
+     * existed - uncached and log-flooding indefinitely, not for one TTL.
+     *
+     * The four claims under test - the feed renders (not '[]') with the bad bytes
+     * visible as U+FFFD, the body is cached, so the identical repeat is a HIT rather
+     * than another rebuild, and exactly one warning covers both requests (the fill's,
+     * not one per request) - are the whole of the #248 decision.
+     *
+     * Round-trips through the default cache adapter rather than a spy, the way
+     * testNonSearchFilteredRequestsStillRoundTripThroughTheCache() does: the
+     * claim under test is that a real second request reads the substituted body
+     * back, and a mock that always returns null would assert nothing about that.
+     */
+    public function testInvalidUtf8TitleIsSubstitutedAndCached(): void
+    {
+        // Same extension-registration constraint as test 22: the helper has to be
+        // on Calendar before the page objects are built, so the feed path it
+        // corrupts is the one this controller reads.
+        Calendar::add_extension(LegacyUtf8TitleTestExtension::class);
+        Injector::nest();
+
+        try {
+            $this->calendar = Calendar::create([
+                'Title' => 'Substitute Failure Calendar',
+                'URLSegment' => 'substitute-failure-calendar',
+            ]);
+            $this->calendar->write();
+            $this->calendar->publishRecursive();
+            $this->controller = CalendarController::create($this->calendar);
+
+            $event = EventPage::create([
+                'Title' => 'Legacy Import Event',
+                'ParentID' => $this->calendar->ID,
+                'StartDate' => Carbon::now()->format('Y-m-d'),
+                'Recursion' => 'NONE',
+            ]);
+            $event->write();
+            $event->publishRecursive();
+
+            // Armed after the write, as in test 22: the corrupt bytes are a
+            // feed-path fault, and arming earlier would corrupt the row being saved.
+            LegacyUtf8TitleTestExtension::$corruptTitleAfter = 'Legacy Import Event';
+
+            $logged = [];
+            $logger = $this->createMock(LoggerInterface::class);
+            $logger->method('warning')
+                ->willReturnCallback(function (string $message) use (&$logged): void {
+                    $logged[] = $message;
+                });
+            Injector::inst()->registerService($logger, LoggerInterface::class);
+
+            $first = $this->snapshotResponse($this->createAjaxRequest());
+            $second = $this->snapshotResponse($this->createAjaxRequest());
+
+            $this->assertSame('MISS', $first['cache'], 'A cold feed must report a MISS');
+            $this->assertNotSame('[]', $first['body'], 'A substitutable feed must not be withheld');
+
+            $decoded = json_decode($first['body'], true);
+            $this->assertIsArray($decoded, 'The substituted body must still be valid JSON');
+            $titles = array_column($decoded, 'title');
+            $this->assertContains('Legacy Import Event' . "\u{FFFD}1", $titles, sprintf(
+                'The bad byte must arrive as U+FFFD, not as %s or as a silently dropped character',
+                '\\xB1\\x31'
+            ));
+
+            $this->assertSame('HIT', $second['cache'], 'The substituted feed must be cached');
+            $this->assertSame($first['body'], $second['body'], 'A HIT must serve the same body');
+            $this->assertContains(
+                'Legacy Import Event' . "\u{FFFD}1",
+                $this->titlesFrom($second['body']),
+                'The cached body must carry the substituted title, not an empty feed'
+            );
+
+            $this->assertCount(
+                1,
+                $logged,
+                'Substitution must be warned about once per cache fill, not once per request'
+            );
+            $this->assertStringContainsString('substituted with U+FFFD', $logged[0]);
+            $this->assertStringContainsString(
+                'unencodable event id(s): ' . $event->ID,
+                $logged[0],
+                'The warning must still name the corrupted row, since that row is now visible to visitors'
+            );
+        } finally {
             LegacyUtf8TitleTestExtension::$corruptTitleAfter = '';
             Calendar::remove_extension(LegacyUtf8TitleTestExtension::class);
             Injector::unnest();

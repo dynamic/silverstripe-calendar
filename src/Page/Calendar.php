@@ -420,8 +420,15 @@ class Calendar extends \Page
                 $exceptions = $event->EventExceptions();
                 $exceptionsByDate = [];
 
-                foreach ($exceptions as $exception) {
-                    $exceptionsByDate[$exception->InstanceDate] = $exception;
+                // Order by ID and keep the first hit, so duplicate rows for one date resolve
+                // to the lowest ID - the same rule CarbonRecursion::exceptionMap() applies.
+                // There is no unique index on (OriginalEventID, InstanceDate), and the two
+                // paths disagreeing meant the feed could drop an occurrence the expansion kept.
+                foreach ($exceptions->sort('ID', 'ASC') as $exception) {
+                    $instanceDate = (string) $exception->InstanceDate;
+                    if (!isset($exceptionsByDate[$instanceDate])) {
+                        $exceptionsByDate[$instanceDate] = $exception;
+                    }
                 }
 
                 foreach ($occurrences as $occurrence) {

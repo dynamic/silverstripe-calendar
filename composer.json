@@ -16,6 +16,11 @@
             "homepage": "http://www.dynamicagency.com"
         }
     ],
+    "support": {
+        "issues": "https://github.com/dynamic/silverstripe-calendar/issues",
+        "source": "https://github.com/dynamic/silverstripe-calendar",
+        "security": "https://github.com/dynamic/silverstripe-calendar/security/policy"
+    },
     "require": {
         "php": "^8.3",
         "nesbot/carbon": "^3.0",

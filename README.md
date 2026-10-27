@@ -477,6 +477,15 @@ one day short. A timed `end` is unchanged, and a row with no `EndDate` still omi
 The event modal follows the same rule: its date line names the last covered day, which is
 the day before that exclusive end, so a single-day all-day event shows one date.
 
+### Deprecations
+
+`DefaultFromDateMonths` and `DefaultToDateMonths` on the Calendar page are deprecated as
+of 3.x. They are read by no code — the events feed's window does not use them — so
+changing either has no effect on the calendar. The columns remain in the database
+through 3.x to avoid a destructive migration, and both will be removed in 4.0.0
+([#334](https://github.com/dynamic/silverstripe-calendar/issues/334)). No action is
+needed beyond not relying on them; their CMS fields now say so.
+
 ## Troubleshooting
 
 ### Common Issues

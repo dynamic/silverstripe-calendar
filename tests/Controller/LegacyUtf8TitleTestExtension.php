@@ -62,9 +62,9 @@ class LegacyUtf8TitleTestExtension extends Extension implements TestOnly
             }
 
             // "\xB1\x31" is the byte pair the issue names: 0xB1 is not a valid UTF-8 lead
-            // sequence, so json_encode() fails on the string with
-            // JSON_ERROR_INVALID_UTF8 - the same bytes MySQL's own
-            // "Incorrect string value: '\xB11'" message reports.
+            // sequence, so json_encode() fails on the string with JSON_ERROR_UTF8 -
+            // the same bytes MySQL's own "Incorrect string value: '\xB11'" message
+            // reports.
             $event->setField('Title', $event->Title . "\xB1\x31");
         }
     }

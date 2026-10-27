@@ -4,6 +4,7 @@ namespace Dynamic\Calendar\Task;
 
 use Dynamic\Calendar\Page\EventPage;
 use SilverStripe\Dev\BuildTask;
+use SilverStripe\Dev\Deprecation;
 use SilverStripe\PolyExecution\PolyOutput;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -17,6 +18,8 @@ use Symfony\Component\Console\Input\InputInterface;
  * validation tool for Carbon-based recurrence patterns.
  *
  * @package Dynamic\Calendar\Task
+ *
+ * @deprecated 3.1.0 Use DateTimeConversion (sake tasks:calendar-datetime-conversion-task) instead; removed in 4.0.0.
  */
 class CarbonRecursionMigrationTask extends BuildTask
 {
@@ -28,7 +31,17 @@ class CarbonRecursionMigrationTask extends BuildTask
 
     protected function execute(InputInterface $input, PolyOutput $output): int
     {
+        Deprecation::notice('3.1.0', 'Use ' . DateTimeConversion::class
+            . ' (sake tasks:calendar-datetime-conversion-task) instead; removed in 4.0.0.', Deprecation::SCOPE_CLASS);
+
         $this->printHeader($output);
+
+        $this->printMessage(
+            $output,
+            'This task is deprecated since 3.1.0 and will be removed in 4.0.0. '
+            . 'Use DateTimeConversion (sake tasks:calendar-datetime-conversion-task) instead.',
+            'warning'
+        );
 
         // Check if RecursiveEvent class exists (legacy RRule system)
         if (!class_exists('Dynamic\Calendar\Page\RecursiveEvent')) {

@@ -334,8 +334,11 @@ class CalendarDateFilteringTest extends SapphireTest
         DB::query(sprintf('UPDATE EventPage SET EndDate = NULL WHERE ID = %d', (int)$event->ID));
         $event->flushCache();
         // The raw UPDATE bypasses the ORM, so drop any cached result set that still
-        // holds the derived EndDate for this class.
-        DataList::reset(EventPage::class);
+        // holds the derived EndDate for this class. DataList::reset() is not present in
+        // every framework 6 release that CI resolves, so only call it where it exists.
+        if (method_exists(DataList::class, 'reset')) {
+            DataList::reset(EventPage::class);
+        }
     }
 
     /**

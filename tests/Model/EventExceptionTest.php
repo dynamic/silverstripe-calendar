@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Dynamic\Calendar\Model\EventException;
 use Dynamic\Calendar\Page\Calendar;
 use Dynamic\Calendar\Page\EventPage;
+use SilverStripe\Core\Config\Config;
 use SilverStripe\Dev\SapphireTest;
 use SilverStripe\Forms\DropdownField;
 use SilverStripe\Forms\DateField;
@@ -235,6 +236,99 @@ class EventExceptionTest extends SapphireTest
         // Should be a date field for non-recurring events
         $this->assertInstanceOf(DateField::class, $instanceField);
         $this->assertEquals('Instance Date', $instanceField->Title());
+    }
+
+    /**
+     * Test getCMSFields event dropdown excludes non-recurring events and is capped
+     */
+    public function testGetCMSFieldsEventDropdownExcludesNonRecurring(): void
+    {
+        // Create a non-recurring event
+        $nonRecurringEvent = EventPage::create([
+            'Title' => 'Non-Recurring Dropdown Event',
+            'URLSegment' => 'non-recurring-dropdown-event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::today()->format('Y-m-d'),
+            'EndDate' => Carbon::today()->format('Y-m-d'),
+            'StartTime' => '10:00:00',
+            'EndTime' => '11:00:00',
+            'Recursion' => 'NONE',
+        ]);
+        $nonRecurringEvent->write();
+
+        $fields = EventException::create()->getCMSFields();
+        $eventField = $fields->fieldByName('Root.Main.OriginalEventID');
+
+        $this->assertInstanceOf(DropdownField::class, $eventField);
+        $source = $eventField->getSource();
+        $this->assertArrayNotHasKey(
+            $nonRecurringEvent->ID,
+            $source,
+            'A non-recurring (NONE) event must not be offered in the event dropdown'
+        );
+        $this->assertArrayHasKey(
+            $this->recurringEvent->ID,
+            $source,
+            'A recurring event must be offered in the event dropdown'
+        );
+
+        // With the cap set to 1, only one event may be offered
+        Config::modify()->set(EventException::class, 'event_dropdown_limit', 1);
+
+        // A recurring event sorting after the cap window. Writing an exception
+        // pointing at it first also covers the saved-event guard: the cap cuts
+        // this event out of the list, but an existing exception must keep it.
+        $secondRecurringEvent = EventPage::create([
+            'Title' => 'Z Second Recurring Event',
+            'URLSegment' => 'second-recurring-event',
+            'ParentID' => $this->calendar->ID,
+            'StartDate' => Carbon::today()->format('Y-m-d'),
+            'EndDate' => Carbon::today()->format('Y-m-d'),
+            'StartTime' => '10:00:00',
+            'EndTime' => '11:00:00',
+            'Recursion' => 'WEEKLY',
+            'Interval' => 1,
+            'RecursionEndDate' => Carbon::today()->addWeeks(10)->format('Y-m-d'),
+        ]);
+        $secondRecurringEvent->write();
+
+        $existingException = EventException::create([
+            'OriginalEventID' => $secondRecurringEvent->ID,
+            'InstanceDate' => Carbon::today()->addWeek()->format('Y-m-d'),
+            'Action' => 'MODIFIED',
+        ]);
+        $existingException->write();
+
+        $cappedSource = EventException::create()
+            ->getCMSFields()
+            ->fieldByName('Root.Main.OriginalEventID')
+            ->getSource();
+        $this->assertCount(
+            1,
+            $cappedSource,
+            'The dropdown source must be capped to exactly the configured event_dropdown_limit'
+        );
+        $this->assertSame(
+            $this->recurringEvent->ID,
+            array_key_first($cappedSource),
+            'The capped dropdown must keep the event sorting inside the cap window'
+        );
+
+        // The saved event of an existing exception is re-added to the source
+        // even though the cap cut it out, so editing never loses the value
+        $savedSource = $existingException->getCMSFields()
+            ->fieldByName('Root.Main.OriginalEventID')
+            ->getSource();
+        $this->assertArrayHasKey(
+            $secondRecurringEvent->ID,
+            $savedSource,
+            'An existing exception must keep its saved event in the source even when the cap cut it out'
+        );
+        $this->assertCount(
+            2,
+            $savedSource,
+            'The saved event is the only entry re-added on top of the capped list'
+        );
     }
 
     /**

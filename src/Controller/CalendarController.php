@@ -403,8 +403,7 @@ class CalendarController extends \PageController
                 // nothing is claimed here, and the branch below logs the failure that
                 // really stands - the INF/NaN error - while describeUnencodableEvents()
                 // still lists the UTF-8 row that substitution could have repaired. The
-                // feed builds only strings, ints and colour hex values, so that mix is
-                // not reachable today.
+                // feed builds no floats, so that mix is not reachable today.
                 if ($substituted !== false) {
                     $this->logWithFallback(
                         'CalendarController: json_encode failed - ' . $strictError

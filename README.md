@@ -302,6 +302,36 @@ Dynamic\Calendar\Model\RecurringEvent:
   default_end_months: 12
 ```
 
+### Feed Cache Configuration
+
+The AJAX events feed is cached as encoded JSON. Both settings live on the controller:
+
+```yaml
+# app/_config/calendar.yml
+Dynamic\Calendar\Controller\CalendarController:
+  # Feed cache lifetime in seconds
+  json_cache_ttl: 1800
+
+  # Repair malformed UTF-8 instead of withholding the feed
+  substitute_invalid_utf8: true
+```
+
+`json_cache_ttl` is how long a generated feed stays in the cache, in seconds. The default
+is 1800 (30 minutes).
+
+`substitute_invalid_utf8` defaults to `true`. `json_encode()` refuses a value that carries
+bytes which are not valid UTF-8, which is what a legacy import or a truncated multibyte
+character can leave behind in an event title, summary or category title. With the setting
+on, those bytes are replaced with U+FFFD, so visitors may see the replacement character in
+a title, and the rest of the feed renders and is cached as usual. Either way a warning
+names the event id of the affected row, on each cache fill, or on every request for a feed
+that is never cached, such as a search-filtered one. Set it to `false` to withhold the feed
+instead: it comes back as an empty list and is not cached, so every request re-queries it
+while the row exists and logs again.
+
+Only malformed UTF-8 is repaired this way. Other encode failures have no lossy repair and
+still return an empty feed.
+
 ### Template Configuration
 
 The module templates use vanilla Bootstrap classes and should work out of the box. To disable theme-specific configurations for testing:

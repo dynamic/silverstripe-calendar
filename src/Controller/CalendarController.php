@@ -1460,9 +1460,11 @@ class CalendarController extends \PageController
      * id is what makes either outcome actionable: with substitute_invalid_utf8 on (the
      * default since issue #248) it names the row whose title visitors are seeing as
      * U+FFFD, and with it off it names the row costing every visitor the whole feed.
-     * Only with it off is the message repeated: that path caches nothing, so while such
-     * a row exists every request re-queries and re-fails, whereas with the flag on the
-     * repaired body is cached and the warning follows the cache fill. This runs strictly
+     * The repeat rate differs the same way: with the flag off that path caches nothing,
+     * so while such a row exists every request re-queries and re-fails; with it on the
+     * repaired body is cached and the warning follows the cache fill, except on the
+     * requests that cache nothing anyway (a null $cacheKey, a failed $cache->set()),
+     * which repeat it. This runs strictly
      * - no flags - which is why it still lists the event after the outer encode was
      * repaired by substitution.
      *

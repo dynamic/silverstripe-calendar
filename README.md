@@ -318,8 +318,9 @@ Dynamic\Calendar\Controller\CalendarController:
 
 `json_cache_ttl` is the lifetime in seconds of a cached events feed body, counted from the
 moment the entry is written. Saving a calendar, an event or an exception clears the whole
-feed cache, so normal editor work shows up on the next request; the TTL is what bounds how
-long an entry can still be served after a change the module does not observe.
+feed cache, so that work shows up on the next request; the TTL is what bounds how long an
+entry can still be served after a change the module does not observe, such as editing a
+category's title or colour, which invalidates nothing.
 
 `substitute_invalid_utf8` decides what a visitor sees when one event carries a title,
 summary or category title whose bytes are not valid UTF-8, which `json_encode()` refuses

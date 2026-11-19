@@ -413,13 +413,12 @@ class CalendarController extends \PageController
             }
 
             // Also reached when substitution was off, did not apply, or its own
-            // encode failed too. In that mixed case the line below reports the
-            // error json_last_error() last saw while describeUnencodableEvents()
-            // still names the row substitution could have fixed, so the two halves
-            // of the message can point at different rows. The feed builds only
-            // strings, ints and booleans (colour values reach it as '#rrggbb'
-            // strings), so INF/NaN cannot occur there today and this stays
-            // theoretical.
+            // encode failed too. In that mixed case the error text below describes
+            // the INF/NaN failure while describeUnencodableEvents() lists every row
+            // that failed its own encode, including the UTF-8 one substitution could
+            // have fixed. The feed builds only strings, ints and booleans (colour
+            // values reach it as '#rrggbb' strings), so INF/NaN cannot occur there
+            // today and this stays theoretical.
             if ($json === false) {
                 $this->logWithFallback(
                     'CalendarController: json_encode failed - ' . json_last_error_msg()
@@ -1464,9 +1463,8 @@ class CalendarController extends \PageController
      * so while such a row exists every request re-queries and re-fails; with it on the
      * repaired body is cached and the warning follows the cache fill, except on the
      * requests that cache nothing anyway (a null $cacheKey, a failed $cache->set()),
-     * which repeat it. This runs strictly
-     * - no flags - which is why it still lists the event after the outer encode was
-     * repaired by substitution.
+     * which repeat it. This runs strictly, with no flags, which is why it still lists
+     * the event after the outer encode was repaired by substitution.
      *
      * Encoding each event separately is done only on the already-failed path, so the
      * cost is never paid by a working feed. An event that encodes fine alone is absent

@@ -302,6 +302,42 @@ Dynamic\Calendar\Model\RecurringEvent:
   default_end_months: 12
 ```
 
+### Events Feed Cache and Encoding
+
+The AJAX events feed is cached, and both settings below live on the controller:
+
+```yaml
+# app/_config/calendar.yml
+Dynamic\Calendar\Controller\CalendarController:
+  # Seconds an events feed body stays in the cache (default 1800)
+  json_cache_ttl: 1800
+
+  # Repair malformed UTF-8 in the feed instead of withholding it (default true)
+  substitute_invalid_utf8: true
+```
+
+`json_cache_ttl` is the lifetime in seconds of a cached events feed body, counted from the
+moment the entry is written. Saving a calendar, an event or an exception clears the whole
+feed cache, so that work shows up on the next request; the TTL is what bounds how long an
+entry can still be served after a change the module does not observe, such as editing a
+category's title or colour, which invalidates nothing.
+
+`substitute_invalid_utf8` decides what a visitor sees when one event carries a title,
+summary or category title whose bytes are not valid UTF-8, which `json_encode()` refuses
+for the whole feed:
+
+- `true` (the default): the bad bytes are replaced with the Unicode replacement character
+  U+FFFD, so that one title shows a placeholder glyph where the corrupted bytes were, the
+  rest of the feed is served normally, and the body is cached like any other. A row like
+  this logs one warning per cache fill on cacheable requests; search-filtered requests
+  (`?search=`) are never cached and warn every time.
+- `false`: the feed is withheld entirely. The request answers an empty `[]` body, nothing
+  is cached, and the failure is logged again on every request until the row is fixed.
+
+The warning names the offending event id in both cases, which is the row to repair. Other
+encode failures (an `INF` or `NaN` value, or nesting past `json_encode()`'s depth) have no
+lossy repair and always take the empty-feed path, whatever this setting says.
+
 ### Template Configuration
 
 The module templates use vanilla Bootstrap classes and should work out of the box. To disable theme-specific configurations for testing:

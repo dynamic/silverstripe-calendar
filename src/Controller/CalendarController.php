@@ -78,9 +78,11 @@ class CalendarController extends \PageController
      *
      * Turned on - the default - the bad bytes become U+FFFD, the rest of the
      * feed renders, and the body is cached normally, so the cost of one bad row
-     * is one warning per cache fill rather than one per request. The warning
-     * still names the event id, which is what makes the corrupted title
-     * repairable.
+     * is one warning per cache fill on cacheable requests. A request gated off
+     * the cache (a live ?search= filter, issue #162) and a failed
+     * $cache->set() both leave nothing cached, so on those the same row warns
+     * once per request. The warning still names the event id, which is what
+     * makes the corrupted title repairable.
      *
      * Set false to restore the #226 behaviour: an unencodable feed is withheld
      * as '[]' and never cached.
@@ -372,11 +374,13 @@ class CalendarController extends \PageController
             // Malformed UTF-8 is the one failure with a lossy repair, so it gets
             // one when substitute_invalid_utf8 is on (issue #248): re-encode with
             // JSON_INVALID_UTF8_SUBSTITUTE and fall through to the cache write
-            // below. Caching the substituted body is the point - it is what bounds
-            // the warning to one per fill instead of one per request, which is the
-            // complaint that #248 is actually about. With the flag off, or for an
-            // encode failure substitution cannot fix (INF/NaN, depth), the empty
-            // feed is withheld and nothing is written, as in #226.
+            // below. Caching the substituted body is the point - it bounds the
+            // warning to one per cache fill on cacheable requests, which is the
+            // complaint that #248 is actually about; a null $cacheKey (a live
+            // ?search= request) or a failed $cache->set() caches nothing, so those
+            // requests warn every time. With the flag off, or for an encode
+            // failure substitution cannot fix (INF/NaN, depth), the empty feed is
+            // withheld and nothing is written, as in #226.
             if (
                 $json === false
                 && json_last_error() === JSON_ERROR_UTF8
@@ -389,13 +393,15 @@ class CalendarController extends \PageController
                 $strictError = json_last_error_msg();
                 $substituted = json_encode($eventsData, JSON_INVALID_UTF8_SUBSTITUTE);
 
-                // Logged only once the repair is known to have worked, and then on
-                // this cache-fill path alone: the body written below is cached, so one
-                // bad row costs one warning per fill rather than one per request - the
-                // cost #248 is actually about. When substitution does not work (the
-                // strict encode stopped on bad UTF-8 and a later value is INF or NaN)
-                // nothing is claimed here, and the branch below logs the failure that
-                // really stands.
+                // Logged only once the repair is known to have worked. The body
+                // written below is normally cached, so one bad row costs one
+                // warning per cache fill on cacheable requests - the cost #248 is
+                // actually about - while a null $cacheKey (a live ?search= request)
+                // or a failed $cache->set() leaves the same row warning once per
+                // request. When substitution does not work (the strict encode
+                // stopped on bad UTF-8 and a later value is INF or NaN) nothing is
+                // claimed here, and the branch below logs the failure that really
+                // stands.
                 if ($substituted !== false) {
                     $this->logWithFallback(
                         'CalendarController: json_encode failed - ' . $strictError
@@ -406,6 +412,13 @@ class CalendarController extends \PageController
                 }
             }
 
+            // Also reached when substitution was off, did not apply, or its own
+            // encode failed too. In that mixed case the error text below describes
+            // the INF/NaN failure while describeUnencodableEvents() lists every row
+            // that failed its own encode, including the UTF-8 one substitution could
+            // have fixed. The feed builds only strings, ints and booleans (colour
+            // values reach it as '#rrggbb' strings), so INF/NaN cannot occur there
+            // today and this stays theoretical.
             if ($json === false) {
                 $this->logWithFallback(
                     'CalendarController: json_encode failed - ' . json_last_error_msg()
@@ -1442,18 +1455,23 @@ class CalendarController extends \PageController
      * Name the events json_encode() refused, so one log line points at a row to fix.
      *
      * json_encode() fails for the whole array but reports no position, so on its own
-     * 'Malformed UTF-8 characters' leaves the operator to find the row by hand - and
-     * while such a row exists every request re-queries and re-fails, so the message is
-     * repeated, and the id is what makes either outcome actionable: with
-     * substitute_invalid_utf8 on (the default since issue #248) it names the row whose
-     * title visitors are seeing as U+FFFD, and with it off it names the row costing
-     * every visitor the whole feed. This runs strictly - no flags - which is why it
-     * still lists the event after the outer encode was repaired by substitution.
+     * 'Malformed UTF-8 characters' leaves the operator to find the row by hand, and the
+     * id is what makes either outcome actionable: with substitute_invalid_utf8 on (the
+     * default since issue #248) it names the row whose title visitors are seeing as
+     * U+FFFD, and with it off it names the row costing every visitor the whole feed.
+     * The repeat rate differs the same way: with the flag off that path caches nothing,
+     * so while such a row exists every request re-queries and re-fails; with it on the
+     * repaired body is cached and the warning follows the cache fill, except on the
+     * requests that cache nothing anyway (a null $cacheKey, a failed $cache->set()),
+     * which repeat it. This runs strictly, with no flags, which is why it still lists
+     * the event after the outer encode was repaired by substitution.
      *
      * Encoding each event separately is done only on the already-failed path, so the
      * cost is never paid by a working feed. An event that encodes fine alone is absent
      * from the list, and an empty list is itself information: the failure is not in any
-     * single event's payload (a depth or INF/NaN problem, say).
+     * single event's payload, which in practice means nesting past json_encode()'s
+     * depth. An INF or NaN value does sit inside one event, so that event's own strict
+     * encode fails and its id is listed.
      *
      * @param array<int, array<string, mixed>> $eventsData
      * @return string A suffix beginning with '; ', never a bare id list
